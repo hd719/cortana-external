@@ -1,0 +1,37 @@
+[
+  {
+    "date": "2024-10-31 00:00:00",
+    "Total Revenue": 35082000000.0,
+    "Net Income": 19309000000.0,
+    "Gross Profit": 26156000000.0,
+    "Operating Income": 21869000000.0
+  },
+  {
+    "date": "2025-01-31 00:00:00",
+    "Total Revenue": 39331000000.0,
+    "Net Income": 22091000000.0,
+    "Gross Profit": 28723000000.0,
+    "Operating Income": 24034000000.0
+  },
+  {
+    "date": "2025-04-30 00:00:00",
+    "Total Revenue": 44062000000.0,
+    "Net Income": 18775000000.0,
+    "Gross Profit": 26668000000.0,
+    "Operating Income": 21638000000.0
+  },
+  {
+    "date": "2025-07-31 00:00:00",
+    "Total Revenue": 46743000000.0,
+    "Net Income": 26422000000.0,
+    "Gross Profit": 33853000000.0,
+    "Operating Income": 28440000000.0
+  },
+  {
+    "date": "2025-10-31 00:00:00",
+    "Total Revenue": 57006000000.0,
+    "Net Income": 31910000000.0,
+    "Gross Profit": 41849000000.0,
+    "Operating Income": 36010000000.0
+  }
+]

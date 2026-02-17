@@ -1,0 +1,32 @@
+# Core dependencies for backtesting engine
+# Install with: pip install -r requirements.txt
+
+# Data manipulation - the backbone of financial data analysis
+pandas>=2.0.0
+
+# Numerical operations - fast math for indicators
+numpy>=1.24.0
+
+# Alpaca API - for fetching historical market data
+alpaca-trade-api>=3.0.0
+
+# HTTP requests - backup for API calls
+requests>=2.28.0
+
+# Date handling - timezone-aware datetime operations
+python-dateutil>=2.8.0
+
+# Progress bars - visual feedback during long backtests
+tqdm>=4.65.0
+
+# Pretty tables - format results nicely
+tabulate>=0.9.0
+
+# Yahoo Finance - for fundamental data (earnings, financials)
+yfinance>=0.2.0
+
+# XML parsing - required by yfinance for earnings data
+lxml>=4.9.0
+
+# Optional: VectorBT for fast optimization (can skip initially)
+# vectorbt>=0.26.0
