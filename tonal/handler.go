@@ -137,18 +137,14 @@ func (s *Service) DataHandler(c *gin.Context) {
 		}
 	}
 
-	userID, err := s.getUserInfo(ctx, token)
-	if errors.Is(err, errTonalUnauthorized) {
-		token, err = s.reAuthOnUnauthorized(ctx)
-		if err != nil {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "re-auth failed", "details": err.Error()})
-			return
-		}
-		userID, err = s.getUserInfo(ctx, token)
-	}
+	userID, err := s.getUserInfoRetry(ctx, &token)
 	if err != nil {
 		s.Logger.Printf("failed to get user info: %v", err)
-		c.JSON(http.StatusBadGateway, gin.H{"error": "failed to get user info"})
+		status := http.StatusBadGateway
+		if errors.Is(err, errTonalUnauthorized) {
+			status = http.StatusUnauthorized
+		}
+		c.JSON(status, gin.H{"error": "failed to get user info", "details": err.Error()})
 		return
 	}
 	cache.UserID = userID
@@ -157,7 +153,7 @@ func (s *Service) DataHandler(c *gin.Context) {
 		return // Client disconnected, exit gracefully
 	}
 
-	profile, err := s.getProfile(ctx, token, userID)
+	profile, err := s.getProfileRetry(ctx, &token, userID)
 	if err != nil {
 		s.Logger.Printf("failed to get profile: %v", err)
 		c.JSON(http.StatusBadGateway, gin.H{"error": "failed to get profile"})
@@ -175,7 +171,7 @@ func (s *Service) DataHandler(c *gin.Context) {
 		totalWorkouts = int(tw)
 	}
 
-	workouts, err := s.getWorkoutActivities(ctx, token, userID, workoutFetchLimit, totalWorkouts)
+	workouts, err := s.getWorkoutActivitiesRetry(ctx, &token, userID, workoutFetchLimit, totalWorkouts)
 	if err != nil {
 		s.Logger.Printf("failed to get workouts: %v", err)
 		c.JSON(http.StatusBadGateway, gin.H{"error": "failed to get workouts"})
@@ -201,7 +197,7 @@ func (s *Service) DataHandler(c *gin.Context) {
 		return
 	}
 
-	currentScores, err := s.getStrengthScoresCurrent(ctx, token, userID)
+	currentScores, err := s.getStrengthScoresCurrentRetry(ctx, &token, userID)
 	if err != nil {
 		s.Logger.Printf("failed to get current strength scores: %v", err)
 		c.JSON(http.StatusBadGateway, gin.H{"error": "failed to get current strength scores"})
@@ -212,7 +208,7 @@ func (s *Service) DataHandler(c *gin.Context) {
 		return
 	}
 
-	historyScores, err := s.getStrengthScoresHistory(ctx, token, userID)
+	historyScores, err := s.getStrengthScoresHistoryRetry(ctx, &token, userID)
 	if err != nil {
 		s.Logger.Printf("failed to get strength score history: %v", err)
 		c.JSON(http.StatusBadGateway, gin.H{"error": "failed to get strength score history"})

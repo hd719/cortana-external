@@ -158,6 +158,23 @@ func (s *Service) getValidToken(ctx context.Context) (string, error) {
 	return tokens.IDToken, nil
 }
 
+// fetchWithRetry calls fetchTonal and automatically retries once on 401 by
+// re-authenticating. This ensures all API calls (not just getUserInfo) recover
+// from expired tokens transparently.
+func (s *Service) fetchWithRetry(ctx context.Context, token *string, method, path string, headers map[string]string) ([]byte, error) {
+	body, err := s.fetchTonal(ctx, *token, method, path, headers)
+	if errors.Is(err, errTonalUnauthorized) {
+		s.Logger.Printf("401 on %s %s — re-authenticating...", method, path)
+		newToken, reAuthErr := s.reAuthOnUnauthorized(ctx)
+		if reAuthErr != nil {
+			return nil, fmt.Errorf("re-auth after 401 failed: %w", reAuthErr)
+		}
+		*token = newToken
+		return s.fetchTonal(ctx, *token, method, path, headers)
+	}
+	return body, err
+}
+
 func (s *Service) fetchTonal(ctx context.Context, token, method, path string, headers map[string]string) ([]byte, error) {
 	endpoint := tonalAPIBase + path
 
@@ -189,6 +206,19 @@ func (s *Service) fetchTonal(ctx context.Context, token, method, path string, he
 	return io.ReadAll(resp.Body)
 }
 
+// getUserInfoRetry wraps getUserInfo with automatic 401 retry.
+func (s *Service) getUserInfoRetry(ctx context.Context, token *string) (string, error) {
+	body, err := s.fetchWithRetry(ctx, token, "GET", "/v6/users/userinfo", nil)
+	if err != nil {
+		return "", err
+	}
+	var info userInfoResponse
+	if err := json.Unmarshal(body, &info); err != nil {
+		return "", err
+	}
+	return info.ID, nil
+}
+
 func (s *Service) getUserInfo(ctx context.Context, token string) (string, error) {
 	body, err := s.fetchTonal(ctx, token, "GET", "/v6/users/userinfo", nil)
 	if err != nil {
@@ -201,6 +231,19 @@ func (s *Service) getUserInfo(ctx context.Context, token string) (string, error)
 	}
 
 	return info.ID, nil
+}
+
+func (s *Service) getProfileRetry(ctx context.Context, token *string, userID string) (map[string]any, error) {
+	path := fmt.Sprintf("/v6/users/%s/profile", userID)
+	body, err := s.fetchWithRetry(ctx, token, "GET", path, nil)
+	if err != nil {
+		return nil, err
+	}
+	var profile map[string]any
+	if err := json.Unmarshal(body, &profile); err != nil {
+		return nil, err
+	}
+	return profile, nil
 }
 
 func (s *Service) getProfile(ctx context.Context, token, userID string) (map[string]any, error) {
@@ -216,6 +259,27 @@ func (s *Service) getProfile(ctx context.Context, token, userID string) (map[str
 	}
 
 	return profile, nil
+}
+
+func (s *Service) getWorkoutActivitiesRetry(ctx context.Context, token *string, userID string, limit int, totalWorkouts int) ([]map[string]any, error) {
+	path := fmt.Sprintf("/v6/users/%s/workout-activities", userID)
+	offset := 0
+	if totalWorkouts > limit {
+		offset = totalWorkouts - limit
+	}
+	headers := map[string]string{
+		"pg-offset": fmt.Sprintf("%d", offset),
+		"pg-limit":  fmt.Sprintf("%d", limit),
+	}
+	body, err := s.fetchWithRetry(ctx, token, "GET", path, headers)
+	if err != nil {
+		return nil, err
+	}
+	var workouts []map[string]any
+	if err := json.Unmarshal(body, &workouts); err != nil {
+		return nil, err
+	}
+	return workouts, nil
 }
 
 func (s *Service) getWorkoutActivities(ctx context.Context, token, userID string, limit int, totalWorkouts int) ([]map[string]any, error) {
@@ -246,6 +310,19 @@ func (s *Service) getWorkoutActivities(ctx context.Context, token, userID string
 	return workouts, nil
 }
 
+func (s *Service) getStrengthScoresCurrentRetry(ctx context.Context, token *string, userID string) ([]map[string]any, error) {
+	path := fmt.Sprintf("/v6/users/%s/strength-scores/current", userID)
+	body, err := s.fetchWithRetry(ctx, token, "GET", path, nil)
+	if err != nil {
+		return nil, err
+	}
+	var scores []map[string]any
+	if err := json.Unmarshal(body, &scores); err != nil {
+		return nil, err
+	}
+	return scores, nil
+}
+
 func (s *Service) getStrengthScoresCurrent(ctx context.Context, token, userID string) ([]map[string]any, error) {
 	path := fmt.Sprintf("/v6/users/%s/strength-scores/current", userID)
 	body, err := s.fetchTonal(ctx, token, "GET", path, nil)
@@ -259,6 +336,19 @@ func (s *Service) getStrengthScoresCurrent(ctx context.Context, token, userID st
 	}
 
 	return scores, nil
+}
+
+func (s *Service) getStrengthScoresHistoryRetry(ctx context.Context, token *string, userID string) ([]map[string]any, error) {
+	path := fmt.Sprintf("/v6/users/%s/strength-scores/history", userID)
+	body, err := s.fetchWithRetry(ctx, token, "GET", path, nil)
+	if err != nil {
+		return nil, err
+	}
+	var history []map[string]any
+	if err := json.Unmarshal(body, &history); err != nil {
+		return nil, err
+	}
+	return history, nil
 }
 
 func (s *Service) getStrengthScoresHistory(ctx context.Context, token, userID string) ([]map[string]any, error) {
