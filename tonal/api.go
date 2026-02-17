@@ -17,9 +17,12 @@ const (
 	tonalClientID = "ERCyexW-xoVG_Yy3RDe-eV4xsOnRHP6L"
 )
 
+var errTonalUnauthorized = errors.New("tonal unauthorized")
+
 type authResponse struct {
-	IDToken   string `json:"id_token"`
-	ExpiresIn int64  `json:"expires_in"`
+	IDToken      string `json:"id_token"`
+	RefreshToken string `json:"refresh_token"`
+	ExpiresIn    int64  `json:"expires_in"`
 }
 
 type userInfoResponse struct {
@@ -65,8 +68,60 @@ func (s *Service) authenticate(ctx context.Context) (*TokenData, error) {
 	}
 
 	return &TokenData{
-		IDToken:   authResp.IDToken,
-		ExpiresAt: time.Now().Add(time.Duration(authResp.ExpiresIn) * time.Second),
+		IDToken:      authResp.IDToken,
+		RefreshToken: authResp.RefreshToken,
+		ExpiresAt:    time.Now().Add(time.Duration(authResp.ExpiresIn) * time.Second),
+	}, nil
+}
+
+// refreshAuthentication uses a refresh token to get a new id_token without
+// requiring the user's password. This is more reliable than password auth
+// and avoids rate-limit issues with Auth0.
+func (s *Service) refreshAuthentication(ctx context.Context, refreshToken string) (*TokenData, error) {
+	payload := map[string]string{
+		"grant_type":    "refresh_token",
+		"client_id":     tonalClientID,
+		"refresh_token": refreshToken,
+	}
+
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", tonalAuthURL, bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := s.HTTPClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		respBody, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("refresh auth failed: %s - %s", resp.Status, string(respBody))
+	}
+
+	var authResp authResponse
+	if err := json.NewDecoder(resp.Body).Decode(&authResp); err != nil {
+		return nil, err
+	}
+
+	newRefresh := authResp.RefreshToken
+	if newRefresh == "" {
+		// Some Auth0 configurations don't rotate refresh tokens;
+		// keep the existing one in that case.
+		newRefresh = refreshToken
+	}
+
+	return &TokenData{
+		IDToken:      authResp.IDToken,
+		RefreshToken: newRefresh,
+		ExpiresAt:    time.Now().Add(time.Duration(authResp.ExpiresIn) * time.Second),
 	}, nil
 }
 
@@ -76,7 +131,21 @@ func (s *Service) getValidToken(ctx context.Context) (string, error) {
 		return tokens.IDToken, nil
 	}
 
-	s.Logger.Println("authenticating with Tonal...")
+	// Token expired or missing — try refresh token first (faster, no password needed)
+	if err == nil && tokens.RefreshToken != "" {
+		s.Logger.Println("refreshing Tonal token...")
+		refreshed, refreshErr := s.refreshAuthentication(ctx, tokens.RefreshToken)
+		if refreshErr == nil {
+			if saveErr := SaveTokens(s.TokenPath, refreshed); saveErr != nil {
+				s.Logger.Printf("warning: failed to save refreshed tokens: %v", saveErr)
+			}
+			return refreshed.IDToken, nil
+		}
+		s.Logger.Printf("refresh token failed, falling back to password auth: %v", refreshErr)
+	}
+
+	// Fall back to full password authentication
+	s.Logger.Println("authenticating with Tonal (password)...")
 	tokens, err = s.authenticate(ctx)
 	if err != nil {
 		return "", fmt.Errorf("authentication failed: %w", err)
@@ -110,7 +179,7 @@ func (s *Service) fetchTonal(ctx context.Context, token, method, path string, he
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusUnauthorized {
-		return nil, errors.New("tonal unauthorized")
+		return nil, errTonalUnauthorized
 	}
 	if resp.StatusCode >= 400 {
 		body, _ := io.ReadAll(resp.Body)

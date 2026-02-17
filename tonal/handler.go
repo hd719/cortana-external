@@ -2,9 +2,11 @@ package tonal
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"sync"
 	"time"
 
@@ -95,9 +97,23 @@ func (s *Service) HealthHandler(c *gin.Context) {
 	})
 }
 
+// reAuthOnUnauthorized forces a fresh password authentication, clearing any
+// cached/stale tokens. Returns a new valid token or an error.
+func (s *Service) reAuthOnUnauthorized(ctx context.Context) (string, error) {
+	s.Logger.Println("401 received — forcing re-authentication...")
+	// Delete stale token file so getValidToken doesn't reload it
+	os.Remove(s.TokenPath)
+	tokens, err := s.authenticate(ctx)
+	if err != nil {
+		return "", fmt.Errorf("re-authentication failed: %w", err)
+	}
+	if saveErr := SaveTokens(s.TokenPath, tokens); saveErr != nil {
+		s.Logger.Printf("warning: failed to save re-auth tokens: %v", saveErr)
+	}
+	return tokens.IDToken, nil
+}
+
 func (s *Service) DataHandler(c *gin.Context) {
-	// ctx (context) carries request-scoped data and cancellation signals.
-	// When a client disconnects, ctx.Done() becomes readable, signaling cancellation.
 	ctx := c.Request.Context()
 
 	token, err := s.getValidToken(ctx)
@@ -122,6 +138,14 @@ func (s *Service) DataHandler(c *gin.Context) {
 	}
 
 	userID, err := s.getUserInfo(ctx, token)
+	if errors.Is(err, errTonalUnauthorized) {
+		token, err = s.reAuthOnUnauthorized(ctx)
+		if err != nil {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "re-auth failed", "details": err.Error()})
+			return
+		}
+		userID, err = s.getUserInfo(ctx, token)
+	}
 	if err != nil {
 		s.Logger.Printf("failed to get user info: %v", err)
 		c.JSON(http.StatusBadGateway, gin.H{"error": "failed to get user info"})

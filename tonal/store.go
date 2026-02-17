@@ -7,8 +7,9 @@ import (
 )
 
 type TokenData struct {
-	IDToken   string    `json:"id_token"`
-	ExpiresAt time.Time `json:"expires_at"`
+	IDToken      string    `json:"id_token"`
+	RefreshToken string    `json:"refresh_token,omitempty"`
+	ExpiresAt    time.Time `json:"expires_at"`
 }
 
 type StrengthScoreData struct {
