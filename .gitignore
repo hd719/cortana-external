@@ -6,3 +6,10 @@ alpaca_keys.*
 .DS_Store
 fitness-services
 *.json.backup
+
+# Python
+__pycache__/
+*.pyc
+
+# Data cache
+backtester/data/cache/
