@@ -1,0 +1,8 @@
+whoop_tokens.*
+tonal_tokens.*
+tonal_data.*
+alpaca_keys.*
+.env
+.DS_Store
+fitness-services
+*.json.backup

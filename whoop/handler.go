@@ -1,0 +1,197 @@
+package whoop
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"log"
+	"net/http"
+	"net/url"
+	"strings"
+	"time"
+
+	"github.com/gin-gonic/gin"
+)
+
+const whoopAuthURL = "https://api.prod.whoop.com/oauth/oauth2/auth"
+const whoopTokenURL = "https://api.prod.whoop.com/oauth/oauth2/token"
+
+type TokenResponse struct {
+	AccessToken  string `json:"access_token"`
+	RefreshToken string `json:"refresh_token,omitempty"`
+	ExpiresIn    int64  `json:"expires_in"`
+	Scope        string `json:"scope"`
+	TokenType    string `json:"token_type"`
+}
+
+type Service struct {
+	HTTPClient   *http.Client
+	Logger       *log.Logger
+	ClientID     string
+	ClientSecret string
+	RedirectURL  string
+	TokenPath    string
+}
+
+func (s *Service) AuthURLHandler(c *gin.Context) {
+	params := url.Values{}
+	params.Set("client_id", s.ClientID)
+	params.Set("redirect_uri", s.RedirectURL)
+	params.Set("response_type", "code")
+	params.Set("scope", "read:profile read:body_measurement read:cycles read:recovery read:sleep read:workout offline")
+	params.Set("state", "whoopauth") // Simple static state for single-user personal use
+
+	authURL := whoopAuthURL + "?" + params.Encode()
+	c.JSON(http.StatusOK, gin.H{"url": authURL})
+}
+
+func (s *Service) CallbackHandler(c *gin.Context) {
+	if errParam := c.Query("error"); errParam != "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error":       errParam,
+			"description": c.Query("error_description"),
+		})
+		return
+	}
+
+	code := c.Query("code")
+	if code == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "missing code parameter"})
+		return
+	}
+
+	token, err := s.exchangeToken(c.Request.Context(), code)
+	if err != nil {
+		if s.Logger != nil {
+			s.Logger.Printf("token exchange failed: %v", err)
+		}
+		c.JSON(http.StatusBadGateway, gin.H{"error": "token exchange failed"})
+		return
+	}
+
+	tokens := &TokenData{
+		AccessToken:  token.AccessToken,
+		RefreshToken: token.RefreshToken,
+		ExpiresAt:    time.Now().Add(time.Duration(token.ExpiresIn) * time.Second),
+	}
+
+	if err := SaveTokens(s.TokenPath, tokens); err != nil {
+		if s.Logger != nil {
+			s.Logger.Printf("failed to save tokens: %v", err)
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save tokens"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"status": "ok", "message": "tokens saved successfully"})
+}
+
+func (s *Service) DataHandler(c *gin.Context) {
+	tokens, err := LoadTokens(s.TokenPath)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "not authenticated - visit /auth/url to authenticate"})
+		return
+	}
+
+	ctx := c.Request.Context()
+
+	if time.Now().After(tokens.ExpiresAt.Add(-1 * time.Minute)) {
+		if tokens.RefreshToken == "" {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "token expired and no refresh token"})
+			return
+		}
+
+		refreshed, err := s.refreshToken(ctx, tokens.RefreshToken)
+		if err != nil {
+			if s.Logger != nil {
+				s.Logger.Printf("token refresh failed: %v", err)
+			}
+			c.JSON(http.StatusBadGateway, gin.H{"error": "token refresh failed"})
+			return
+		}
+
+		tokens.AccessToken = refreshed.AccessToken
+		if refreshed.RefreshToken != "" {
+			tokens.RefreshToken = refreshed.RefreshToken
+		}
+		tokens.ExpiresAt = time.Now().Add(time.Duration(refreshed.ExpiresIn) * time.Second)
+
+		if err := SaveTokens(s.TokenPath, tokens); err != nil {
+			if s.Logger != nil {
+				s.Logger.Printf("failed to save refreshed tokens: %v", err)
+			}
+		}
+	}
+
+	data, err := s.fetchAllWhoopData(ctx, tokens.AccessToken)
+	if err != nil {
+		if s.Logger != nil {
+			s.Logger.Printf("failed to fetch whoop data: %v", err)
+		}
+		c.JSON(http.StatusBadGateway, gin.H{"error": "failed to fetch whoop data"})
+		return
+	}
+
+	c.JSON(http.StatusOK, data)
+}
+
+func (s *Service) exchangeToken(ctx context.Context, code string) (*TokenResponse, error) {
+	form := url.Values{}
+	form.Set("grant_type", "authorization_code")
+	form.Set("code", code)
+	form.Set("client_id", s.ClientID)
+	form.Set("client_secret", s.ClientSecret)
+	form.Set("redirect_uri", s.RedirectURL)
+
+	req, err := http.NewRequestWithContext(ctx, "POST", whoopTokenURL, strings.NewReader(form.Encode()))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	resp, err := s.HTTPClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		return nil, errors.New("token endpoint returned error")
+	}
+
+	var token TokenResponse
+	if err := json.NewDecoder(resp.Body).Decode(&token); err != nil {
+		return nil, err
+	}
+	return &token, nil
+}
+
+func (s *Service) refreshToken(ctx context.Context, refreshToken string) (*TokenResponse, error) {
+	form := url.Values{}
+	form.Set("grant_type", "refresh_token")
+	form.Set("refresh_token", refreshToken)
+	form.Set("client_id", s.ClientID)
+	form.Set("client_secret", s.ClientSecret)
+
+	req, err := http.NewRequestWithContext(ctx, "POST", whoopTokenURL, strings.NewReader(form.Encode()))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	resp, err := s.HTTPClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		return nil, errors.New("refresh token endpoint returned error")
+	}
+
+	var token TokenResponse
+	if err := json.NewDecoder(resp.Body).Decode(&token); err != nil {
+		return nil, err
+	}
+	return &token, nil
+}
