@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -15,6 +16,9 @@ import (
 
 const whoopAuthURL = "https://api.prod.whoop.com/oauth/oauth2/auth"
 const whoopTokenURL = "https://api.prod.whoop.com/oauth/oauth2/token"
+
+// Cache configuration
+const defaultCacheTTL = 5 * time.Minute
 
 type TokenResponse struct {
 	AccessToken  string `json:"access_token"`
@@ -24,6 +28,14 @@ type TokenResponse struct {
 	TokenType    string `json:"token_type"`
 }
 
+// whoopDataCache represents an in-memory cache for Whoop data
+type whoopDataCache struct {
+	data      *WhoopData
+	lastFetch time.Time
+	mu        sync.RWMutex
+	ttl       time.Duration
+}
+
 type Service struct {
 	HTTPClient   *http.Client
 	Logger       *log.Logger
@@ -31,6 +43,7 @@ type Service struct {
 	ClientSecret string
 	RedirectURL  string
 	TokenPath    string
+	cache        *whoopDataCache
 }
 
 func (s *Service) AuthURLHandler(c *gin.Context) {
@@ -87,6 +100,19 @@ func (s *Service) CallbackHandler(c *gin.Context) {
 }
 
 func (s *Service) DataHandler(c *gin.Context) {
+	// Initialize cache if not already done (lazy initialization for backward compatibility)
+	if s.cache == nil {
+		s.cache = &whoopDataCache{
+			ttl: defaultCacheTTL,
+		}
+	}
+
+	// Check cache first - serve immediately if data is fresh
+	if cachedData, isFresh := s.cache.get(); isFresh {
+		c.JSON(http.StatusOK, cachedData)
+		return
+	}
+
 	tokens, err := LoadTokens(s.TokenPath)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "not authenticated - visit /auth/url to authenticate"})
@@ -132,6 +158,9 @@ func (s *Service) DataHandler(c *gin.Context) {
 		return
 	}
 
+	// Update cache with fresh data
+	s.cache.set(data)
+
 	c.JSON(http.StatusOK, data)
 }
 
@@ -164,6 +193,46 @@ func (s *Service) exchangeToken(ctx context.Context, code string) (*TokenRespons
 		return nil, err
 	}
 	return &token, nil
+}
+
+// NewService creates a new Service with initialized cache
+func NewService(httpClient *http.Client, logger *log.Logger, clientID, clientSecret, redirectURL, tokenPath string) *Service {
+	return &Service{
+		HTTPClient:   httpClient,
+		Logger:       logger,
+		ClientID:     clientID,
+		ClientSecret: clientSecret,
+		RedirectURL:  redirectURL,
+		TokenPath:    tokenPath,
+		cache: &whoopDataCache{
+			ttl: defaultCacheTTL,
+		},
+	}
+}
+
+// isStale checks if the cached data is stale
+func (c *whoopDataCache) isStale() bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.data == nil || time.Since(c.lastFetch) > c.ttl
+}
+
+// get returns cached data if available and fresh
+func (c *whoopDataCache) get() (*WhoopData, bool) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	if c.data == nil || time.Since(c.lastFetch) > c.ttl {
+		return nil, false
+	}
+	return c.data, true
+}
+
+// set updates the cache with new data
+func (c *whoopDataCache) set(data *WhoopData) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.data = data
+	c.lastFetch = time.Now()
 }
 
 func (s *Service) refreshToken(ctx context.Context, refreshToken string) (*TokenResponse, error) {
