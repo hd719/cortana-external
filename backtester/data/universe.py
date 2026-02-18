@@ -33,26 +33,89 @@ import time
 # S&P 500 tickers (we'll use this as our base universe)
 # In production, this should be fetched dynamically
 SP500_TICKERS = [
-    "AAPL", "MSFT", "AMZN", "NVDA", "GOOGL", "META", "TSLA", "BRK-B", "UNH", "JNJ",
-    "XOM", "JPM", "V", "PG", "MA", "HD", "CVX", "MRK", "ABBV", "LLY",
-    "PEP", "KO", "COST", "AVGO", "MCD", "WMT", "CSCO", "TMO", "ABT", "ACN",
-    "DHR", "CRM", "NKE", "NEE", "LIN", "TXN", "PM", "UNP", "BMY", "RTX",
-    "ORCL", "HON", "QCOM", "UPS", "IBM", "CAT", "LOW", "SPGI", "AMGN", "BA",
-    "GE", "SBUX", "INTU", "DE", "PLD", "MDLZ", "ISRG", "GILD", "ADI", "AXP",
-    "BKNG", "MMC", "VRTX", "SYK", "TJX", "ADP", "REGN", "LRCX", "CVS", "ETN",
-    "NOW", "CI", "ZTS", "SCHW", "CB", "BDX", "PGR", "MO", "DUK", "SLB",
-    "PANW", "CME", "EOG", "SO", "ITW", "BSX", "WM", "NOC", "HUM", "CL",
-    "APD", "USB", "FI", "ICE", "CCI", "MCK", "PNC", "CDNS", "SHW", "SNPS",
-    # Add more as needed - this is a subset for faster screening
+    # === Mega Cap / Top 30 by market cap ===
+    "AAPL", "MSFT", "AMZN", "NVDA", "GOOGL", "GOOG", "META", "TSLA", "BRK-B",
+    "UNH", "LLY", "JPM", "V", "AVGO", "XOM", "MA", "JNJ", "PG", "HD",
+    "COST", "MRK", "ABBV", "CRM", "CVX", "KO", "PEP", "WMT", "BAC", "NFLX",
+    "TMO", "MCD", "CSCO", "ABT", "ACN", "LIN", "DHR", "ORCL", "AMD", "TXN",
+
+    # === Technology & Software ===
+    "ADBE", "INTU", "NOW", "SNPS", "CDNS", "PANW", "CRWD", "FTNT", "WDAY",
+    "TEAM", "HUBS", "DDOG", "ZS", "MNDY", "BILL", "PCTY", "PAYC", "TTD",
+    "VEEV", "ANSS", "CPAY", "GDDY", "GEN", "AKAM", "EPAM", "GLOB",
+
+    # === Semiconductors ===
+    "AVGO", "AMD", "QCOM", "TXN", "ADI", "LRCX", "KLAC", "AMAT", "MRVL",
+    "ON", "NXPI", "MCHP", "SWKS", "MPWR", "ARM", "SMCI", "CRUS", "WOLF",
+
+    # === Financials ===
+    "JPM", "BAC", "WFC", "GS", "MS", "SCHW", "BLK", "SPGI", "ICE", "CME",
+    "CB", "PGR", "AIG", "MET", "PRU", "TRV", "ALL", "AXP", "FI", "PYPL",
+    "COF", "USB", "PNC", "BK", "AMP", "RJF", "HOOD", "SOFI",
+
+    # === Healthcare & Biotech ===
+    "LLY", "UNH", "JNJ", "MRK", "ABBV", "TMO", "ABT", "DHR", "PFE", "BMY",
+    "AMGN", "GILD", "VRTX", "REGN", "ISRG", "SYK", "BSX", "MDT", "EW", "ZTS",
+    "IDXX", "DXCM", "ALGN", "HOLX", "IQV", "CI", "ELV", "HUM", "MOH",
+    "MRNA", "BMRN", "SGEN", "ALNY", "PCVX", "ARGX", "NBIX", "SRPT", "IONS",
+
+    # === Industrials & Defense ===
+    "GE", "CAT", "HON", "UNP", "UPS", "RTX", "DE", "BA", "LMT", "NOC",
+    "GD", "ITW", "ETN", "PH", "EMR", "ROK", "AME", "FTV", "CARR",
+    "TT", "AXON", "VRSK", "TDG", "HWM", "GWW", "FAST", "IR",
+
+    # === Consumer / Retail ===
+    "COST", "WMT", "HD", "LOW", "TJX", "NKE", "SBUX", "MCD", "CMG", "YUM",
+    "DPZ", "LULU", "DECK", "BIRD", "ONON", "CAVA", "ELF", "CELH",
+    "ORLY", "AZO", "ULTA", "ROST", "DG", "DLTR", "FIVE",
+
+    # === Energy ===
+    "XOM", "CVX", "COP", "EOG", "SLB", "PXD", "MPC", "PSX", "VLO", "OXY",
+    "DVN", "FANG", "HES", "HAL", "TRGP", "WMB", "KMI", "OKE", "LNG",
+
+    # === Communication & Media ===
+    "GOOGL", "META", "NFLX", "DIS", "CMCSA", "T", "VZ", "TMUS", "CHTR",
+    "SPOT", "RBLX", "ROKU", "ZM", "MTCH",
+
+    # === REITs & Utilities ===
+    "PLD", "AMT", "CCI", "EQIX", "SPG", "PSA", "WELL", "DLR", "O",
+    "NEE", "SO", "DUK", "AEP", "SRE", "D", "PCG", "VST", "CEG",
+
+    # === Materials & Chemicals ===
+    "APD", "SHW", "ECL", "LIN", "FCX", "NEM", "NUE", "STLD", "VMC", "MLM",
+    "CL", "CLX", "DD", "EMN",
 ]
 
 # Growth/momentum stocks to always include in scans
 GROWTH_WATCHLIST = [
-    "NVDA", "TSLA", "META", "AMZN", "GOOGL", "MSFT", "AAPL",  # Mega caps
-    "CRWD", "PLTR", "NET", "SNOW", "DDOG", "ZS", "PANW",       # Cybersecurity/Cloud
-    "AMD", "AVGO", "MRVL", "ARM", "SMCI",                       # Semiconductors
-    "UBER", "ABNB", "SQ", "SHOP", "COIN",                       # Tech growth
-    "LLY", "NVO", "VRTX", "REGN",                               # Biotech
+    # Mega cap leaders
+    "NVDA", "TSLA", "META", "AMZN", "GOOGL", "MSFT", "AAPL", "NFLX",
+
+    # Cybersecurity & Cloud
+    "CRWD", "PLTR", "NET", "SNOW", "DDOG", "ZS", "PANW", "FTNT", "S",
+
+    # AI / Data Infrastructure
+    "ARM", "SMCI", "AI", "PATH", "SNOW", "MDB", "ESTC", "CFLT", "DDOG",
+
+    # Semiconductors
+    "AMD", "AVGO", "MRVL", "ARM", "SMCI", "AMAT", "LRCX", "KLAC", "ON", "MPWR",
+
+    # High-growth tech / fintech
+    "UBER", "ABNB", "SQ", "SHOP", "COIN", "HOOD", "SOFI", "AFRM", "NU", "TOST",
+    "TTD", "HUBS", "MNDY", "BILL",
+
+    # Biotech / Healthcare growth
+    "LLY", "NVO", "VRTX", "REGN", "ARGX", "NBIX", "SRPT", "ALNY", "MRNA",
+
+    # Consumer growth / IPOs with momentum
+    "CAVA", "ONON", "BIRK", "ELF", "CELH", "DUOL", "CART", "RKLB",
+    "LULU", "DECK", "CMG",
+
+    # Energy / Infrastructure
+    "VST", "CEG", "TRGP", "LNG",
+
+    # Industrials with momentum
+    "AXON", "TT", "GE", "CARR", "HWM", "TDG",
 ]
 
 
