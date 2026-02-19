@@ -108,3 +108,149 @@ INSERT 0 1
 2026-02-18 21:49:18 [info] Alerts sent to Telegram
 INSERT 0 1
 === Watchdog complete ===
+=== Watchdog run: Wed Feb 18 22:04:18 EST 2026 ===
+2026-02-18 22:04:18 [info] Cron health check complete
+INSERT 0 1
+2026-02-18 22:04:18 [info] Heartbeat pileup check: 0 processes
+INSERT 0 1
+2026-02-18 22:04:18 [info] gog: OK
+INSERT 0 1
+2026-02-18 22:04:19 [info] Tonal: OK
+INSERT 0 1
+2026-02-18 22:04:25 [info] Whoop: OK
+INSERT 0 1
+2026-02-18 22:04:26 [info] PostgreSQL: OK
+INSERT 0 1
+2026-02-18 22:04:33 [warning] API budget low: ~0% remaining before day 20
+INSERT 0 1
+2026-02-18 22:04:33 [info] Alerts sent to Telegram
+INSERT 0 1
+=== Watchdog complete ===
+=== Watchdog run: Wed Feb 18 22:19:33 EST 2026 ===
+2026-02-18 22:19:33 [info] Cron health check complete
+INSERT 0 1
+2026-02-18 22:19:33 [info] Heartbeat pileup check: 0 processes
+INSERT 0 1
+2026-02-18 22:19:34 [info] gog: OK
+INSERT 0 1
+2026-02-18 22:19:34 [info] Tonal: OK
+INSERT 0 1
+2026-02-18 22:19:41 [info] Whoop: OK
+INSERT 0 1
+2026-02-18 22:19:41 [info] PostgreSQL: OK
+INSERT 0 1
+2026-02-18 22:19:48 [warning] API budget low: ~0% remaining before day 20
+INSERT 0 1
+2026-02-18 22:19:49 [info] Alerts sent to Telegram
+INSERT 0 1
+=== Watchdog complete ===
+=== Watchdog run: Wed Feb 18 22:34:49 EST 2026 ===
+2026-02-18 22:34:49 [info] Cron health check complete
+INSERT 0 1
+2026-02-18 22:34:49 [info] Heartbeat pileup check: 0 processes
+INSERT 0 1
+2026-02-18 22:34:49 [info] gog: OK
+INSERT 0 1
+2026-02-18 22:34:50 [info] Tonal: OK
+INSERT 0 1
+2026-02-18 22:34:56 [info] Whoop: OK
+INSERT 0 1
+2026-02-18 22:34:56 [info] PostgreSQL: OK
+INSERT 0 1
+2026-02-18 22:35:03 [warning] API budget low: ~0% remaining before day 20
+INSERT 0 1
+2026-02-18 22:35:03 [info] Alerts sent to Telegram
+INSERT 0 1
+=== Watchdog complete ===
+=== Watchdog run: Wed Feb 18 22:50:04 EST 2026 ===
+2026-02-18 22:50:04 [info] Cron health check complete
+INSERT 0 1
+2026-02-18 22:50:04 [info] Heartbeat pileup check: 0 processes
+INSERT 0 1
+2026-02-18 22:50:04 [info] gog: OK
+INSERT 0 1
+2026-02-18 22:50:04 [info] Tonal: OK
+INSERT 0 1
+2026-02-18 22:50:05 [info] Whoop: OK
+INSERT 0 1
+2026-02-18 22:50:05 [info] PostgreSQL: OK
+INSERT 0 1
+2026-02-18 22:50:09 [warning] API budget low: ~0% remaining before day 20
+INSERT 0 1
+2026-02-18 22:50:10 [info] Alerts sent to Telegram
+INSERT 0 1
+=== Watchdog complete ===
+=== Watchdog run: Wed Feb 18 23:05:10 EST 2026 ===
+2026-02-18 23:05:10 [info] Cron health check complete
+INSERT 0 1
+2026-02-18 23:05:10 [info] Heartbeat pileup check: 0 processes
+INSERT 0 1
+2026-02-18 23:05:10 [info] gog: OK
+INSERT 0 1
+2026-02-18 23:05:10 [info] Tonal: OK
+INSERT 0 1
+2026-02-18 23:05:10 [info] Whoop: OK
+INSERT 0 1
+2026-02-18 23:05:11 [info] PostgreSQL: OK
+INSERT 0 1
+2026-02-18 23:05:18 [warning] API budget low: ~0% remaining before day 20
+INSERT 0 1
+2026-02-18 23:05:18 [info] Alerts sent to Telegram
+INSERT 0 1
+=== Watchdog complete ===
+=== Watchdog run: Wed Feb 18 23:20:19 EST 2026 ===
+2026-02-18 23:20:19 [info] Cron health check complete
+INSERT 0 1
+2026-02-18 23:20:19 [info] Heartbeat pileup check: 0 processes
+INSERT 0 1
+2026-02-18 23:20:19 [info] gog: OK
+INSERT 0 1
+2026-02-18 23:20:19 [info] Tonal: OK
+INSERT 0 1
+2026-02-18 23:20:19 [info] Whoop: OK
+INSERT 0 1
+2026-02-18 23:20:20 [info] PostgreSQL: OK
+INSERT 0 1
+2026-02-18 23:20:26 [warning] API budget low: ~0% remaining before day 20
+INSERT 0 1
+2026-02-18 23:20:27 [info] Alerts sent to Telegram
+INSERT 0 1
+=== Watchdog complete ===
+=== Watchdog run: Wed Feb 18 23:35:27 EST 2026 ===
+2026-02-18 23:35:27 [info] Cron health check complete
+INSERT 0 1
+2026-02-18 23:35:27 [info] Heartbeat pileup check: 0 processes
+INSERT 0 1
+2026-02-18 23:35:27 [info] gog: OK
+INSERT 0 1
+2026-02-18 23:35:28 [info] Tonal: OK
+INSERT 0 1
+2026-02-18 23:35:28 [info] Whoop: OK
+INSERT 0 1
+2026-02-18 23:35:28 [info] PostgreSQL: OK
+INSERT 0 1
+2026-02-18 23:35:35 [warning] API budget low: ~0% remaining before day 20
+INSERT 0 1
+2026-02-18 23:35:35 [info] Alerts sent to Telegram
+INSERT 0 1
+=== Watchdog complete ===
+=== Watchdog run: Thu Feb 19 03:14:13 EST 2026 ===
+2026-02-19 03:14:14 [info] Cron health check complete
+INSERT 0 1
+2026-02-19 03:14:19 [info] Heartbeat pileup check: 0 processes
+INSERT 0 1
+2026-02-19 03:14:20 [info] gog: OK
+INSERT 0 1
+2026-02-19 03:14:20 [warning] Tonal health check failed (HTTP 000000), attempting self-heal
+INSERT 0 1
+2026-02-19 03:14:26 [warning] Tonal still down after self-heal (HTTP 000000)
+INSERT 0 1
+2026-02-19 03:14:26 [warning] Whoop health check failed (HTTP 000000)
+INSERT 0 1
+2026-02-19 03:14:26 [info] PostgreSQL: OK
+INSERT 0 1
+2026-02-19 03:14:33 [warning] API budget low: ~0% remaining before day 20
+INSERT 0 1
+2026-02-19 03:14:34 [info] Alerts sent to Telegram
+INSERT 0 1
+=== Watchdog complete ===
