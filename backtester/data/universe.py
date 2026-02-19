@@ -84,6 +84,33 @@ SP500_TICKERS = [
     # === Materials & Chemicals ===
     "APD", "SHW", "ECL", "LIN", "FCX", "NEM", "NUE", "STLD", "VMC", "MLM",
     "CL", "CLX", "DD", "EMN",
+
+    # === Additional Large Cap / S&P 500 Components ===
+    "GRMN", "CDNS", "SNPS", "MELI", "WDAY", "ADSK", "LRCX", "ANET", "MNST",
+    "FTNT", "CPRT", "CTAS", "ODFL", "PCAR", "FICO", "MSCI", "IDXX", "DXCM",
+    "EW", "ROP", "MTD", "WST", "ZBRA", "TER", "TRMB", "NTAP", "JBHT",
+    "POOL", "TECH", "BIO", "PKG", "WRB", "CINF", "GL", "AIZ",
+    "FDS", "CBOE", "NDAQ", "MKTX", "TROW", "IVZ", "BEN",
+
+    # === High-Growth Tech / AI / Cloud ===
+    "PLTR", "NET", "SNOW", "MDB", "ESTC", "CFLT", "IOT", "AI", "PATH",
+    "GTLB", "DOCN", "BRZE", "AMPL", "FRSH", "TOST", "GLBE",
+    "APP", "RDDT", "GRAB", "SE", "BABA", "JD", "PDD", "BIDU",
+    "ASAN", "TWLO", "OKTA", "U", "PINS", "SNAP",
+
+    # === Recent Strong IPOs / Newer Public Companies ===
+    "RKLB", "CART", "BIRK", "DUOL", "CAVA", "KVYO", "ONON",
+    "VRT", "CRDO", "IBKR", "FOUR", "SOUN",
+
+    # === Biotech Growth ===
+    "SGEN", "PCVX", "BMRN", "INCY", "EXAS", "HALO", "RARE",
+    "BPMC", "RCKT", "DNLI", "KRYS", "RYTM", "INSM", "NUVB",
+
+    # === Energy Transition / Infrastructure ===
+    "ENPH", "SEDG", "FSLR", "RUN", "ARRY", "PWR", "QUBT",
+
+    # === Industrials / Aerospace Growth ===
+    "HEXY", "ARES", "KKR", "APO", "OWL", "STEP",
 ]
 
 # Growth/momentum stocks to always include in scans
@@ -116,6 +143,14 @@ GROWTH_WATCHLIST = [
 
     # Industrials with momentum
     "AXON", "TT", "GE", "CARR", "HWM", "TDG",
+
+    # Additional high-growth / AI infrastructure
+    "APP", "RDDT", "VRT", "CRDO", "ANET", "FICO", "PLTR",
+    "GRAB", "SE", "NU", "MELI", "FOUR", "SOUN", "IOT",
+    "KVYO", "GLBE", "GTLB",
+
+    # Alt energy / private equity growth
+    "ENPH", "FSLR", "KKR", "APO", "ARES",
 ]
 
 

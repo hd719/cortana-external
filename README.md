@@ -228,6 +228,19 @@ Tonal 401 means credentials in `.env` are wrong.
 
 ---
 
+## Whoop Caching
+
+The `/whoop/data` endpoint includes a 5-minute in-memory cache to reduce API load and improve response times:
+
+- **Cache initialization**: Lazy init with `sync.RWMutex` for thread safety
+- **Performance**: First request hits Whoop API (~6.5s), subsequent requests return cached data (~3ms)
+- **TTL**: 5-minute expiration, configurable via `defaultCacheTTL` constant in `whoop/handler.go`
+- **Auto-refresh**: Cache refreshes automatically after TTL expires on the next request
+
+This means frequent calls within a 5-minute window will be nearly instantaneous without hitting Whoop's rate limits.
+
+---
+
 ## Example Python Code
 
 ```python
@@ -256,9 +269,10 @@ print(f"Strength: {strength}, Workouts: {total_workouts}, Last: {last_workout['w
 ## Architecture
 
 ```
-/Users/hameldesai/Desktop/services/
+/Users/hd/cortana-external/
 ├── .env                     # Credentials (WHOOP_*, TONAL_*)
 ├── main.go                  # Server entry point, runs on :8080
+├── run.sh                   # Primary startup script
 ├── whoop_tokens.json        # Whoop OAuth tokens (auto-managed)
 ├── tonal_tokens.json        # Tonal auth tokens (auto-managed)
 ├── tonal_data.json          # Tonal workout cache (grows over time)
@@ -275,11 +289,31 @@ print(f"Strength: {strength}, Workouts: {total_workouts}, Last: {last_workout['w
 ## Running the Server
 
 ```bash
-cd /Users/hameldesai/Desktop/services
-source .env && go run main.go
+cd /Users/hd/cortana-external
+bash run.sh
+
+# Or run in background:
+nohup bash run.sh &>/tmp/fitness-service.log &
 ```
 
 Server listens on `http://localhost:8080`.
+
+## Launchd Service
+
+The fitness service can run as a macOS launchd agent for automatic startup and crash recovery:
+
+**Files:**
+- Plist location: `~/Library/LaunchAgents/com.cortana.fitness-service.plist`
+- Wrapper script: `~/fitness-service-launch.sh`
+
+**Management:**
+- Start: `launchctl load ~/Library/LaunchAgents/com.cortana.fitness-service.plist`
+- Stop: `launchctl unload ~/Library/LaunchAgents/com.cortana.fitness-service.plist`  
+- Restart: unload then load
+- Check status: `launchctl list | grep cortana.fitness`
+- Logs: `/tmp/fitness-service.log`
+
+**Auto-restart:** Service automatically restarts on crash via KeepAlive setting.
 
 ---
 
