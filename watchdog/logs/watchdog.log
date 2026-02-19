@@ -90,3 +90,21 @@
 /bin/bash: /Users/hd/Desktop/services/watchdog/watchdog.sh: Operation not permitted
 /bin/bash: /Users/hd/Desktop/services/watchdog/watchdog.sh: Operation not permitted
 /bin/bash: /Users/hd/Desktop/services/watchdog/watchdog.sh: Operation not permitted
+=== Watchdog run: Wed Feb 18 21:49:10 EST 2026 ===
+2026-02-18 21:49:10 [info] Cron health check complete
+INSERT 0 1
+2026-02-18 21:49:10 [info] Heartbeat pileup check: 0 processes
+INSERT 0 1
+2026-02-18 21:49:10 [info] gog: OK
+INSERT 0 1
+2026-02-18 21:49:11 [info] Tonal: OK
+INSERT 0 1
+2026-02-18 21:49:11 [info] Whoop: OK
+INSERT 0 1
+2026-02-18 21:49:11 [info] PostgreSQL: OK
+INSERT 0 1
+2026-02-18 21:49:17 [warning] API budget low: ~0% remaining before day 20
+INSERT 0 1
+2026-02-18 21:49:18 [info] Alerts sent to Telegram
+INSERT 0 1
+=== Watchdog complete ===
