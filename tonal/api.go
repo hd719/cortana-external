@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"time"
 )
 
@@ -178,7 +179,7 @@ func (s *Service) fetchTonal(ctx context.Context, token, method, path string, he
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode == http.StatusUnauthorized {
+	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
 		return nil, errTonalUnauthorized
 	}
 	if resp.StatusCode >= 400 {
@@ -187,6 +188,59 @@ func (s *Service) fetchTonal(ctx context.Context, token, method, path string, he
 	}
 
 	return io.ReadAll(resp.Body)
+}
+
+// apiCallWithSelfHeal wraps API operations with automatic token refresh/retry logic.
+// When an auth failure (401/403) is detected, it:
+// 1. Deletes the stale token file
+// 2. Forces fresh authentication 
+// 3. Retries the API call once with the new token
+// 4. Logs the self-heal action for visibility
+func (s *Service) apiCallWithSelfHeal(ctx context.Context, operation func(ctx context.Context, token string) error) error {
+	// Get initial token
+	token, err := s.getValidToken(ctx)
+	if err != nil {
+		return err
+	}
+
+	// Try the operation with current token
+	err = operation(ctx, token)
+	if !errors.Is(err, errTonalUnauthorized) {
+		return err // Success or non-auth error
+	}
+
+	// Auth failure detected - perform self-healing
+	s.Logger.Printf("🔧 TONAL SELF-HEAL: Authentication failure detected, attempting automatic recovery...")
+	
+	// Delete stale token file
+	if removeErr := os.Remove(s.TokenPath); removeErr != nil && !os.IsNotExist(removeErr) {
+		s.Logger.Printf("⚠️  TONAL SELF-HEAL: Warning - failed to remove stale token file: %v", removeErr)
+	} else {
+		s.Logger.Printf("🗑️  TONAL SELF-HEAL: Deleted stale token file: %s", s.TokenPath)
+	}
+
+	// Get fresh token via full authentication
+	freshTokens, err := s.authenticate(ctx)
+	if err != nil {
+		s.Logger.Printf("❌ TONAL SELF-HEAL: Failed to re-authenticate: %v", err)
+		return fmt.Errorf("self-heal failed - re-authentication error: %w", err)
+	}
+
+	// Save fresh tokens
+	if saveErr := SaveTokens(s.TokenPath, freshTokens); saveErr != nil {
+		s.Logger.Printf("⚠️  TONAL SELF-HEAL: Warning - failed to save fresh tokens: %v", saveErr)
+	}
+
+	// Retry operation with fresh token
+	s.Logger.Printf("🔄 TONAL SELF-HEAL: Retrying API call with fresh token...")
+	err = operation(ctx, freshTokens.IDToken)
+	if err != nil {
+		s.Logger.Printf("❌ TONAL SELF-HEAL: Retry failed: %v", err)
+		return fmt.Errorf("self-heal failed - retry error: %w", err)
+	}
+
+	s.Logger.Printf("✅ TONAL SELF-HEAL: Recovery successful - API call completed with fresh authentication")
+	return nil
 }
 
 func (s *Service) getUserInfo(ctx context.Context, token string) (string, error) {
@@ -274,4 +328,91 @@ func (s *Service) getStrengthScoresHistory(ctx context.Context, token, userID st
 	}
 
 	return history, nil
+}
+
+// Self-healing wrapper functions that use apiCallWithSelfHeal
+
+func (s *Service) getUserInfoWithRetry(ctx context.Context) (string, error) {
+	var result string
+	var resultErr error
+	
+	err := s.apiCallWithSelfHeal(ctx, func(ctx context.Context, token string) error {
+		userInfo, err := s.getUserInfo(ctx, token)
+		result = userInfo
+		resultErr = err
+		return err
+	})
+	
+	if err != nil {
+		return "", err
+	}
+	return result, resultErr
+}
+
+func (s *Service) getProfileWithRetry(ctx context.Context, userID string) (map[string]any, error) {
+	var result map[string]any
+	var resultErr error
+	
+	err := s.apiCallWithSelfHeal(ctx, func(ctx context.Context, token string) error {
+		profile, err := s.getProfile(ctx, token, userID)
+		result = profile
+		resultErr = err
+		return err
+	})
+	
+	if err != nil {
+		return nil, err
+	}
+	return result, resultErr
+}
+
+func (s *Service) getWorkoutActivitiesWithRetry(ctx context.Context, userID string, limit int, totalWorkouts int) ([]map[string]any, error) {
+	var result []map[string]any
+	var resultErr error
+	
+	err := s.apiCallWithSelfHeal(ctx, func(ctx context.Context, token string) error {
+		workouts, err := s.getWorkoutActivities(ctx, token, userID, limit, totalWorkouts)
+		result = workouts
+		resultErr = err
+		return err
+	})
+	
+	if err != nil {
+		return nil, err
+	}
+	return result, resultErr
+}
+
+func (s *Service) getStrengthScoresCurrentWithRetry(ctx context.Context, userID string) ([]map[string]any, error) {
+	var result []map[string]any
+	var resultErr error
+	
+	err := s.apiCallWithSelfHeal(ctx, func(ctx context.Context, token string) error {
+		scores, err := s.getStrengthScoresCurrent(ctx, token, userID)
+		result = scores
+		resultErr = err
+		return err
+	})
+	
+	if err != nil {
+		return nil, err
+	}
+	return result, resultErr
+}
+
+func (s *Service) getStrengthScoresHistoryWithRetry(ctx context.Context, userID string) ([]map[string]any, error) {
+	var result []map[string]any
+	var resultErr error
+	
+	err := s.apiCallWithSelfHeal(ctx, func(ctx context.Context, token string) error {
+		history, err := s.getStrengthScoresHistory(ctx, token, userID)
+		result = history
+		resultErr = err
+		return err
+	})
+	
+	if err != nil {
+		return nil, err
+	}
+	return result, resultErr
 }
