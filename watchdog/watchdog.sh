@@ -11,6 +11,94 @@ BOT_TOKEN="$(cat /Users/hd/.openclaw/openclaw.json | jq -r '.channels.telegram.b
 CHAT_ID="8171372724"
 ALERTS=""
 LOGS=""
+STATE_FILE="$SCRIPT_DIR/watchdog-state.json"
+
+# ── State Management ──
+load_state() {
+  if [[ -f "$STATE_FILE" ]]; then
+    cat "$STATE_FILE" 2>/dev/null || echo '{}'
+  else
+    echo '{}'
+  fi
+}
+
+save_state() {
+  local state="$1"
+  echo "$state" > "$STATE_FILE" 2>/dev/null || true
+}
+
+get_current_timestamp() {
+  date +%s
+}
+
+# Get the last alert time for a specific check
+get_last_alert_time() {
+  local check_name="$1"
+  local state=$(load_state)
+  echo "$state" | jq -r ".\"$check_name\".last_alert // 0" 2>/dev/null || echo "0"
+}
+
+# Get the first failure time for a specific check
+get_first_failure_time() {
+  local check_name="$1"
+  local state=$(load_state)
+  echo "$state" | jq -r ".\"$check_name\".first_failure // 0" 2>/dev/null || echo "0"
+}
+
+# Update state for a check
+update_check_state() {
+  local check_name="$1"
+  local status="$2"  # "failing" or "recovered"
+  local current_time=$(get_current_timestamp)
+  local state=$(load_state)
+  
+  if [[ "$status" == "failing" ]]; then
+    local first_failure=$(get_first_failure_time "$check_name")
+    if [[ "$first_failure" == "0" ]]; then
+      first_failure="$current_time"
+    fi
+    state=$(echo "$state" | jq --arg check "$check_name" --argjson time "$current_time" --argjson first "$first_failure" \
+      '.[$check] = {last_alert: $time, first_failure: $first, status: "failing"}')
+  else
+    # Clear failure state on recovery
+    state=$(echo "$state" | jq --arg check "$check_name" --argjson time "$current_time" \
+      '.[$check] = {last_alert: 0, first_failure: 0, status: "recovered", last_recovery: $time}')
+  fi
+  
+  save_state "$state"
+}
+
+# Check if we should suppress this alert
+should_suppress_alert() {
+  local check_name="$1"
+  local current_time=$(get_current_timestamp)
+  local last_alert=$(get_last_alert_time "$check_name")
+  local first_failure=$(get_first_failure_time "$check_name")
+  
+  # First occurrence - never suppress
+  if [[ "$last_alert" == "0" ]]; then
+    return 1  # Don't suppress
+  fi
+  
+  # Special case for Tonal: if failing >1 hour, only alert every 6 hours
+  if [[ "$check_name" == *"Tonal"* ]]; then
+    local failure_duration=$((current_time - first_failure))
+    if [[ "$failure_duration" -gt 3600 ]]; then  # >1 hour
+      local time_since_last=$((current_time - last_alert))
+      if [[ "$time_since_last" -lt 21600 ]]; then  # <6 hours
+        return 0  # Suppress
+      fi
+    fi
+  fi
+  
+  # General suppression: don't repeat identical alerts within 6 hours
+  local time_since_last=$((current_time - last_alert))
+  if [[ "$time_since_last" -lt 21600 ]]; then  # <6 hours
+    return 0  # Suppress
+  fi
+  
+  return 1  # Don't suppress
+}
 
 log() {
   local severity="$1" msg="$2" meta="${3:-{}}"
@@ -21,8 +109,31 @@ log() {
 
 alert() {
   local msg="$1"
+  local check_name="${2:-$msg}"  # Use msg as check_name if not provided
+  
+  if should_suppress_alert "$check_name"; then
+    log "info" "Suppressed repeated alert: $msg"
+    return
+  fi
+  
   ALERTS="${ALERTS}• ${msg}\n"
   log "warning" "$msg"
+  update_check_state "$check_name" "failing"
+}
+
+# Send recovery alert for a previously failing check
+recovery_alert() {
+  local check_name="$1"
+  local msg="$2"
+  local state=$(load_state)
+  local check_status=$(echo "$state" | jq -r ".\"$check_name\".status // \"unknown\"" 2>/dev/null || echo "unknown")
+  
+  # Only send recovery alert if the check was previously failing
+  if [[ "$check_status" == "failing" ]]; then
+    ALERTS="${ALERTS}✅ ${msg}\n"
+    log "info" "Recovery: $msg"
+    update_check_state "$check_name" "recovered"
+  fi
 }
 
 # ── A) Cron Health ──
@@ -33,8 +144,13 @@ check_cron_health() {
       [[ -f "$state_file" ]] || continue
       local name=$(basename "$state_file" .state.json)
       local consecutive_failures=$(jq -r '.consecutiveFailures // 0' "$state_file" 2>/dev/null || echo 0)
+      local check_name="cron_${name}"
+      
       if [[ "$consecutive_failures" -ge 3 ]]; then
-        alert "Cron \`${name}\` has ${consecutive_failures} consecutive failures"
+        alert "Cron \`${name}\` has ${consecutive_failures} consecutive failures" "$check_name"
+      else
+        # Send recovery alert if this cron was previously failing
+        recovery_alert "$check_name" "Cron \`${name}\` recovered (${consecutive_failures} failures)"
       fi
     done
   fi
@@ -44,8 +160,12 @@ check_cron_health() {
 # ── B) Heartbeat Pileup ──
 check_heartbeat_pileup() {
   local count=$(pgrep -f "openclaw.*heartbeat" 2>/dev/null | wc -l | tr -d ' ')
+  local check_name="heartbeat_pileup"
+  
   if [[ "$count" -gt 1 ]]; then
-    alert "Heartbeat pileup detected: ${count} processes running"
+    alert "Heartbeat pileup detected: ${count} processes running" "$check_name"
+  else
+    recovery_alert "$check_name" "Heartbeat pileup resolved (${count} process)"
   fi
   log "info" "Heartbeat pileup check: ${count} processes"
 }
@@ -53,19 +173,22 @@ check_heartbeat_pileup() {
 # ── C) Tool Smoke Tests ──
 check_tools() {
   # gog
+  local check_name="gog"
   gog_exit=0
   timeout 5 gog --account hameldesai3@gmail.com gmail search 'newer_than:1d' --max 1 2>/dev/null || gog_exit=$?
   if [[ "$gog_exit" -eq 4 ]]; then
-    alert "gog needs re-auth (exit code 4 = no auth)"
+    alert "gog needs re-auth (exit code 4 = no auth)" "$check_name"
   elif [[ "$gog_exit" -eq 124 ]]; then
-    alert "gog timed out (possible auth/network issue)"
+    alert "gog timed out (possible auth/network issue)" "$check_name"
   elif [[ "$gog_exit" -ne 0 ]]; then
-    log "warning" "gog smoke test failed (exit $gog_exit)"
+    alert "gog smoke test failed (exit $gog_exit)" "$check_name"
   else
+    recovery_alert "$check_name" "gog recovered and is working"
     log "info" "gog: OK"
   fi
 
-  # Tonal
+  # Tonal - this is the main target for suppression
+  local tonal_check_name="tonal"
   local tonal_code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 http://localhost:8080/tonal/health 2>/dev/null || echo "000")
   if [[ "$tonal_code" != "200" ]]; then
     log "warning" "Tonal health check failed (HTTP ${tonal_code}), attempting self-heal"
@@ -73,26 +196,32 @@ check_tools() {
     sleep 5
     tonal_code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 http://localhost:8080/tonal/health 2>/dev/null || echo "000")
     if [[ "$tonal_code" != "200" ]]; then
-      alert "Tonal still down after self-heal (HTTP ${tonal_code})"
+      alert "Tonal still down after self-heal (HTTP ${tonal_code})" "$tonal_check_name"
     else
+      recovery_alert "$tonal_check_name" "Tonal self-healed successfully"
       log "info" "Tonal self-healed successfully"
     fi
   else
+    recovery_alert "$tonal_check_name" "Tonal recovered and is healthy"
     log "info" "Tonal: OK"
   fi
 
   # Whoop
+  local whoop_check_name="whoop"
   local whoop_code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 http://localhost:8080/whoop/data 2>/dev/null || echo "000")
   if [[ "$whoop_code" != "200" ]]; then
-    log "warning" "Whoop health check failed (HTTP ${whoop_code})"
+    alert "Whoop health check failed (HTTP ${whoop_code})" "$whoop_check_name"
   else
+    recovery_alert "$whoop_check_name" "Whoop recovered and is healthy"
     log "info" "Whoop: OK"
   fi
 
   # PostgreSQL
+  local pg_check_name="postgresql"
   if ! psql cortana -c "SELECT 1;" &>/dev/null; then
-    alert "PostgreSQL is DOWN"
+    alert "PostgreSQL is DOWN" "$pg_check_name"
   else
+    recovery_alert "$pg_check_name" "PostgreSQL recovered and is running"
     log "info" "PostgreSQL: OK"
   fi
 }
@@ -107,14 +236,17 @@ check_budget() {
   # handler.js outputs "🔋 Quota: 🟢 100%" meaning 100% available
   local pct=$(echo "$output" | grep -oE 'Quota:.*?([0-9]+(\.[0-9]+)?)%' | grep -oE '[0-9]+(\.[0-9]+)?%' | tr -d '%')
   
+  local budget_check_name="budget_low"
+  
   if [[ -n "$pct" ]]; then
     # pct = remaining quota (e.g., 100 = fully available, 0 = exhausted)
     local is_low=$(echo "$pct" | awk '{print ($1 < 30) ? 1 : 0}')
     if [[ "$is_low" == "1" && "$day_of_month" -lt 20 ]]; then
-      alert "API budget low: ~${pct}% quota remaining before day 20"
+      alert "API budget low: ~${pct}% quota remaining before day 20" "$budget_check_name"
     elif [[ "$is_low" == "1" ]]; then
-      alert "API budget low: ~${pct}% quota remaining"
+      alert "API budget low: ~${pct}% quota remaining" "$budget_check_name"
     else
+      recovery_alert "$budget_check_name" "API budget recovered: ${pct}% quota remaining"
       log "info" "Budget: ${pct}% quota remaining"
     fi
   else

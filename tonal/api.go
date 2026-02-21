@@ -3,12 +3,14 @@ package tonal
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -28,6 +30,41 @@ type authResponse struct {
 
 type userInfoResponse struct {
 	ID string `json:"id"`
+}
+
+// extractJWTExpiry decodes a JWT token and extracts the exp claim
+func extractJWTExpiry(idToken string) (time.Time, error) {
+	// Split JWT into parts
+	parts := strings.Split(idToken, ".")
+	if len(parts) != 3 {
+		return time.Time{}, errors.New("invalid JWT format")
+	}
+
+	// Decode the payload (second part)
+	payload := parts[1]
+	// Add padding if needed for base64 decoding
+	if padding := len(payload) % 4; padding != 0 {
+		payload += strings.Repeat("=", 4-padding)
+	}
+
+	decoded, err := base64.URLEncoding.DecodeString(payload)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("failed to decode JWT payload: %w", err)
+	}
+
+	// Parse JSON to extract exp claim
+	var claims struct {
+		Exp int64 `json:"exp"`
+	}
+	if err := json.Unmarshal(decoded, &claims); err != nil {
+		return time.Time{}, fmt.Errorf("failed to parse JWT claims: %w", err)
+	}
+
+	if claims.Exp == 0 {
+		return time.Time{}, errors.New("exp claim not found or invalid")
+	}
+
+	return time.Unix(claims.Exp, 0), nil
 }
 
 func (s *Service) authenticate(ctx context.Context) (*TokenData, error) {
@@ -68,10 +105,19 @@ func (s *Service) authenticate(ctx context.Context) (*TokenData, error) {
 		return nil, err
 	}
 
+	// Try to extract expiry from JWT, fallback to expires_in with safety margin
+	expiresAt := time.Now().Add(time.Duration(authResp.ExpiresIn) * time.Second)
+	if jwtExpiry, err := extractJWTExpiry(authResp.IDToken); err == nil {
+		expiresAt = jwtExpiry
+	} else {
+		// JWT decoding failed, use expires_in with safety margin (half the time)
+		expiresAt = time.Now().Add(time.Duration(authResp.ExpiresIn/2) * time.Second)
+	}
+
 	return &TokenData{
 		IDToken:      authResp.IDToken,
 		RefreshToken: authResp.RefreshToken,
-		ExpiresAt:    time.Now().Add(time.Duration(authResp.ExpiresIn) * time.Second),
+		ExpiresAt:    expiresAt,
 	}, nil
 }
 
@@ -119,10 +165,19 @@ func (s *Service) refreshAuthentication(ctx context.Context, refreshToken string
 		newRefresh = refreshToken
 	}
 
+	// Try to extract expiry from JWT, fallback to expires_in with safety margin
+	expiresAt := time.Now().Add(time.Duration(authResp.ExpiresIn) * time.Second)
+	if jwtExpiry, err := extractJWTExpiry(authResp.IDToken); err == nil {
+		expiresAt = jwtExpiry
+	} else {
+		// JWT decoding failed, use expires_in with safety margin (half the time)
+		expiresAt = time.Now().Add(time.Duration(authResp.ExpiresIn/2) * time.Second)
+	}
+
 	return &TokenData{
 		IDToken:      authResp.IDToken,
 		RefreshToken: newRefresh,
-		ExpiresAt:    time.Now().Add(time.Duration(authResp.ExpiresIn) * time.Second),
+		ExpiresAt:    expiresAt,
 	}, nil
 }
 
