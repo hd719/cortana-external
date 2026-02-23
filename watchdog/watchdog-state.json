@@ -1,1 +1,14 @@
-{}
+{
+  "tonal": {
+    "last_alert": 0,
+    "first_failure": 0,
+    "status": "recovered",
+    "last_recovery": 1771771979
+  },
+  "postgresql": {
+    "last_alert": 0,
+    "first_failure": 0,
+    "status": "recovered",
+    "last_recovery": 1771867514
+  }
+}
