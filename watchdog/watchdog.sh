@@ -254,18 +254,21 @@ check_tools() {
 # ── D) Budget Guard ──
 check_budget() {
   local output
-  output=$(node /Users/hd/clawd/skills/telegram-usage/handler.js 2>/dev/null) || { log "warning" "Budget check failed to run"; return; }
-  
-  local day_of_month=$(date +%d | sed 's/^0//')
-  # Extract quota percentage from output (this is % REMAINING, not % used)
-  # handler.js outputs "🔋 Quota: 🟢 100%" meaning 100% available
-  local pct=$(echo "$output" | grep -oE 'Quota:.*?([0-9]+(\.[0-9]+)?)%' | grep -oE '[0-9]+(\.[0-9]+)?%' | tr -d '%')
-  
+  output=$(node /Users/hd/clawd/skills/telegram-usage/handler.js json 2>/dev/null) || { log "warning" "Budget check failed to run"; return; }
+
+  local day_of_month
+  day_of_month=$(date +%d | sed 's/^0//')
+
+  # Parse numeric quotaRemaining directly from JSON to avoid fragile text scraping
+  local pct
+  pct=$(echo "$output" | jq -r '.quotaRemaining // empty' 2>/dev/null || true)
+
   local budget_check_name="budget_low"
-  
-  if [[ -n "$pct" ]]; then
+
+  if [[ -n "$pct" && "$pct" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
     # pct = remaining quota (e.g., 100 = fully available, 0 = exhausted)
-    local is_low=$(echo "$pct" | awk '{print ($1 < 30) ? 1 : 0}')
+    local is_low
+    is_low=$(echo "$pct" | awk '{print ($1 < 30) ? 1 : 0}')
     if [[ "$is_low" == "1" && "$day_of_month" -lt 20 ]]; then
       alert "API budget low: ~${pct}% quota remaining before day 20" "$budget_check_name"
     elif [[ "$is_low" == "1" ]]; then
@@ -275,7 +278,7 @@ check_budget() {
       log "info" "Budget: ${pct}% quota remaining"
     fi
   else
-    log "info" "Budget check: day ${day_of_month}, could not parse quota"
+    log "info" "Budget check: day ${day_of_month}, quota unknown (no reliable usage line)"
   fi
 }
 
