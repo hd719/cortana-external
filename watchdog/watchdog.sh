@@ -138,6 +138,29 @@ recovery_alert() {
 }
 
 # ── A) Cron Health ──
+check_cron_quarantine() {
+  local qdir="${HOME}/.openclaw/cron/quarantine"
+  if [[ ! -d "$qdir" ]]; then
+    log "info" "Cron quarantine check: none"
+    return
+  fi
+
+  local found=0
+  for qf in "$qdir"/*.quarantined; do
+    [[ -f "$qf" ]] || continue
+    found=1
+    local name
+    name=$(basename "$qf" .quarantined)
+    local reason
+    reason=$(tail -n 1 "$qf" 2>/dev/null || echo "unknown")
+    alert "Cron \`${name}\` is quarantined (${reason})" "cron_quarantine_${name}"
+  done
+
+  if [[ "$found" -eq 0 ]]; then
+    log "info" "Cron quarantine check: none"
+  fi
+}
+
 check_cron_health() {
   local cron_dir="/Users/hd/.openclaw/cron"
   if [[ -d "$cron_dir" ]]; then
@@ -259,6 +282,7 @@ check_budget() {
 # ── Run all checks ──
 echo "=== Watchdog run: $(date) ==="
 
+check_cron_quarantine
 check_cron_health
 check_heartbeat_pileup
 check_tools

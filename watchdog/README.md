@@ -7,6 +7,7 @@ Current location: `~/Developer/cortana-external/watchdog` · Status: **active** 
 
 | Check | Action on failure |
 |-------|-------------------|
+| **Cron Quarantine** | Alert if any preflight quarantine marker exists (`~/.openclaw/cron/quarantine/*.quarantined`) |
 | **Cron Health** | Alert if any cron has 3+ consecutive failures |
 | **Heartbeat Pileup** | Alert if multiple heartbeat processes running |
 | **gog (Gmail)** | Log failure |
