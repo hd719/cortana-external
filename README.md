@@ -269,7 +269,7 @@ print(f"Strength: {strength}, Workouts: {total_workouts}, Last: {last_workout['w
 ## Architecture
 
 ```
-/Users/hd/cortana-external/
+~/Developer/cortana-external/
 ├── .env                     # Credentials (WHOOP_*, TONAL_*)
 ├── main.go                  # Server entry point, runs on :8080
 ├── run.sh                   # Primary startup script
@@ -289,7 +289,7 @@ print(f"Strength: {strength}, Workouts: {total_workouts}, Last: {last_workout['w
 ## Running the Server
 
 ```bash
-cd /Users/hd/cortana-external
+cd ~/Developer/cortana-external
 bash run.sh
 
 # Or run in background:

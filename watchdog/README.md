@@ -1,6 +1,7 @@
 # Cortana Watchdog
 
 Local reliability monitor — pure shell, $0 cost, runs every 15 min via launchd.
+Current location: `~/Developer/cortana-external/watchdog` · Status: **active** (`com.cortana.watchdog`).
 
 ## What it checks
 
@@ -19,22 +20,22 @@ All results logged to `cortana_events` table.
 ## Install
 
 ```bash
-chmod +x /Users/hd/Desktop/services/watchdog/watchdog.sh
-chmod +x /Users/hd/Desktop/services/watchdog/send_telegram.sh
-cp /Users/hd/Desktop/services/watchdog/com.cortana.watchdog.plist ~/Library/LaunchAgents/
+chmod +x ~/Developer/cortana-external/watchdog/watchdog.sh
+chmod +x ~/Developer/cortana-external/watchdog/send_telegram.sh
+cp ~/Developer/cortana-external/watchdog/com.cortana.watchdog.plist ~/Library/LaunchAgents/
 launchctl load ~/Library/LaunchAgents/com.cortana.watchdog.plist
 ```
 
 ## Test manually
 
 ```bash
-/Users/hd/Desktop/services/watchdog/watchdog.sh
+~/Developer/cortana-external/watchdog/watchdog.sh
 ```
 
 ## Check logs
 
 ```bash
-tail -f /Users/hd/Desktop/services/watchdog/logs/watchdog.log
+tail -f ~/Developer/cortana-external/watchdog/logs/watchdog.log
 ```
 
 ## Manage

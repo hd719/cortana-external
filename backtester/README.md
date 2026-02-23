@@ -5,7 +5,7 @@ A Python-based backtesting engine and trading advisor implementing the CANSLIM s
 ## Quick Start
 
 ```bash
-cd ~/Desktop/services/backtester
+cd ~/Developer/cortana-external/backtester
 source venv/bin/activate
 
 # Check market status
@@ -107,7 +107,7 @@ backtester/
 
 ## API Keys
 
-Alpaca keys stored at: `~/Desktop/services/alpaca_keys.json`
+Alpaca keys stored at: `~/Developer/cortana-external/backtester/alpaca_keys.json`
 
 ```json
 {
