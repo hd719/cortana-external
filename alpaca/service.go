@@ -7,7 +7,7 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -103,8 +103,9 @@ func (s *Service) LoadKeys() error {
 	if keys.BaseURL == "" {
 		keys.BaseURL = "https://paper-api.alpaca.markets"
 	}
+	keys.BaseURL = strings.TrimRight(keys.BaseURL, "/")
 	// Ensure base URL has /v2 suffix
-	if keys.BaseURL[len(keys.BaseURL)-3:] != "/v2" {
+	if !strings.HasSuffix(keys.BaseURL, "/v2") {
 		keys.BaseURL = keys.BaseURL + "/v2"
 	}
 	if keys.DataURL == "" {
@@ -154,10 +155,8 @@ func (s *Service) SaveTrades() error {
 
 // makeRequest makes an authenticated request to Alpaca API
 func (s *Service) makeRequest(method, url string) ([]byte, error) {
-	if s.keys == nil {
-		if err := s.LoadKeys(); err != nil {
-			return nil, err
-		}
+	if err := s.ensureKeysLoaded(); err != nil {
+		return nil, err
 	}
 
 	req, err := http.NewRequest(method, url, nil)
@@ -187,6 +186,16 @@ func (s *Service) makeRequest(method, url string) ([]byte, error) {
 	return body, nil
 }
 
+func (s *Service) ensureKeysLoaded() error {
+	if s.keys != nil {
+		return nil
+	}
+	if err := s.LoadKeys(); err != nil {
+		return err
+	}
+	return nil
+}
+
 // HealthHandler checks if Alpaca API is accessible
 func (s *Service) HealthHandler(c *gin.Context) {
 	if err := s.LoadKeys(); err != nil {
@@ -210,7 +219,7 @@ func (s *Service) HealthHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"status": "healthy",
 		"environment": func() string {
-			if filepath.Base(s.keys.BaseURL) == "paper-api.alpaca.markets" {
+			if strings.Contains(s.keys.BaseURL, "paper-api.alpaca.markets") {
 				return "paper"
 			}
 			return "live"
@@ -220,10 +229,17 @@ func (s *Service) HealthHandler(c *gin.Context) {
 
 // AccountHandler returns account summary
 func (s *Service) AccountHandler(c *gin.Context) {
+	if err := s.ensureKeysLoaded(); err != nil {
+		s.Logger.Printf("failed to load Alpaca keys in /alpaca/account: %v", err)
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
+		return
+	}
+
 	url := s.keys.BaseURL + "/account"
 	data, err := s.makeRequest("GET", url)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		s.Logger.Printf("alpaca account request failed: %v", err)
+		c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -238,10 +254,17 @@ func (s *Service) AccountHandler(c *gin.Context) {
 
 // PositionsHandler returns all positions
 func (s *Service) PositionsHandler(c *gin.Context) {
+	if err := s.ensureKeysLoaded(); err != nil {
+		s.Logger.Printf("failed to load Alpaca keys in /alpaca/positions: %v", err)
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
+		return
+	}
+
 	url := s.keys.BaseURL + "/positions"
 	data, err := s.makeRequest("GET", url)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		s.Logger.Printf("alpaca positions request failed: %v", err)
+		c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -256,11 +279,18 @@ func (s *Service) PositionsHandler(c *gin.Context) {
 
 // PortfolioHandler returns combined account + positions summary
 func (s *Service) PortfolioHandler(c *gin.Context) {
+	if err := s.ensureKeysLoaded(); err != nil {
+		s.Logger.Printf("failed to load Alpaca keys in /alpaca/portfolio: %v", err)
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
+		return
+	}
+
 	// Get account
 	accountURL := s.keys.BaseURL + "/account"
 	accountData, err := s.makeRequest("GET", accountURL)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		s.Logger.Printf("alpaca portfolio account fetch failed: %v", err)
+		c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -274,7 +304,8 @@ func (s *Service) PortfolioHandler(c *gin.Context) {
 	positionsURL := s.keys.BaseURL + "/positions"
 	positionsData, err := s.makeRequest("GET", positionsURL)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		s.Logger.Printf("alpaca portfolio positions fetch failed: %v", err)
+		c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
 		return
 	}
 
