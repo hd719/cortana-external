@@ -51,3 +51,4 @@ launchctl load ~/Library/LaunchAgents/com.cortana.watchdog.plist    # start
 - Bot token: read from `/Users/hd/.openclaw/openclaw.json`
 - Chat ID: `8171372724`
 - Interval: 900s (15 min)
+- Fitness base URL: `FITNESS_BASE_URL` env var (default: `http://localhost:3033`)

@@ -12,6 +12,7 @@ CHAT_ID="8171372724"
 ALERTS=""
 LOGS=""
 STATE_FILE="$SCRIPT_DIR/watchdog-state.json"
+FITNESS_BASE_URL="${FITNESS_BASE_URL:-http://localhost:3033}"
 
 # ── State Management ──
 load_state() {
@@ -172,6 +173,8 @@ check_heartbeat_pileup() {
 
 # ── C) Tool Smoke Tests ──
 check_tools() {
+  log "info" "Fitness endpoint base: ${FITNESS_BASE_URL}"
+
   # gog
   local check_name="gog"
   gog_exit=0
@@ -189,11 +192,11 @@ check_tools() {
 
   # Tonal - this is the main target for suppression
   local tonal_check_name="tonal"
-  local tonal_code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 http://localhost:8080/tonal/health 2>/dev/null || echo "000")
+  local tonal_code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$FITNESS_BASE_URL/tonal/health" 2>/dev/null || echo "000")
   if [[ "$tonal_code" != "200" ]]; then
     log "warning" "Tonal health check failed (HTTP ${tonal_code}), waiting for in-service refresh self-heal"
     sleep 5
-    tonal_code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 http://localhost:8080/tonal/health 2>/dev/null || echo "000")
+    tonal_code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$FITNESS_BASE_URL/tonal/health" 2>/dev/null || echo "000")
     if [[ "$tonal_code" != "200" ]]; then
       alert "Tonal still down after in-service self-heal (HTTP ${tonal_code})" "$tonal_check_name"
     else
@@ -207,7 +210,7 @@ check_tools() {
 
   # Whoop
   local whoop_check_name="whoop"
-  local whoop_code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 http://localhost:8080/whoop/data 2>/dev/null || echo "000")
+  local whoop_code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$FITNESS_BASE_URL/whoop/data" 2>/dev/null || echo "000")
   if [[ "$whoop_code" != "200" ]]; then
     alert "Whoop health check failed (HTTP ${whoop_code})" "$whoop_check_name"
   else
