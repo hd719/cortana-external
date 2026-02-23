@@ -156,11 +156,12 @@ The Tonal service uses **smart incremental caching**:
 **You do not need to handle token refresh.** The `/tonal/data` endpoint automatically:
 
 1. Checks if the ID token is expired (or expires within 1 minute)
-2. Re-authenticates with Tonal using your credentials
-3. Saves the new token to `tonal_tokens.json`
-4. Returns the data
+2. Tries refresh-token auth first (no manual token file deletion needed)
+3. Falls back to password auth only if refresh fails
+4. Saves the updated token set to `tonal_tokens.json`
+5. Returns the data
 
-Tokens are short-lived (~24 hours) but the service refreshes them automatically using your stored credentials.
+Tokens are short-lived (~24 hours), and the service handles refresh automatically from stored credentials/refresh token.
 
 ## Error Responses
 

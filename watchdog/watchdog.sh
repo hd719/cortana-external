@@ -191,12 +191,11 @@ check_tools() {
   local tonal_check_name="tonal"
   local tonal_code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 http://localhost:8080/tonal/health 2>/dev/null || echo "000")
   if [[ "$tonal_code" != "200" ]]; then
-    log "warning" "Tonal health check failed (HTTP ${tonal_code}), attempting self-heal"
-    rm -f /Users/hd/Developer/cortana-external/tonal_tokens.json
+    log "warning" "Tonal health check failed (HTTP ${tonal_code}), waiting for in-service refresh self-heal"
     sleep 5
     tonal_code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 http://localhost:8080/tonal/health 2>/dev/null || echo "000")
     if [[ "$tonal_code" != "200" ]]; then
-      alert "Tonal still down after self-heal (HTTP ${tonal_code})" "$tonal_check_name"
+      alert "Tonal still down after in-service self-heal (HTTP ${tonal_code})" "$tonal_check_name"
     else
       recovery_alert "$tonal_check_name" "Tonal self-healed successfully"
       log "info" "Tonal self-healed successfully"

@@ -10,7 +10,7 @@ Current location: `~/Developer/cortana-external/watchdog` · Status: **active** 
 | **Cron Health** | Alert if any cron has 3+ consecutive failures |
 | **Heartbeat Pileup** | Alert if multiple heartbeat processes running |
 | **gog (Gmail)** | Log failure |
-| **Tonal API** | Self-heal (delete tokens), then alert if still down |
+| **Tonal API** | Health probe + retry; Tonal service self-heals via refresh-token flow |
 | **Whoop API** | Log failure |
 | **PostgreSQL** | Alert |
 | **API Budget** | Alert if <30% remaining before day 20 |
