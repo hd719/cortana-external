@@ -17,6 +17,9 @@ python advisor.py --symbol NVDA
 # Quick scan for opportunities (watchlist)
 python advisor.py --quick
 
+# Telegram-ready CANSLIM alert summary
+python canslim_alert.py --limit 8 --min-score 6
+
 # Run a backtest
 python main.py --symbol AAPL --years 2 --compare
 ```
@@ -26,6 +29,7 @@ python main.py --symbol AAPL --years 2 --compare
 ```
 backtester/
 ├── advisor.py          # Main trading advisor (recommendations)
+├── canslim_alert.py    # Daily CANSLIM alert formatter (Telegram-ready)
 ├── main.py             # Backtest runner
 ├── backtest.py         # Core backtesting engine
 ├── metrics.py          # Performance calculations (Sharpe, Sortino, etc.)
@@ -159,7 +163,7 @@ python main.py --symbol AAPL --years 2 --strategy momentum
 - [ ] Phase 3: Trade Recommendations (in progress)
   - [x] Trade signal generation
   - [x] Position sizing based on regime
-  - [ ] Telegram alerts integration
+  - [x] Telegram alerts integration (via `canslim_alert.py` + OpenClaw cron)
   - [ ] Trade tracking (/executed, /declined)
 - [ ] Phase 4: Automated Execution (future, optional)
 
