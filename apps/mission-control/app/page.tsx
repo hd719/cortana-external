@@ -27,9 +27,9 @@ export default async function Home() {
           <p>{error}</p>
           <ol className="list-decimal space-y-1 pl-5">
             <li>Copy .env.example to .env.local and update DATABASE_URL.</li>
-            <li>Run <code className="font-mono">npm run db:migrate</code>.</li>
-            <li>Seed starter data with <code className="font-mono">npm run db:seed</code>.</li>
-            <li>Restart the dev server: <code className="font-mono">npm run dev</code>.</li>
+            <li>Run <code className="font-mono">pnpm db:migrate</code>.</li>
+            <li>Seed starter data with <code className="font-mono">pnpm db:seed</code>.</li>
+            <li>Restart the dev server: <code className="font-mono">pnpm dev</code>.</li>
           </ol>
         </CardContent>
       </Card>

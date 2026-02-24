@@ -11,7 +11,7 @@ Next.js + PostgreSQL dashboard for Cortana agents. Provides a unified view of ag
 1) Install deps
 ```bash
 cd apps/mission-control
-npm install
+pnpm install
 ```
 2) Configure the database
 ```bash
@@ -21,23 +21,23 @@ cp .env.example .env.local
 ```
 3) Apply schema + seed data (creates agents Huragok, Oracle, Researcher, Librarian, Monitor)
 ```bash
-npm run db:migrate
-npm run db:seed
+pnpm db:migrate
+pnpm db:seed
 ```
 4) Run the app
 ```bash
-npm run dev
+pnpm dev
 # open http://localhost:3000
 ```
 
 ## Scripts
-- `npm run dev` — start Next.js dev server
-- `npm run build` / `npm run start` — production build & start
-- `npm run lint` — lint
-- `npm run db:migrate` — apply Prisma migrations
-- `npm run db:deploy` — deploy migrations in production
-- `npm run db:seed` — load starter agents/runs/events
-- `npm run db:generate` — regenerate Prisma client
+- `pnpm dev` — start Next.js dev server
+- `pnpm build` / `pnpm start` — production build & start
+- `pnpm lint` — lint
+- `pnpm db:migrate` — apply Prisma migrations
+- `pnpm db:deploy` — deploy migrations in production
+- `pnpm db:seed` — load starter agents/runs/events
+- `pnpm db:generate` — regenerate Prisma client
 
 ## Data model (Prisma)
 - `Agent`: id, name, role, description, capabilities, status (active/idle/degraded/offline), healthScore, lastSeen, timestamps.
@@ -56,5 +56,5 @@ npm run dev
 - `/jobs` — Runs/jobs list
 
 ## Notes
-- Migrations are stored in `prisma/migrations`. Update schema in `prisma/schema.prisma`, then run `npm run db:migrate`.
+- Migrations are stored in `prisma/migrations`. Update schema in `prisma/schema.prisma`, then run `pnpm db:migrate`.
 - Seed data lives in `prisma/seed.ts`; safe to re-run.
