@@ -9,6 +9,7 @@ const links = [
   { href: "/task-board", label: "Task Board" },
   { href: "/agents", label: "Agents" },
   { href: "/jobs", label: "Jobs & Runs" },
+  { href: "/decisions", label: "Decision Traces" },
 ];
 
 export function MainNav() {
