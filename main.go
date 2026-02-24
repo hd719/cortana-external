@@ -71,8 +71,9 @@ func main() {
 	if port == "" {
 		port = "3033"
 	}
-	log.Printf("Starting server on :%s", port)
-	if err := router.Run(":" + port); err != nil {
+	bindAddr := "127.0.0.1:" + port
+	log.Printf("Starting server on %s", bindAddr)
+	if err := router.Run(bindAddr); err != nil {
 		log.Fatalf("server error: %v", err)
 	}
 }
