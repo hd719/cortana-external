@@ -141,18 +141,6 @@ const taskSeeds = [
     dueAt: new Date(Date.now() + 1000 * 60 * 60 * 24 * 2),
   },
   {
-    key: "auto-remediation",
-    title: "Enable auto-remediation for heartbeat misses",
-    description: "Trigger restart + alert when uptime probes fail twice.",
-    status: "pending",
-    priority: 1,
-    autoExecutable: true,
-    dependsOnKeys: ["uptime-playbook"],
-    metadata: { pillar: "Career" },
-    epic: "Reliability",
-    dueAt: new Date(Date.now() + 1000 * 60 * 60 * 36),
-  },
-  {
     key: "task-board-ui",
     title: "Add task board to Mission Control",
     description: "Expose ready, blocked, and pillar views for transparency.",

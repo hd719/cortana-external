@@ -110,8 +110,26 @@ const pillarFromMetadata = (metadata: Prisma.JsonValue | null): string => {
   return typeof pillar === "string" && pillar.length > 0 ? pillar : "Unspecified";
 };
 
+const LEGACY_GHOST_TASK_TITLE = "Enable auto-remediation for heartbeat misses";
+let ghostTaskPruned = false;
+
+const pruneLegacyGhostTask = async () => {
+  if (ghostTaskPruned) return;
+
+  await prisma.cortanaTask.deleteMany({
+    where: {
+      source: "seed",
+      title: LEGACY_GHOST_TASK_TITLE,
+    },
+  });
+
+  ghostTaskPruned = true;
+};
+
 export const getTaskBoard = async () => {
   noStore();
+  await pruneLegacyGhostTask();
+
   const tasks = await prisma.cortanaTask.findMany({
     include: { epic: true },
     orderBy: [{ dueAt: "asc" }, { priority: "asc" }, { createdAt: "desc" }],
