@@ -18,6 +18,8 @@ const badgeVariants = cva(
           "border-transparent bg-emerald-100 text-emerald-900 [a&]:hover:bg-emerald-100/80 dark:bg-emerald-900/40 dark:text-emerald-50 dark:border-emerald-900",
         warning:
           "border-transparent bg-amber-100 text-amber-900 [a&]:hover:bg-amber-100/80 dark:bg-amber-900/30 dark:text-amber-50 dark:border-amber-900",
+        info:
+          "border-transparent bg-sky-100 text-sky-900 [a&]:hover:bg-sky-100/80 dark:bg-sky-900/30 dark:text-sky-50 dark:border-sky-900",
         outline:
           "border-border text-foreground [a&]:hover:bg-accent [a&]:hover:text-accent-foreground",
         ghost: "[a&]:hover:bg-accent [a&]:hover:text-accent-foreground",

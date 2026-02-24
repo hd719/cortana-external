@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { getRuns } from "@/lib/data";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -7,17 +8,38 @@ import { Badge } from "@/components/ui/badge";
 import { RunStatus } from "@prisma/client";
 import { AutoRefresh } from "@/components/auto-refresh";
 
-export default async function JobsPage() {
+export default async function JobsPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ agentId?: string }>;
+}) {
+  const params = (await searchParams) ?? {};
+  const selectedAgentId = params.agentId?.trim() || "";
+
   const runs = await getRuns();
 
+  const agents = Array.from(
+    new Map(
+      runs
+        .filter((run) => run.agent?.id)
+        .map((run) => [run.agent!.id, { id: run.agent!.id, name: run.agent!.name }])
+    ).values()
+  ).sort((a, b) => a.name.localeCompare(b.name));
+
+  const filteredRuns = selectedAgentId
+    ? runs.filter((run) => run.agent?.id === selectedAgentId)
+    : runs;
+
   const grouped = Object.values(
-    runs.reduce<Record<string, { label: string; count: number }>>((acc, run) => {
-      const label = run.status;
+    filteredRuns.reduce<Record<string, { label: string; count: number }>>((acc, run) => {
+      const label = run.externalStatus || run.status;
       acc[label] = acc[label] || { label, count: 0 };
       acc[label].count += 1;
       return acc;
     }, {})
   );
+
+  const selectedAgent = agents.find((agent) => agent.id === selectedAgentId);
 
   return (
     <div className="space-y-6">
@@ -33,16 +55,35 @@ export default async function JobsPage() {
           </p>
         </div>
         <Badge variant="secondary">
-          {grouped
-            .sort((a, b) => b.count - a.count)
-            .map((item) => `${item.label}: ${item.count}`)
-            .join(" · ")}
+          {grouped.length > 0
+            ? grouped
+                .sort((a, b) => b.count - a.count)
+                .map((item) => `${item.label}: ${item.count}`)
+                .join(" · ")
+            : "No runs"}
         </Badge>
       </div>
 
       <Card>
-        <CardHeader>
+        <CardHeader className="gap-3">
           <CardTitle className="text-base">Recent runs</CardTitle>
+          <div className="flex flex-wrap gap-2">
+            <Link href="/jobs">
+              <Badge variant={selectedAgentId ? "outline" : "secondary"}>All agents</Badge>
+            </Link>
+            {selectedAgentId && (
+              <Link href={`/jobs?agentId=${selectedAgentId}`}>
+                <Badge variant="secondary">This agent: {selectedAgent?.name || selectedAgentId}</Badge>
+              </Link>
+            )}
+            {agents.map((agent) => (
+              <Link key={agent.id} href={`/jobs?agentId=${agent.id}`}>
+                <Badge variant={agent.id === selectedAgentId ? "secondary" : "outline"}>
+                  {agent.name}
+                </Badge>
+              </Link>
+            ))}
+          </div>
         </CardHeader>
         <CardContent className="overflow-hidden rounded-md border">
           <table className="w-full text-left text-sm">
@@ -56,7 +97,7 @@ export default async function JobsPage() {
               </tr>
             </thead>
             <tbody>
-              {runs.map((run) => (
+              {filteredRuns.map((run) => (
                 <tr key={run.id} className="border-t">
                   <td className="px-3 py-3">
                     <div className="font-semibold text-foreground">{run.jobType}</div>
@@ -87,6 +128,13 @@ export default async function JobsPage() {
                   </td>
                 </tr>
               ))}
+              {filteredRuns.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="px-3 py-8 text-center text-sm text-muted-foreground">
+                    No runs found for this filter.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </CardContent>

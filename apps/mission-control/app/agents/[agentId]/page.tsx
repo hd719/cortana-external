@@ -31,9 +31,15 @@ export default async function AgentDetailPage({
     <div className="space-y-6">
       <AutoRefresh />
       <div className="space-y-3">
-        <Link href="/agents" className="text-sm text-muted-foreground hover:text-foreground">
-          ← Back to agents
-        </Link>
+        <div className="flex flex-wrap items-center gap-3 text-sm">
+          <Link href="/agents" className="text-muted-foreground hover:text-foreground">
+            ← Back to agents
+          </Link>
+          <span className="text-muted-foreground">•</span>
+          <Link href={`/jobs?agentId=${agent.id}`} className="text-muted-foreground hover:text-foreground">
+            This agent in Jobs →
+          </Link>
+        </div>
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <p className="text-sm font-medium uppercase tracking-widest text-muted-foreground">Agent detail</p>

@@ -17,14 +17,14 @@ const agentMap: Record<AgentStatus, BadgeVariant> = {
 };
 
 const runMap: Record<string, BadgeVariant> = {
-  queued: "secondary",
-  running: "success",
+  done: "success",
   completed: "success",
   failed: "destructive",
+  timeout: "warning",
+  running: "info",
+  queued: "secondary",
   cancelled: "outline",
-  timeout: "destructive",
-  killed: "destructive",
-  done: "success",
+  killed: "outline",
 };
 
 const severityMap: Record<Severity, BadgeVariant> = {
