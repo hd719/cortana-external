@@ -2,6 +2,7 @@ import prisma from "@/lib/prisma";
 import { AgentStatus, Prisma, RunStatus, Severity } from "@prisma/client";
 import { unstable_noStore as noStore } from "next/cache";
 import { syncOpenClawRunsFromStore } from "@/lib/openclaw-sync";
+import { getTaskPrisma } from "@/lib/task-prisma";
 
 type AgentHealthBand = "healthy" | "degraded" | "critical";
 
@@ -283,9 +284,13 @@ const pruneLegacyGhostTask = async () => {
 
 export const getTaskBoard = async () => {
   noStore();
-  await pruneLegacyGhostTask();
 
-  const tasks = await prisma.cortanaTask.findMany({
+  const taskPrisma = getTaskPrisma() ?? prisma;
+  if (taskPrisma === prisma) {
+    await pruneLegacyGhostTask();
+  }
+
+  const tasks = await taskPrisma.cortanaTask.findMany({
     include: { epic: true },
     orderBy: [{ dueAt: "asc" }, { priority: "asc" }, { createdAt: "desc" }],
   });
