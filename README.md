@@ -9,6 +9,57 @@ Server runs on `localhost:8080` and handles all authentication automatically.
 
 ---
 
+## Mission Control (apps/mission-control)
+- Path: `apps/mission-control`
+- Stack: Next.js (App Router, TypeScript), shadcn/ui (Tailwind v4), PostgreSQL + Prisma
+- Package manager: **pnpm-first**
+- Docs: `apps/mission-control/docs/mission-control.md`
+
+### Setup
+```bash
+cd apps/mission-control
+pnpm install
+cp .env.example .env.local
+# set DATABASE_URL to your Postgres instance
+```
+
+### Database
+```bash
+pnpm db:migrate
+pnpm db:seed
+pnpm db:deploy
+pnpm db:generate
+```
+
+### Run / Build / Lint
+```bash
+pnpm dev
+pnpm build
+pnpm start
+pnpm lint
+```
+
+### Mission Control Operator Quick Actions
+```bash
+open http://localhost:3000
+cd apps/mission-control && pnpm db:generate
+cd apps/mission-control && rm -rf .next && pnpm dev
+```
+
+### Task Board integration
+- Page: `/task-board` (Ready now, Blocked, Due soon/Overdue, By pillar, Recent outcomes)
+- Reads `cortana_tasks` + `cortana_epics`
+- `Ready now` = `status='pending'` + `auto_executable=true` + dependencies done
+- Pillars from `metadata -> 'pillar'` (Time, Health, Wealth, Career; default Unspecified)
+
+### Troubleshooting — Radix import mismatch
+If you see `Cannot find module "radix-ui"` or bad `ProgressPrimitive` imports:
+1) Use scoped packages (`@radix-ui/react-progress`, etc.)
+2) Remove lingering `radix-ui` imports and re-run `pnpm install`
+3) Clear cache: `rm -rf .next` then `pnpm dev`
+
+---
+
 ## Quick Reference for Claude
 
 ### To Get Whoop Data (sleep, recovery, strain, HRV)
@@ -316,14 +367,6 @@ The fitness service can run as a macOS launchd agent for automatic startup and c
 **Auto-restart:** Service automatically restarts on crash via KeepAlive setting.
 
 ---
-
-## Mission Control (Next.js dashboard)
-- Path: `apps/mission-control`
-- Stack: Next.js (App Router) + PostgreSQL + Prisma + shadcn/ui
-- Setup: `cd apps/mission-control && pnpm install && cp .env.example .env.local` then update `DATABASE_URL`
-- DB: `pnpm db:migrate && pnpm db:seed`
-- Run locally: `pnpm dev` (http://localhost:3000)
-- Docs: `docs/mission-control.md`
 
 ---
 
