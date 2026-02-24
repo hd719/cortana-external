@@ -23,6 +23,7 @@ const runMap: Record<string, BadgeVariant> = {
   timeout: "warning",
   running: "info",
   queued: "secondary",
+  stale: "warning",
   cancelled: "outline",
   killed: "outline",
 };
