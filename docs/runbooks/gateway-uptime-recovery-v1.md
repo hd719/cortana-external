@@ -16,8 +16,9 @@
 
 Trigger if **any** of these are true:
 
-- **Heartbeat missed:** No heartbeat check-in for **>30 min** during active hours, or `pgrep -f "openclaw.*heartbeat"` shows **0** process.
-- **Heartbeat pileup:** `pgrep -f "openclaw.*heartbeat" | wc -l` returns **>1**.
+- **Heartbeat critical:** no process (`0`), pileup (`>1`), process age `>=3600s`, or restart churn `>=4` in 6h.
+- **Heartbeat warning:** process age `>=2400s`, restart churn `>=2` in 6h, or timing variance drift `>=300s`.
+- **Degraded agent:** mission-control agent is `degraded/offline` or `last_seen` is stale (`>45 min`).
 - **Cron failure:** any cron state file has `consecutiveFailures >= 3`.
 - **Cron quarantine present:** any `~/.openclaw/cron/quarantine/*.quarantined` exists.
 - **Budget telemetry mismatch:** usage source reports invalid/empty quota, or watchdog logs repeated budget parse failures for **>30 min**.
@@ -59,6 +60,10 @@ Run in order. Stop when root cause is confirmed.
 6. **Check budget telemetry source**
    ```bash
    node /Users/hd/clawd/skills/telegram-usage/handler.js json | jq '{quotaRemaining, periodStart, periodEnd}'
+   ```
+7. **Check degraded agents directly (if mission-control DB is present)**
+   ```bash
+   psql cortana -c "SELECT id, name, status, last_seen FROM agents WHERE status IN ('degraded','offline') OR (last_seen IS NOT NULL AND last_seen < NOW() - INTERVAL '45 minutes');"
    ```
 
 ---

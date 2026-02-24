@@ -9,7 +9,8 @@ Current location: `~/Developer/cortana-external/watchdog` · Status: **active** 
 |-------|-------------------|
 | **Cron Quarantine** | Alert if any preflight quarantine marker exists (`~/.openclaw/cron/quarantine/*.quarantined`) |
 | **Cron Health** | Alert if any cron has 3+ consecutive failures |
-| **Heartbeat Pileup** | Alert if multiple heartbeat processes running |
+| **Heartbeat Health (variance + degradation)** | Classify heartbeat as healthy/warning/critical using process count, process age, restart churn (6h), and timing drift variance |
+| **Degraded Agents** | Alert when mission-control agents are degraded/offline or stale (`last_seen > 45m`) |
 | **gog (Gmail)** | Log failure |
 | **Tonal API** | Health probe + retry; Tonal service self-heals via refresh-token flow |
 | **Whoop API** | Log failure |
@@ -33,6 +34,12 @@ launchctl load ~/Library/LaunchAgents/com.cortana.watchdog.plist
 ~/Developer/cortana-external/watchdog/watchdog.sh
 ```
 
+## Validate heartbeat classifier logic
+
+```bash
+~/Developer/cortana-external/watchdog/tests/heartbeat-classifier-test.sh
+```
+
 ## Check logs
 
 ```bash
@@ -53,3 +60,10 @@ launchctl load ~/Library/LaunchAgents/com.cortana.watchdog.plist    # start
 - Chat ID: `8171372724`
 - Interval: 900s (15 min)
 - Fitness base URL: `FITNESS_BASE_URL` env var (default: `http://localhost:3033`)
+- Optional Slack bridge: `WATCHDOG_SLACK_WEBHOOK_URL` (Telegram remains canonical notification path)
+
+### Heartbeat thresholds (tunable)
+
+- `critical`: no heartbeat process, pileup (`>1`), age `>=3600s`, or restart churn `>=4` restarts in 6h
+- `warning`: age `>=2400s`, restart churn `>=2` in 6h, or timing drift variance `>=300s`
+- `ok`: none of the above; recovery alert is emitted after previously degraded state clears
