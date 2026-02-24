@@ -9,8 +9,6 @@ on:
       pr:
         description: "PR number to process"
         required: false
-  schedule:
-    - cron: "*/30 * * * *"
 
 jobs:
   close-and-verify:
@@ -41,30 +39,28 @@ jobs:
         run: pnpm install --frozen-lockfile
         working-directory: apps/mission-control
 
+      - name: Generate Prisma client
+        run: pnpm prisma generate
+        working-directory: apps/mission-control
+
+      - name: Check database env vars
+        id: db_check
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${DATABASE_URL:-}" ] && [ -z "${CORTANA_DATABASE_URL:-}" ]; then
+            echo "No DATABASE_URL/CORTANA_DATABASE_URL configured; skipping task auto-close run."
+            echo "should_run=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "should_run=true" >> "$GITHUB_OUTPUT"
+
       - name: Process merged PR event (primary trigger)
-        if: github.event_name == 'pull_request'
+        if: steps.db_check.outputs.should_run == 'true' && github.event_name == 'pull_request' && github.event.pull_request.merged == true
         working-directory: apps/mission-control
         run: pnpm task-autoclose:post-merge --event-path "$GITHUB_EVENT_PATH"
 
       - name: Process manual PR
-        if: github.event_name == 'workflow_dispatch' && github.event.inputs.pr != ''
+        if: steps.db_check.outputs.should_run == 'true' && github.event_name == 'workflow_dispatch' && github.event.inputs.pr != ''
         working-directory: apps/mission-control
         run: pnpm task-autoclose:post-merge --pr "${{ github.event.inputs.pr }}" --repo "${{ github.repository }}"
-
-      - name: Cron fallback (scan latest merged PRs on main)
-        if: github.event_name == 'schedule'
-        working-directory: apps/mission-control
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          prs=$(gh api "repos/${{ github.repository }}/pulls?state=closed&base=main&sort=updated&direction=desc&per_page=20" --jq '.[] | select(.merged_at != null) | .number' || true)
-          if [ -z "$prs" ]; then
-            echo "No merged PRs found in recent window"
-            exit 0
-          fi
-          echo "$prs" | head -n 10 | while read -r pr; do
-            [ -z "$pr" ] && continue
-            echo "Processing PR #$pr"
-            pnpm task-autoclose:post-merge --pr "$pr" --repo "${{ github.repository }}"
-          done
