@@ -367,6 +367,8 @@ export const getAgentDetail = async (agentId: string) => {
   const agent = await prisma.agent.findUnique({ where: { id: agentId } });
   if (!agent) return null;
 
+  const liveAgent = (await getAgents()).find((candidate) => candidate.id === agentId) ?? agent;
+
   const [recentRuns, recentEvents] = await Promise.all([
     prisma.run.findMany({
       where: { agentId },
@@ -409,7 +411,7 @@ export const getAgentDetail = async (agentId: string) => {
   );
 
   return {
-    agent,
+    agent: liveAgent,
     recentRuns: runSummaries,
     recentEvents,
     failureEvents,
