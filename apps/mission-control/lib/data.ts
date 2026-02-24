@@ -3,6 +3,8 @@ import { AgentStatus, Prisma, RunStatus, Severity } from "@prisma/client";
 import { unstable_noStore as noStore } from "next/cache";
 import { syncOpenClawRunsFromStore } from "@/lib/openclaw-sync";
 import { getTaskPrisma } from "@/lib/task-prisma";
+import { reconcileTaskBoardSources } from "@/lib/task-reconciliation";
+import { deriveEvidenceGrade, deriveLaunchPhase, extractProviderPath } from "@/lib/run-intelligence";
 
 type AgentHealthBand = "healthy" | "degraded" | "critical";
 
@@ -176,8 +178,15 @@ export const getRuns = async ({ take = 20, cursor, agentId }: GetRunsInput = {})
   const pageRuns = hasMore ? runs.slice(0, normalizedTake) : runs;
   const nextCursor = hasMore ? pageRuns[pageRuns.length - 1]?.id ?? null : null;
 
+  const enrichedRuns = pageRuns.map((run) => ({
+    ...run,
+    confidence: deriveEvidenceGrade(run),
+    launchPhase: deriveLaunchPhase(run),
+    providerPath: extractProviderPath(run.payload ?? null),
+  }));
+
   return {
-    runs: pageRuns,
+    runs: enrichedRuns,
     hasMore,
     nextCursor,
   };
@@ -283,7 +292,7 @@ const pruneLegacyGhostTask = async () => {
 };
 
 type TaskBoardWarning = {
-  code: "task_db_fallback";
+  code: "task_db_fallback" | "task_source_drift";
   message: string;
   cause?: string;
 };
@@ -330,6 +339,15 @@ export const getTaskBoard = async () => {
     });
 
     tasks = await readTaskBoardTasks(prisma, { pruneGhostTask: true });
+  }
+
+  const reconcileReport = await reconcileTaskBoardSources();
+  if (reconcileReport?.drift) {
+    warnings.push({
+      code: "task_source_drift",
+      message: `Source-of-truth drift detected (preferred=${reconcileReport.preferredCount}, app=${reconcileReport.appCount}). Auto-reconcile is monitoring and this UI is anchored to ${taskSource}.`,
+      cause: `missingInApp=${reconcileReport.missingInAppSample.join(",") || "none"}; missingInPreferred=${reconcileReport.missingInPreferredSample.join(",") || "none"}`,
+    });
   }
 
   const tasksById = tasks.reduce<
@@ -424,6 +442,7 @@ export const getTaskBoard = async () => {
     metadata: {
       source: taskSource,
       warnings,
+      reconciliation: reconcileReport,
     },
   };
 };
@@ -468,6 +487,9 @@ export const getAgentDetail = async (agentId: string) => {
       ...run,
       durationMinutes: minutes,
       durationLabel: durationLabel(minutes),
+      confidence: deriveEvidenceGrade(run),
+      launchPhase: deriveLaunchPhase(run),
+      providerPath: extractProviderPath(run.payload ?? null),
       timedOut:
         run.status === "failed" &&
         (run.summary?.toLowerCase().includes("timeout") ||

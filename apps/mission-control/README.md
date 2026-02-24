@@ -78,6 +78,12 @@ pnpm dev
 - OpenClaw lifecycle bridge supports two ingestion paths:
   1) Push webhook adapter in `lib/openclaw-bridge.ts` + `/api/openclaw/subagent-events`
   2) Pull sync adapter in `lib/openclaw-sync.ts` that reads `~/.openclaw/subagents/runs.json` (or `OPENCLAW_SUBAGENT_RUNS_PATH`) and upserts real sub-agent runs into Mission Control on data fetch.
+- Reliability/autonomy controls now implemented:
+  - **Two-phase launch confirmation**: queued (phase 1) and running (phase 2). Running without prior queue evidence is marked `phase2_running_unconfirmed` and emits warning events.
+  - **Stale UI guard + auto-reconcile**: long-running states not present in live run store are auto-marked `stale` and emit `subagent.reconciled_stale` events.
+  - **Source-of-truth reconciliation job**: Task Board periodically compares dedicated Cortana DB vs app DB and surfaces drift warnings in the UI.
+  - **Fallback transparency layer**: Jobs/Agent detail display provider/model/auth path and explicit fallback-path badges when detected in run payload metadata.
+  - **Evidence-graded status messaging**: each run gets confidence grade (`high|medium|low`) based on observed lifecycle evidence.
 - Upserts runs by `Run.openclaw_run_id`, stores raw lifecycle in `Run.external_status`, and writes `Event` rows (`subagent.<status>`).
 - Optional webhook auth: set `OPENCLAW_EVENT_TOKEN` and send `Authorization: Bearer <token>`.
 

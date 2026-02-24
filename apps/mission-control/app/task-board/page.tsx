@@ -143,8 +143,14 @@ export default async function TaskBoardPage() {
           </CardHeader>
           <CardContent className="space-y-1 text-sm text-muted-foreground">
             {metadata.warnings.map((warning) => (
-              <p key={warning.code}>{warning.message}</p>
+              <div key={`${warning.code}-${warning.message}`}>
+                <p>{warning.message}</p>
+                {warning.cause && <p className="text-xs">Details: {warning.cause}</p>}
+              </div>
             ))}
+            {metadata.reconciliation?.ranAt && (
+              <p className="text-xs">Last reconciliation: {new Date(metadata.reconciliation.ranAt).toLocaleString()}</p>
+            )}
           </CardContent>
         </Card>
       )}

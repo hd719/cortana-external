@@ -91,9 +91,18 @@ export default async function AgentDetailPage({
                   <Badge variant={run.timedOut ? "destructive" : "outline"}>
                     {run.timedOut ? "timeout" : `duration ${run.durationLabel}`}
                   </Badge>
+                  {run.confidence && (
+                    <Badge variant={run.confidence === "high" ? "success" : run.confidence === "medium" ? "warning" : "outline"}>
+                      confidence {run.confidence}
+                    </Badge>
+                  )}
+                  {run.launchPhase === "phase2_running_unconfirmed" && <Badge variant="warning">launch unconfirmed</Badge>}
                   <span className="text-xs text-muted-foreground">{dtf.format(run.startedAt)}</span>
                 </div>
                 <p className="mt-1 text-sm text-muted-foreground">{run.summary || "No summary"}</p>
+                {run.providerPath?.label && (
+                  <p className="text-xs text-muted-foreground">Path: {run.providerPath.label}</p>
+                )}
               </div>
             ))
           )}

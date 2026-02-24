@@ -80,17 +80,39 @@ const reconcileStaleRunningRuns = async (activeRunIds: Set<string>) => {
     return 0;
   }
 
-  await prisma.$transaction(
-    staleRuns.map((run) =>
+  await prisma.$transaction([
+    ...staleRuns.map((run) =>
       prisma.run.update({
         where: { id: run.id },
         data: {
           externalStatus: "stale",
           summary: run.summary ?? "Sub-agent run marked stale after reconciliation TTL",
+          payload: {
+            source: "openclaw-reconcile",
+            reconciledAt: new Date().toISOString(),
+            staleTtlMs: STALE_RUNNING_TTL_MS,
+            uiStateGuard: true,
+          },
         },
       })
-    )
-  );
+    ),
+    ...staleRuns.map((run) =>
+      prisma.event.create({
+        data: {
+          runId: run.id,
+          type: "subagent.reconciled_stale",
+          severity: "warning",
+          message: `Stale sub-agent state auto-reconciled for ${run.openclawRunId}`,
+          metadata: {
+            source: "openclaw-sync",
+            openclawRunId: run.openclawRunId,
+            action: "stale-ui-guard",
+            ttlMs: STALE_RUNNING_TTL_MS,
+          },
+        },
+      })
+    ),
+  ]);
 
   return staleRuns.length;
 };

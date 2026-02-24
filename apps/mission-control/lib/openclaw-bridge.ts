@@ -1,6 +1,7 @@
 import { Prisma, RunStatus, Severity } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { resolveAssignedAgentId } from "@/lib/openclaw-assignment";
+import { deriveEvidenceGrade } from "@/lib/run-intelligence";
 
 export type OpenClawLifecycleStatus =
   | "queued"
@@ -75,6 +76,15 @@ export async function ingestOpenClawLifecycleEvent(event: OpenClawLifecycleEvent
   const status = runStatusFromLifecycle(normalizedStatus);
   const isTerminal = ["done", "failed", "timeout", "killed"].includes(normalizedStatus);
 
+  const launchPhase =
+    normalizedStatus === "queued"
+      ? "phase1_queued"
+      : normalizedStatus === "running"
+        ? existing?.externalStatus === "queued" || !existing
+          ? "phase2_running_confirmed"
+          : "phase2_running_unconfirmed"
+        : "terminal";
+
   const shouldUpdateRun =
     !existing ||
     existing.externalStatus !== normalizedStatus ||
@@ -93,7 +103,11 @@ export async function ingestOpenClawLifecycleEvent(event: OpenClawLifecycleEvent
             status,
             externalStatus: normalizedStatus,
             summary: event.summary ?? undefined,
-            payload: event.metadata ?? undefined,
+            payload: {
+              ...(typeof event.metadata === "object" && event.metadata ? (event.metadata as object) : {}),
+              launchPhase,
+              confirmationProtocol: "two-phase",
+            },
             completedAt: isTerminal ? existing.completedAt ?? startedAt : null,
           },
         })
@@ -106,7 +120,11 @@ export async function ingestOpenClawLifecycleEvent(event: OpenClawLifecycleEvent
           status,
           externalStatus: normalizedStatus,
           summary: event.summary,
-          payload: event.metadata ?? undefined,
+          payload: {
+            ...(typeof event.metadata === "object" && event.metadata ? (event.metadata as object) : {}),
+            launchPhase,
+            confirmationProtocol: "two-phase",
+          },
           startedAt,
           completedAt: isTerminal ? startedAt : null,
         },
@@ -116,19 +134,33 @@ export async function ingestOpenClawLifecycleEvent(event: OpenClawLifecycleEvent
     return run;
   }
 
+  const confidence = deriveEvidenceGrade({
+    externalStatus: normalizedStatus,
+    completedAt: isTerminal ? startedAt : null,
+    payload: run.payload,
+    summary: event.summary ?? run.summary,
+  });
+
   await prisma.event.create({
     data: {
       agentId: agentId ?? run.agentId,
       runId: run.id,
       type: `subagent.${normalizedStatus}`,
-      severity: severityFromLifecycle(normalizedStatus),
+      severity:
+        launchPhase === "phase2_running_unconfirmed"
+          ? Severity.warning
+          : severityFromLifecycle(normalizedStatus),
       message:
-        event.summary ?? `OpenClaw sub-agent ${event.runId} transitioned to ${normalizedStatus}`,
+        launchPhase === "phase2_running_unconfirmed"
+          ? `OpenClaw sub-agent ${event.runId} reported running without prior queue confirmation`
+          : event.summary ?? `OpenClaw sub-agent ${event.runId} transitioned to ${normalizedStatus}`,
       metadata: {
         ...(typeof event.metadata === "object" && event.metadata ? (event.metadata as object) : {}),
         source: "openclaw-subagent",
         openclawRunId: event.runId,
         externalStatus: normalizedStatus,
+        launchPhase,
+        confidence,
       },
     },
   });

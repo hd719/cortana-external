@@ -20,8 +20,24 @@
 ## App Surfaces
 - **Dashboard (/)**: stats tiles, agent health widgets, recent runs table, alerts feed, quick API references.
 - **Agents (/agents)**: roster with roles, capabilities, health scores, and last-seen times.
-- **Jobs (/jobs)**: recent runs with status, timing, and ownership.
+- **Jobs (/jobs)**: recent runs with status, timing, ownership, launch-phase confidence, and fallback transparency badges.
 - **API routes**: `/api/dashboard`, `/api/agents`, `/api/runs`, `/api/events` (JSON from Postgres via Prisma).
+
+## Reliability/Autonomy Foundations (Tasks #46-#50)
+1. **Two-phase launch confirmation protocol**
+   - Lifecycle ingestion tracks phase-1 (`queued`) and phase-2 (`running`) confirmations.
+   - If a run reports `running` without queued evidence, Mission Control emits a warning and labels launch as unconfirmed.
+2. **Stale UI state guard + auto-reconcile**
+   - OpenClaw run-store sync applies TTL reconciliation and marks stale in-flight runs as `external_status=stale`.
+   - Reconciliation emits explicit events for operator auditability.
+3. **Task Board source-of-truth reconciliation**
+   - Periodic comparison between dedicated Cortana DB and app DB task tables.
+   - Drift is surfaced in Task Board warning banners with sample mismatches.
+4. **Fallback transparency layer**
+   - Provider/model/auth routing path is extracted from run metadata and rendered in Jobs + Agent Detail.
+   - Fallback execution paths are explicitly badged.
+5. **Evidence-graded status messaging**
+   - Run status confidence is classified (`high|medium|low`) and shown in operational views.
 
 ## Phased Rollout
 1) **v1 (this PR)**: local Postgres schema + migrations, seed data, dashboard/agents/jobs pages, basic API routes, setup docs.

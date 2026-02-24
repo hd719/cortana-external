@@ -11,6 +11,9 @@ type RunRecord = {
   summary: string | null;
   status: string;
   externalStatus: string | null;
+  confidence?: "high" | "medium" | "low";
+  launchPhase?: string;
+  providerPath?: { label: string; fallback?: boolean };
   startedAt: string | Date | null;
   completedAt: string | Date | null;
   agent: { id: string; name: string } | null;
@@ -89,6 +92,9 @@ export function JobsRunsTable({
               <td className="px-3 py-3">
                 <div className="font-semibold text-foreground">{run.jobType}</div>
                 <div className="text-xs text-muted-foreground">{run.summary || "No summary"}</div>
+                {run.providerPath?.label && (
+                  <div className="text-[11px] text-muted-foreground">Path: {run.providerPath.label}</div>
+                )}
               </td>
               <td className="px-3 py-3 text-muted-foreground">{run.agent?.name || "Unassigned"}</td>
               <td className="px-3 py-3">
@@ -97,6 +103,15 @@ export function JobsRunsTable({
                   {(run.externalStatus === "timeout" || run.externalStatus === "failed") && (
                     <Badge variant="destructive">attention</Badge>
                   )}
+                  {run.launchPhase === "phase2_running_unconfirmed" && (
+                    <Badge variant="warning">launch unconfirmed</Badge>
+                  )}
+                  {run.confidence && (
+                    <Badge variant={run.confidence === "high" ? "success" : run.confidence === "medium" ? "warning" : "outline"}>
+                      confidence {run.confidence}
+                    </Badge>
+                  )}
+                  {run.providerPath?.fallback && <Badge variant="warning">fallback path</Badge>}
                 </div>
               </td>
               <td className="px-3 py-3 text-xs text-muted-foreground">{formatDate(run.startedAt)}</td>
