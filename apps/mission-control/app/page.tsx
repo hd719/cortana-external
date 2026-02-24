@@ -6,6 +6,7 @@ import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { AutoRefresh } from "@/components/auto-refresh";
 import { HeartbeatPulse } from "@/components/heartbeat-pulse";
+import { ActivityFeed } from "@/components/activity-feed";
 
 export const dynamic = "force-dynamic";
 
@@ -210,34 +211,10 @@ export default async function Home() {
       <div className="grid gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2">
           <CardHeader>
-            <CardTitle className="text-base">Latest alerts & events</CardTitle>
+            <CardTitle className="text-base">Mission activity</CardTitle>
           </CardHeader>
-          <CardContent className="divide-y text-sm">
-            {data.events.map((event) => (
-              <div
-                key={event.id}
-                className="flex items-start justify-between gap-3 py-3"
-              >
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    <StatusBadge
-                      value={event.severity}
-                      variant="severity"
-                    />
-                    <p className="font-medium text-foreground">
-                      {event.type}
-                    </p>
-                  </div>
-                  <p className="text-muted-foreground">{event.message}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {event.agent?.name ? `Agent: ${event.agent.name}` : "Unscoped"}
-                  </p>
-                </div>
-                <div className="text-xs text-muted-foreground">
-                  {event.createdAt.toLocaleString()}
-                </div>
-              </div>
-            ))}
+          <CardContent>
+            <ActivityFeed />
           </CardContent>
         </Card>
 
