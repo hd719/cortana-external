@@ -1,0 +1,70 @@
+name: Post-merge task auto-close
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: "PR number to process"
+        required: false
+  schedule:
+    - cron: "*/30 * * * *"
+
+jobs:
+  close-and-verify:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      CORTANA_DATABASE_URL: ${{ secrets.CORTANA_DATABASE_URL }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: apps/mission-control/pnpm-lock.yaml
+
+      - name: Install mission-control deps
+        run: pnpm install --frozen-lockfile
+        working-directory: apps/mission-control
+
+      - name: Process merged PR event (primary trigger)
+        if: github.event_name == 'pull_request'
+        working-directory: apps/mission-control
+        run: pnpm task-autoclose:post-merge --event-path "$GITHUB_EVENT_PATH"
+
+      - name: Process manual PR
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.pr != ''
+        working-directory: apps/mission-control
+        run: pnpm task-autoclose:post-merge --pr "${{ github.event.inputs.pr }}" --repo "${{ github.repository }}"
+
+      - name: Cron fallback (scan latest merged PRs on main)
+        if: github.event_name == 'schedule'
+        working-directory: apps/mission-control
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          prs=$(gh api "repos/${{ github.repository }}/pulls?state=closed&base=main&sort=updated&direction=desc&per_page=20" --jq '.[] | select(.merged_at != null) | .number' || true)
+          if [ -z "$prs" ]; then
+            echo "No merged PRs found in recent window"
+            exit 0
+          fi
+          echo "$prs" | head -n 10 | while read -r pr; do
+            [ -z "$pr" ] && continue
+            echo "Processing PR #$pr"
+            pnpm task-autoclose:post-merge --pr "$pr" --repo "${{ github.repository }}"
+          done

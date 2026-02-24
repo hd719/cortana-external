@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { getTaskPrisma } from "@/lib/task-prisma";
 
@@ -65,7 +66,7 @@ export async function reconcileTaskBoardSources(): Promise<ReconcileReport | nul
             deadline: epic.deadline,
             createdAt: epic.createdAt,
             completedAt: epic.completedAt,
-            metadata: epic.metadata,
+            metadata: epic.metadata === null ? Prisma.JsonNull : (epic.metadata as Prisma.InputJsonValue),
           },
           update: {
             title: epic.title,
@@ -74,7 +75,7 @@ export async function reconcileTaskBoardSources(): Promise<ReconcileReport | nul
             deadline: epic.deadline,
             createdAt: epic.createdAt,
             completedAt: epic.completedAt,
-            metadata: epic.metadata,
+            metadata: epic.metadata === null ? Prisma.JsonNull : (epic.metadata as Prisma.InputJsonValue),
           },
         });
       }
@@ -96,7 +97,7 @@ export async function reconcileTaskBoardSources(): Promise<ReconcileReport | nul
             dependsOn: task.dependsOn ?? [],
             completedAt: task.completedAt,
             outcome: task.outcome,
-            metadata: task.metadata,
+            metadata: task.metadata === null ? Prisma.JsonNull : (task.metadata as Prisma.InputJsonValue),
             epicId: task.epicId,
             parentId: task.parentId,
             assignedTo: task.assignedTo,
@@ -117,7 +118,7 @@ export async function reconcileTaskBoardSources(): Promise<ReconcileReport | nul
             dependsOn: task.dependsOn ?? [],
             completedAt: task.completedAt,
             outcome: task.outcome,
-            metadata: task.metadata,
+            metadata: task.metadata === null ? Prisma.JsonNull : (task.metadata as Prisma.InputJsonValue),
             epicId: task.epicId,
             parentId: task.parentId,
             assignedTo: task.assignedTo,

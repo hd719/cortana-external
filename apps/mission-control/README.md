@@ -38,6 +38,8 @@ pnpm dev
 - `pnpm db:deploy` — deploy migrations in production
 - `pnpm db:seed` — load starter agents/runs/events
 - `pnpm db:generate` — regenerate Prisma client
+- `pnpm task-autoclose:post-merge` — close mapped `cortana_tasks` for a merged PR and enforce verification gate
+- `pnpm test:task-autoclose` — regression test for PR→task mapping
 
 ## Data model (Prisma)
 - `Agent`: id, name, role, description, capabilities, status (active/idle/degraded/offline), healthScore, lastSeen, timestamps.
@@ -52,6 +54,7 @@ pnpm dev
 - `GET /api/task-board` — task board slices (ready, blocked, due, pillar rollups, recent outcomes)
 - `GET /api/live` — SSE stream for near-live UI refresh ticks
 - `POST /api/openclaw/subagent-events` — OpenClaw sub-agent lifecycle ingestion (queued/running/done/failed/timeout/killed)
+- `POST /api/github/post-merge-task-autoclose` — webhook endpoint for merged PR task auto-closure + verification gate
 
 ## Pages
 - `/` — Dashboard with stats, agent health widgets, runs table, and alerts feed

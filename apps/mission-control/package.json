@@ -11,7 +11,9 @@
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
     "db:seed": "tsx prisma/seed.ts",
-    "verify:score-progress": "tsx scripts/verify-score-progress.ts"
+    "verify:score-progress": "tsx scripts/verify-score-progress.ts",
+    "task-autoclose:post-merge": "tsx scripts/post-merge-task-autoclose.ts",
+    "test:task-autoclose": "tsx scripts/post-merge-task-autoclose.test.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
