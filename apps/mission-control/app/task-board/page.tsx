@@ -117,7 +117,7 @@ export default async function TaskBoardPage() {
     );
   }
 
-  const { readyNow, blocked, dueSoon, overdue, byPillar, recentOutcomes, tasks } = data;
+  const { readyNow, blocked, dueSoon, overdue, byPillar, recentOutcomes, tasks, metadata } = data;
 
   const pillarEntries = Object.entries(byPillar).sort((a, b) => a[0].localeCompare(b[0]));
 
@@ -135,6 +135,19 @@ export default async function TaskBoardPage() {
           </p>
         </div>
       </div>
+
+      {metadata.warnings.length > 0 && (
+        <Card className="border-warning/40 bg-warning/10">
+          <CardHeader>
+            <CardTitle className="text-base">Task Board running in fallback mode</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-1 text-sm text-muted-foreground">
+            {metadata.warnings.map((warning) => (
+              <p key={warning.code}>{warning.message}</p>
+            ))}
+          </CardContent>
+        </Card>
+      )}
 
       <TaskStatusFilters tasks={tasks} />
 

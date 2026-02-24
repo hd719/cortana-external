@@ -282,18 +282,55 @@ const pruneLegacyGhostTask = async () => {
   ghostTaskPruned = true;
 };
 
-export const getTaskBoard = async () => {
-  noStore();
+type TaskBoardWarning = {
+  code: "task_db_fallback";
+  message: string;
+  cause?: string;
+};
 
-  const taskPrisma = getTaskPrisma() ?? prisma;
-  if (taskPrisma === prisma) {
+const readTaskBoardTasks = async (
+  client: typeof prisma,
+  options?: { pruneGhostTask?: boolean }
+) => {
+  if (options?.pruneGhostTask) {
     await pruneLegacyGhostTask();
   }
 
-  const tasks = await taskPrisma.cortanaTask.findMany({
+  return client.cortanaTask.findMany({
     include: { epic: true },
     orderBy: [{ dueAt: "asc" }, { priority: "asc" }, { createdAt: "desc" }],
   });
+};
+
+export const getTaskBoard = async () => {
+  noStore();
+
+  const preferredTaskPrisma = getTaskPrisma();
+  let taskSource: "cortana" | "app" = preferredTaskPrisma ? "cortana" : "app";
+  const warnings: TaskBoardWarning[] = [];
+
+  let tasks: Prisma.CortanaTaskGetPayload<{ include: { epic: true } }>[];
+
+  try {
+    tasks = await readTaskBoardTasks(preferredTaskPrisma ?? prisma, {
+      pruneGhostTask: !preferredTaskPrisma,
+    });
+  } catch (error) {
+    if (!preferredTaskPrisma) {
+      throw error;
+    }
+
+    console.warn("Task board cortana DB unavailable, falling back to app DB", error);
+    taskSource = "app";
+    warnings.push({
+      code: "task_db_fallback",
+      message:
+        "Dedicated task database is unavailable. Showing tasks from the app database until cortana DB recovers.",
+      cause: error instanceof Error ? error.message : "Unknown task DB error",
+    });
+
+    tasks = await readTaskBoardTasks(prisma, { pruneGhostTask: true });
+  }
 
   const tasksById = tasks.reduce<
     Record<number, Prisma.CortanaTaskGetPayload<{ include: { epic: true } }>>
@@ -384,6 +421,10 @@ export const getTaskBoard = async () => {
     overdue,
     byPillar,
     recentOutcomes,
+    metadata: {
+      source: taskSource,
+      warnings,
+    },
   };
 };
 
