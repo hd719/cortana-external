@@ -50,6 +50,8 @@ pnpm dev
 - `GET /api/runs` — recent runs/jobs
 - `GET /api/events` — latest alerts/events
 - `GET /api/task-board` — task board slices (ready, blocked, due, pillar rollups, recent outcomes)
+- `GET /api/live` — SSE stream for near-live UI refresh ticks
+- `POST /api/openclaw/subagent-events` — OpenClaw sub-agent lifecycle ingestion (queued/running/done/failed/timeout/killed)
 
 ## Pages
 - `/` — Dashboard with stats, agent health widgets, runs table, and alerts feed
@@ -67,6 +69,22 @@ pnpm dev
 - Blocked = `status = 'pending'` with dependencies not marked `done`.
 - Due soon = pending + due within 48h; Overdue = pending + due_at in the past.
 - Recent outcomes list tasks with `completed_at` or `outcome` populated.
+
+## Realtime + OpenClaw lifecycle bridge
+- UI live updates are implemented in `components/auto-refresh.tsx`.
+  - Uses `EventSource` against `/api/live` (2s server tick) and falls back to visibility-aware polling.
+  - Applied on Dashboard, Jobs, Agents, Agent detail, and Task Board pages.
+- OpenClaw lifecycle adapter lives in `lib/openclaw-bridge.ts` and `/api/openclaw/subagent-events`.
+  - Upserts runs by `Run.openclaw_run_id` and stores raw lifecycle in `Run.external_status`.
+  - Writes `Event` rows (`subagent.<status>`) and optionally mirrors status/outcome onto `cortana_tasks` via `taskId`.
+- Optional auth: set `OPENCLAW_EVENT_TOKEN` and send `Authorization: Bearer <token>`.
+
+Example local ingestion:
+```bash
+curl -X POST http://localhost:3000/api/openclaw/subagent-events \
+  -H "content-type: application/json" \
+  -d '{"runId":"sub-123","status":"queued","agentName":"Huragok","jobType":"mission-control-sync"}'
+```
 
 ## Notes
 - Migrations are stored in `prisma/migrations`. Update schema in `prisma/schema.prisma`, then run `pnpm db:migrate`.

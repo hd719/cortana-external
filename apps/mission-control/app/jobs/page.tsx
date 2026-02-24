@@ -68,7 +68,12 @@ export default async function JobsPage() {
                     {run.agent?.name || "Unassigned"}
                   </td>
                   <td className="px-3 py-3">
-                    <StatusBadge value={run.status} variant="run" />
+                    <div className="flex items-center gap-2">
+                      <StatusBadge value={run.externalStatus || run.status} variant="run" />
+                      {(run.externalStatus === "timeout" || run.externalStatus === "failed") && (
+                        <Badge variant="destructive">attention</Badge>
+                      )}
+                    </div>
                   </td>
                   <td className="px-3 py-3 text-xs text-muted-foreground">
                     {run.startedAt?.toLocaleString() || "—"}

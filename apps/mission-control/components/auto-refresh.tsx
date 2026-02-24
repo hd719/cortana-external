@@ -7,30 +7,61 @@ type AutoRefreshProps = {
   intervalMs?: number;
 };
 
-export function AutoRefresh({ intervalMs = 15000 }: AutoRefreshProps) {
+export function AutoRefresh({ intervalMs = 2500 }: AutoRefreshProps) {
   const router = useRouter();
 
   useEffect(() => {
-    const refresh = () => router.refresh();
+    let stopped = false;
+    let source: EventSource | null = null;
+    let fallbackInterval: number | null = null;
 
-    const interval = window.setInterval(() => {
+    const refresh = () => {
       if (document.visibilityState === "visible") {
-        refresh();
-      }
-    }, intervalMs);
-
-    const onFocus = () => refresh();
-    const onVisible = () => {
-      if (document.visibilityState === "visible") {
-        refresh();
+        router.refresh();
       }
     };
+
+    const startFallback = () => {
+      if (fallbackInterval !== null) return;
+      fallbackInterval = window.setInterval(refresh, intervalMs);
+    };
+
+    const stopFallback = () => {
+      if (fallbackInterval !== null) {
+        window.clearInterval(fallbackInterval);
+        fallbackInterval = null;
+      }
+    };
+
+    const connect = () => {
+      if (stopped) return;
+      try {
+        source = new EventSource("/api/live");
+        source.addEventListener("ready", refresh);
+        source.addEventListener("tick", refresh);
+        source.onerror = () => {
+          source?.close();
+          source = null;
+          startFallback();
+          window.setTimeout(connect, 1500);
+        };
+      } catch {
+        startFallback();
+      }
+    };
+
+    connect();
+
+    const onFocus = () => refresh();
+    const onVisible = () => refresh();
 
     window.addEventListener("focus", onFocus);
     document.addEventListener("visibilitychange", onVisible);
 
     return () => {
-      window.clearInterval(interval);
+      stopped = true;
+      source?.close();
+      stopFallback();
       window.removeEventListener("focus", onFocus);
       document.removeEventListener("visibilitychange", onVisible);
     };

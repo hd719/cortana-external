@@ -44,19 +44,21 @@ model Agent {
 }
 
 model Run {
-  id          String    @id @default(uuid())
-  agentId     String?
-  agent       Agent?    @relation(fields: [agentId], references: [id])
-  jobType     String
-  status      RunStatus @default(queued)
-  summary     String?
-  payload     Json?
-  result      Json?
-  startedAt   DateTime  @default(now())
-  completedAt DateTime?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  events      Event[]
+  id             String    @id @default(uuid())
+  agentId        String?
+  agent          Agent?    @relation(fields: [agentId], references: [id])
+  jobType        String
+  status         RunStatus @default(queued)
+  summary        String?
+  payload        Json?
+  result         Json?
+  startedAt      DateTime  @default(now())
+  completedAt    DateTime?
+  openclawRunId  String?   @unique @map("openclaw_run_id")
+  externalStatus String?   @map("external_status")
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  events         Event[]
 }
 
 model Event {

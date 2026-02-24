@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { getAgentDetail } from "@/lib/data";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ agentId: string }> }

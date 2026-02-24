@@ -1,11 +1,11 @@
 import { VariantProps } from "class-variance-authority";
 import { Badge, badgeVariants } from "@/components/ui/badge";
-import { AgentStatus, RunStatus, Severity } from "@prisma/client";
+import { AgentStatus, Severity } from "@prisma/client";
 
 type BadgeVariant = VariantProps<typeof badgeVariants>["variant"];
 
 type StatusBadgeProps = {
-  value: AgentStatus | RunStatus | Severity | string;
+  value: AgentStatus | Severity | string;
   variant?: "agent" | "run" | "severity" | "task" | "default";
 };
 
@@ -16,12 +16,15 @@ const agentMap: Record<AgentStatus, BadgeVariant> = {
   offline: "outline",
 };
 
-const runMap: Record<RunStatus, BadgeVariant> = {
+const runMap: Record<string, BadgeVariant> = {
   queued: "secondary",
   running: "success",
   completed: "success",
   failed: "destructive",
   cancelled: "outline",
+  timeout: "destructive",
+  killed: "destructive",
+  done: "success",
 };
 
 const severityMap: Record<Severity, BadgeVariant> = {
@@ -49,7 +52,7 @@ export function StatusBadge({ value, variant = "default" }: StatusBadgeProps) {
   if (variant === "agent" && Object.hasOwn(agentMap, normalized)) {
     badgeVariant = agentMap[normalized as AgentStatus];
   } else if (variant === "run" && Object.hasOwn(runMap, normalized)) {
-    badgeVariant = runMap[normalized as RunStatus];
+    badgeVariant = runMap[normalized];
   } else if (variant === "severity" && Object.hasOwn(severityMap, normalized)) {
     badgeVariant = severityMap[normalized as Severity];
   } else if (variant === "task" && Object.hasOwn(taskMap, normalized)) {

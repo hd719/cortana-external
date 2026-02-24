@@ -4,6 +4,7 @@ import { getAgentDetail } from "@/lib/data";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatusBadge } from "@/components/status-badge";
 import { Badge } from "@/components/ui/badge";
+import { AutoRefresh } from "@/components/auto-refresh";
 
 const dtf = new Intl.DateTimeFormat("en", {
   month: "short",
@@ -28,6 +29,7 @@ export default async function AgentDetailPage({
 
   return (
     <div className="space-y-6">
+      <AutoRefresh />
       <div className="space-y-3">
         <Link href="/agents" className="text-sm text-muted-foreground hover:text-foreground">
           ← Back to agents
