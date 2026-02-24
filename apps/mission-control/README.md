@@ -74,10 +74,11 @@ pnpm dev
 - UI live updates are implemented in `components/auto-refresh.tsx`.
   - Uses `EventSource` against `/api/live` (2s server tick) and falls back to visibility-aware polling.
   - Applied on Dashboard, Jobs, Agents, Agent detail, and Task Board pages.
-- OpenClaw lifecycle adapter lives in `lib/openclaw-bridge.ts` and `/api/openclaw/subagent-events`.
-  - Upserts runs by `Run.openclaw_run_id` and stores raw lifecycle in `Run.external_status`.
-  - Writes `Event` rows (`subagent.<status>`) and optionally mirrors status/outcome onto `cortana_tasks` via `taskId`.
-- Optional auth: set `OPENCLAW_EVENT_TOKEN` and send `Authorization: Bearer <token>`.
+- OpenClaw lifecycle bridge supports two ingestion paths:
+  1) Push webhook adapter in `lib/openclaw-bridge.ts` + `/api/openclaw/subagent-events`
+  2) Pull sync adapter in `lib/openclaw-sync.ts` that reads `~/.openclaw/subagents/runs.json` (or `OPENCLAW_SUBAGENT_RUNS_PATH`) and upserts real sub-agent runs into Mission Control on data fetch.
+- Upserts runs by `Run.openclaw_run_id`, stores raw lifecycle in `Run.external_status`, and writes `Event` rows (`subagent.<status>`).
+- Optional webhook auth: set `OPENCLAW_EVENT_TOKEN` and send `Authorization: Bearer <token>`.
 
 Example local ingestion:
 ```bash

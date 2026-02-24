@@ -1,6 +1,7 @@
 import prisma from "@/lib/prisma";
 import { AgentStatus, Prisma, RunStatus, Severity } from "@prisma/client";
 import { unstable_noStore as noStore } from "next/cache";
+import { syncOpenClawRunsFromStore } from "@/lib/openclaw-sync";
 
 export const getAgents = async () => {
   noStore();
@@ -18,6 +19,7 @@ const latestRunOrder: Prisma.RunOrderByWithRelationInput[] = [
 
 export const getRuns = async () => {
   noStore();
+  await syncOpenClawRunsFromStore();
   return prisma.run.findMany({
     include: { agent: true },
     orderBy: latestRunOrder,
@@ -27,6 +29,7 @@ export const getRuns = async () => {
 
 export const getEvents = async () => {
   noStore();
+  await syncOpenClawRunsFromStore();
   return prisma.event.findMany({
     include: { agent: true, run: true },
     orderBy: { createdAt: "desc" },
@@ -36,6 +39,7 @@ export const getEvents = async () => {
 
 export const getDashboardSummary = async () => {
   noStore();
+  await syncOpenClawRunsFromStore();
   const [agents, runs, events] = await Promise.all([
     getAgents(),
     prisma.run.findMany({
@@ -217,6 +221,7 @@ const durationLabel = (minutes: number) => {
 
 export const getAgentDetail = async (agentId: string) => {
   noStore();
+  await syncOpenClawRunsFromStore();
 
   const agent = await prisma.agent.findUnique({ where: { id: agentId } });
   if (!agent) return null;

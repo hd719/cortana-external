@@ -51,11 +51,15 @@ export async function ingestOpenClawLifecycleEvent(event: OpenClawLifecycleEvent
 
   const existing = await prisma.run.findFirst({
     where: { openclawRunId: event.runId },
-    select: { id: true, startedAt: true },
+    select: { id: true, startedAt: true, externalStatus: true },
   });
 
   const status = runStatusFromLifecycle(normalizedStatus);
   const isTerminal = ["done", "failed", "timeout", "killed"].includes(normalizedStatus);
+
+  if (existing?.externalStatus === normalizedStatus) {
+    return prisma.run.findUniqueOrThrow({ where: { id: existing.id } });
+  }
 
   const run = existing
     ? await prisma.run.update({
