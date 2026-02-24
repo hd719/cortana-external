@@ -1,5 +1,6 @@
 import { Prisma, RunStatus, Severity } from "@prisma/client";
 import prisma from "@/lib/prisma";
+import { resolveAssignedAgentId } from "@/lib/openclaw-assignment";
 
 export type OpenClawLifecycleStatus =
   | "queued"
@@ -14,6 +15,7 @@ export type OpenClawLifecycleEvent = {
   status: OpenClawLifecycleStatus;
   agentId?: string;
   agentName?: string;
+  role?: string;
   jobType?: string;
   summary?: string;
   taskId?: number;
@@ -40,14 +42,22 @@ export async function ingestOpenClawLifecycleEvent(event: OpenClawLifecycleEvent
   const normalizedStatus = event.status.toLowerCase() as OpenClawLifecycleStatus;
   const startedAt = event.timestamp ? new Date(event.timestamp) : new Date();
 
-  let agentId = event.agentId;
-  if (!agentId && event.agentName) {
-    const agent = await prisma.agent.findFirst({
-      where: { name: { equals: event.agentName, mode: "insensitive" } },
-      select: { id: true },
-    });
-    agentId = agent?.id;
-  }
+  const agents = await prisma.agent.findMany({
+    select: { id: true, name: true, role: true },
+  });
+
+  const { agentId } = resolveAssignedAgentId(
+    {
+      agentId: event.agentId,
+      agentName: event.agentName,
+      role: event.role,
+      label: event.jobType,
+      jobType: event.jobType,
+      summary: event.summary,
+      metadata: event.metadata,
+    },
+    agents
+  );
 
   const existing = await prisma.run.findFirst({
     where: { openclawRunId: event.runId },
@@ -132,4 +142,47 @@ export async function ingestOpenClawLifecycleEvent(event: OpenClawLifecycleEvent
   }
 
   return run;
+}
+
+export async function backfillOpenClawRunAssignments(limit = 100) {
+  const [agents, runs] = await Promise.all([
+    prisma.agent.findMany({ select: { id: true, name: true, role: true } }),
+    prisma.run.findMany({
+      where: {
+        openclawRunId: { not: null },
+        agentId: null,
+      },
+      orderBy: [{ updatedAt: "desc" }],
+      take: limit,
+      select: {
+        id: true,
+        jobType: true,
+        summary: true,
+        payload: true,
+      },
+    }),
+  ]);
+
+  let updated = 0;
+  for (const run of runs) {
+    const assignment = resolveAssignedAgentId(
+      {
+        jobType: run.jobType,
+        label: run.jobType,
+        summary: run.summary,
+        payload: run.payload,
+      },
+      agents
+    );
+
+    if (!assignment.agentId) continue;
+
+    await prisma.run.update({
+      where: { id: run.id },
+      data: { agentId: assignment.agentId },
+    });
+    updated += 1;
+  }
+
+  return { scanned: runs.length, updated };
 }

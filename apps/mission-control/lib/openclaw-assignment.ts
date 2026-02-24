@@ -1,0 +1,107 @@
+import { Prisma } from "@prisma/client";
+
+export const OPENCLAW_AGENT_PREFIXES = ["Monitor", "Huragok", "Oracle", "Librarian"] as const;
+
+type AgentRecord = {
+  id: string;
+  name: string;
+  role: string;
+};
+
+type AssignmentSource = {
+  agentId?: string | null;
+  agentName?: string | null;
+  role?: string | null;
+  label?: string | null;
+  jobType?: string | null;
+  summary?: string | null;
+  metadata?: Prisma.JsonValue;
+  payload?: Prisma.JsonValue;
+};
+
+const asObject = (value: Prisma.JsonValue | null | undefined): Record<string, unknown> | null => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
+};
+
+const normalize = (value: string) => value.trim().toLowerCase();
+const slugify = (value: string) =>
+  value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+
+const stringFromUnknown = (value: unknown): string | null =>
+  typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+
+const extractPrefixAgent = (value: string | null | undefined): string | null => {
+  if (!value) return null;
+  const match = value.match(/^\s*([A-Za-z][A-Za-z0-9_-]{1,30})\s*:/);
+  if (!match?.[1]) return null;
+  return match[1];
+};
+
+const gatherAssignmentCandidates = (source: AssignmentSource): string[] => {
+  const out: string[] = [];
+  const push = (value: unknown) => {
+    const str = stringFromUnknown(value);
+    if (str) out.push(str);
+  };
+
+  push(source.agentName);
+  push(source.role);
+
+  const metadata = asObject(source.metadata);
+  const payload = asObject(source.payload);
+
+  const preferredKeys = ["assigned_to", "assignedTo", "agent", "agentName", "role"];
+  for (const key of preferredKeys) {
+    push(metadata?.[key]);
+    push(payload?.[key]);
+  }
+
+  const textFields = [source.label, source.jobType, source.summary, stringFromUnknown(metadata?.label), stringFromUnknown(payload?.label)];
+  for (const value of textFields) {
+    const prefix = extractPrefixAgent(value);
+    if (prefix) out.push(prefix);
+  }
+
+  return [...new Set(out.map((v) => v.trim()).filter(Boolean))];
+};
+
+export const resolveAssignedAgentId = (
+  source: AssignmentSource,
+  agents: AgentRecord[]
+): { agentId: string | null; matchedBy?: string; candidate?: string } => {
+  if (source.agentId) return { agentId: source.agentId };
+
+  const candidates = gatherAssignmentCandidates(source);
+  if (candidates.length === 0) return { agentId: null };
+
+  const byId = new Map(agents.map((agent) => [agent.id, agent.id]));
+  const byName = new Map(agents.map((agent) => [normalize(agent.name), agent.id]));
+  const bySlug = new Map(agents.map((agent) => [slugify(agent.name), agent.id]));
+  const byRole = new Map(agents.map((agent) => [normalize(agent.role), agent.id]));
+
+  for (const candidate of candidates) {
+    if (byId.has(candidate)) return { agentId: byId.get(candidate) ?? null, matchedBy: "id", candidate };
+
+    const normalized = normalize(candidate);
+    const slug = slugify(candidate);
+
+    if (byName.has(normalized)) {
+      return { agentId: byName.get(normalized) ?? null, matchedBy: "name", candidate };
+    }
+
+    if (bySlug.has(slug)) {
+      return { agentId: bySlug.get(slug) ?? null, matchedBy: "slug", candidate };
+    }
+
+    if (byRole.has(normalized)) {
+      return { agentId: byRole.get(normalized) ?? null, matchedBy: "role", candidate };
+    }
+  }
+
+  return { agentId: null, candidate: candidates[0] };
+};

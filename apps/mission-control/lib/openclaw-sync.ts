@@ -1,7 +1,12 @@
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { ingestOpenClawLifecycleEvent, OpenClawLifecycleStatus } from "@/lib/openclaw-bridge";
+import { Prisma } from "@prisma/client";
+import {
+  backfillOpenClawRunAssignments,
+  ingestOpenClawLifecycleEvent,
+  OpenClawLifecycleStatus,
+} from "@/lib/openclaw-bridge";
 
 type OpenClawRunStoreRecord = {
   runId: string;
@@ -13,6 +18,10 @@ type OpenClawRunStoreRecord = {
   childSessionKey?: string;
   requesterSessionKey?: string;
   outcome?: { status?: string };
+  task?: Prisma.JsonValue;
+  agent?: string;
+  role?: string;
+  assigned_to?: string;
 };
 
 type OpenClawRunStore = {
@@ -89,11 +98,18 @@ export async function syncOpenClawRunsFromStore() {
     await ingestOpenClawLifecycleEvent({
       runId: run.runId,
       status,
+      agentName: run.agent,
+      role: run.role,
       jobType: run.label || "openclaw-subagent",
       summary,
       timestamp,
       metadata: {
         source: "openclaw-runs-store",
+        label: run.label ?? null,
+        assigned_to: run.assigned_to ?? null,
+        agent: run.agent ?? null,
+        role: run.role ?? null,
+        task: run.task ?? null,
         childSessionKey: run.childSessionKey,
         requesterSessionKey: run.requesterSessionKey,
         outcome: run.outcome ?? null,
@@ -103,6 +119,8 @@ export async function syncOpenClawRunsFromStore() {
     synced += 1;
   }
 
+  const backfill = await backfillOpenClawRunAssignments(200);
+
   lastMtimeMs = stats.mtimeMs;
-  return { synced, skipped: false };
+  return { synced, backfill, skipped: false };
 }
