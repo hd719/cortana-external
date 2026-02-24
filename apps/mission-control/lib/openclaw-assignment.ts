@@ -42,6 +42,21 @@ const extractPrefixAgent = (value: string | null | undefined): string | null => 
   return match[1];
 };
 
+const extractAgentToken = (value: string | null | undefined): string | null => {
+  if (!value) return null;
+
+  const normalized = value.trim();
+  if (!normalized) return null;
+
+  const knownPrefix = OPENCLAW_AGENT_PREFIXES.find((prefix) =>
+    normalized.toLowerCase().startsWith(prefix.toLowerCase())
+  );
+  if (knownPrefix) return knownPrefix;
+
+  const token = normalized.split(/[:\s_\-]+/).find(Boolean);
+  return token?.trim() || null;
+};
+
 const gatherAssignmentCandidates = (source: AssignmentSource): string[] => {
   const out: string[] = [];
   const push = (value: unknown) => {
@@ -55,10 +70,32 @@ const gatherAssignmentCandidates = (source: AssignmentSource): string[] => {
   const metadata = asObject(source.metadata);
   const payload = asObject(source.payload);
 
-  const preferredKeys = ["assigned_to", "assignedTo", "agent", "agentName", "role"];
+  const preferredKeys = [
+    "assigned_to",
+    "assignedTo",
+    "agent",
+    "agentName",
+    "role",
+    "childSessionKey",
+    "requesterSessionKey",
+  ];
   for (const key of preferredKeys) {
     push(metadata?.[key]);
     push(payload?.[key]);
+  }
+
+  const tokenFields = [
+    stringFromUnknown(metadata?.assigned_to),
+    stringFromUnknown(payload?.assigned_to),
+    stringFromUnknown(metadata?.childSessionKey),
+    stringFromUnknown(payload?.childSessionKey),
+    source.label,
+    source.jobType,
+  ];
+
+  for (const value of tokenFields) {
+    const token = extractAgentToken(value);
+    if (token) out.push(token);
   }
 
   const textFields = [source.label, source.jobType, source.summary, stringFromUnknown(metadata?.label), stringFromUnknown(payload?.label)];
@@ -100,6 +137,15 @@ export const resolveAssignedAgentId = (
 
     if (byRole.has(normalized)) {
       return { agentId: byRole.get(normalized) ?? null, matchedBy: "role", candidate };
+    }
+
+    const startsWithName = agents.find((agent) => {
+      const name = normalize(agent.name);
+      const role = normalize(agent.role);
+      return normalized.startsWith(name) || normalized.startsWith(role);
+    });
+    if (startsWithName) {
+      return { agentId: startsWithName.id, matchedBy: "prefix", candidate };
     }
   }
 

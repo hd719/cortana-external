@@ -5,7 +5,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 export const dynamic = "force-dynamic";
 import { StatusBadge } from "@/components/status-badge";
 import { Badge } from "@/components/ui/badge";
-import { RunStatus } from "@prisma/client";
 import { AutoRefresh } from "@/components/auto-refresh";
 
 export default async function JobsPage({
@@ -122,7 +121,7 @@ export default async function JobsPage({
                   <td className="px-3 py-3 text-xs text-muted-foreground">
                     {run.completedAt
                       ? run.completedAt.toLocaleString()
-                      : run.status === RunStatus.running
+                      : (run.externalStatus || run.status).toString().toLowerCase() === "running"
                         ? "In progress"
                         : "—"}
                   </td>
