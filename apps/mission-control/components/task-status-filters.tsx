@@ -8,19 +8,21 @@ import { StatusBadge } from "@/components/status-badge";
 import { TaskBoardTask } from "@/lib/data";
 import { cn } from "@/lib/utils";
 
-type StatusFilter = "all" | "pending" | "in_progress" | "auto_ready";
+type StatusFilter = "all" | "pending" | "in_progress" | "auto_ready" | "done";
 
 const FILTER_LABELS: Record<StatusFilter, string> = {
   all: "All",
   pending: "Pending",
   in_progress: "In progress",
   auto_ready: "Auto-ready",
+  done: "Done",
 };
 
 const FILTER_EMPTY: Record<Exclude<StatusFilter, "all">, string> = {
   pending: "No pending tasks right now.",
   in_progress: "No tasks currently in progress.",
   auto_ready: "No auto-ready tasks available right now.",
+  done: "No completed tasks yet.",
 };
 
 function TaskItem({ task }: { task: TaskBoardTask }) {
@@ -82,12 +84,14 @@ export function TaskStatusFilters({ tasks }: { tasks: TaskBoardTask[] }) {
     const autoReady = tasks.filter(
       (task) => task.status === "pending" && task.autoExecutable && task.dependencyReady
     ).length;
+    const done = tasks.filter((task) => ["done", "completed"].includes(task.status)).length;
 
     return {
       all: tasks.length,
       pending,
       in_progress: inProgress,
       auto_ready: autoReady,
+      done,
     } satisfies Record<StatusFilter, number>;
   }, [tasks]);
 
@@ -99,6 +103,9 @@ export function TaskStatusFilters({ tasks }: { tasks: TaskBoardTask[] }) {
         (task) => task.status === "pending" && task.autoExecutable && task.dependencyReady
       );
     }
+    if (activeFilter === "done") {
+      return tasks.filter((task) => ["done", "completed"].includes(task.status));
+    }
     return tasks;
   }, [activeFilter, tasks]);
 
@@ -107,7 +114,7 @@ export function TaskStatusFilters({ tasks }: { tasks: TaskBoardTask[] }) {
       <CardHeader className="space-y-3">
         <CardTitle className="text-base">Status filters</CardTitle>
         <div className="flex flex-wrap gap-2">
-          {(["pending", "in_progress", "auto_ready"] as const).map((filter) => (
+          {(["pending", "in_progress", "auto_ready", "done"] as const).map((filter) => (
             <Button
               key={filter}
               type="button"
