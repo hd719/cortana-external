@@ -2,6 +2,7 @@ import { getTaskBoard, TaskBoardTask } from "@/lib/data";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatusBadge } from "@/components/status-badge";
+import { TaskStatusFilters } from "@/components/task-status-filters";
 
 export const dynamic = "force-dynamic";
 
@@ -116,8 +117,6 @@ export default async function TaskBoardPage() {
   }
 
   const { readyNow, blocked, dueSoon, overdue, byPillar, recentOutcomes, tasks } = data;
-  const pendingCount = tasks.filter((t) => t.status === "pending").length;
-  const activeCount = tasks.filter((t) => t.status === "in_progress").length;
 
   const pillarEntries = Object.entries(byPillar).sort((a, b) => a[0].localeCompare(b[0]));
 
@@ -133,12 +132,9 @@ export default async function TaskBoardPage() {
             Live view into the Cortana task queue with ready/blocked slices, pillar rollups, and latest execution logs.
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Badge variant="secondary">Pending: {pendingCount}</Badge>
-          <Badge variant="outline">In progress: {activeCount}</Badge>
-          <Badge variant="success">Auto-ready: {readyNow.length}</Badge>
-        </div>
       </div>
+
+      <TaskStatusFilters tasks={tasks} />
 
       <div className="grid gap-4 md:grid-cols-2">
         <TaskList
