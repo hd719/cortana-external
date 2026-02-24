@@ -1,11 +1,11 @@
 import Link from "next/link";
-import { getRuns } from "@/lib/data";
+import { getAgents, getRuns } from "@/lib/data";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 export const dynamic = "force-dynamic";
-import { StatusBadge } from "@/components/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { AutoRefresh } from "@/components/auto-refresh";
+import { JobsRunsTable } from "./jobs-runs-table";
 
 export default async function JobsPage({
   searchParams,
@@ -15,19 +15,12 @@ export default async function JobsPage({
   const params = (await searchParams) ?? {};
   const selectedAgentId = params.agentId?.trim() || "";
 
-  const runs = await getRuns();
+  const [agents, runsPage] = await Promise.all([
+    getAgents(),
+    getRuns({ agentId: selectedAgentId || undefined, take: 20 }),
+  ]);
 
-  const agents = Array.from(
-    new Map(
-      runs
-        .filter((run) => run.agent?.id)
-        .map((run) => [run.agent!.id, { id: run.agent!.id, name: run.agent!.name }])
-    ).values()
-  ).sort((a, b) => a.name.localeCompare(b.name));
-
-  const filteredRuns = selectedAgentId
-    ? runs.filter((run) => run.agent?.id === selectedAgentId)
-    : runs;
+  const filteredRuns = runsPage.runs;
 
   const grouped = Object.values(
     filteredRuns.reduce<Record<string, { label: string; count: number }>>((acc, run) => {
@@ -84,58 +77,13 @@ export default async function JobsPage({
             ))}
           </div>
         </CardHeader>
-        <CardContent className="overflow-hidden rounded-md border">
-          <table className="w-full text-left text-sm">
-            <thead className="bg-muted/70 text-xs uppercase tracking-wide text-muted-foreground">
-              <tr>
-                <th className="px-3 py-2">Run</th>
-                <th className="px-3 py-2">Agent</th>
-                <th className="px-3 py-2">Status</th>
-                <th className="px-3 py-2">Started</th>
-                <th className="px-3 py-2">Completed</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredRuns.map((run) => (
-                <tr key={run.id} className="border-t">
-                  <td className="px-3 py-3">
-                    <div className="font-semibold text-foreground">{run.jobType}</div>
-                    <div className="text-xs text-muted-foreground">
-                      {run.summary || "No summary"}
-                    </div>
-                  </td>
-                  <td className="px-3 py-3 text-muted-foreground">
-                    {run.agent?.name || "Unassigned"}
-                  </td>
-                  <td className="px-3 py-3">
-                    <div className="flex items-center gap-2">
-                      <StatusBadge value={run.externalStatus || run.status} variant="run" />
-                      {(run.externalStatus === "timeout" || run.externalStatus === "failed") && (
-                        <Badge variant="destructive">attention</Badge>
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-3 py-3 text-xs text-muted-foreground">
-                    {run.startedAt?.toLocaleString() || "—"}
-                  </td>
-                  <td className="px-3 py-3 text-xs text-muted-foreground">
-                    {run.completedAt
-                      ? run.completedAt.toLocaleString()
-                      : (run.externalStatus || run.status).toString().toLowerCase() === "running"
-                        ? "In progress"
-                        : "—"}
-                  </td>
-                </tr>
-              ))}
-              {filteredRuns.length === 0 && (
-                <tr>
-                  <td colSpan={5} className="px-3 py-8 text-center text-sm text-muted-foreground">
-                    No runs found for this filter.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+        <CardContent>
+          <JobsRunsTable
+            initialRuns={filteredRuns}
+            initialHasMore={runsPage.hasMore}
+            initialNextCursor={runsPage.nextCursor}
+            agentId={selectedAgentId || undefined}
+          />
         </CardContent>
       </Card>
     </div>

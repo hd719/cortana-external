@@ -140,14 +140,46 @@ const latestRunOrder: Prisma.RunOrderByWithRelationInput[] = [
   { id: "desc" },
 ];
 
-export const getRuns = async () => {
+type GetRunsInput = {
+  take?: number;
+  cursor?: string;
+  agentId?: string;
+};
+
+export type RunsPage = {
+  runs: Prisma.RunGetPayload<{ include: { agent: true } }>[];
+  nextCursor: string | null;
+  hasMore: boolean;
+};
+
+export const getRuns = async ({ take = 20, cursor, agentId }: GetRunsInput = {}): Promise<RunsPage> => {
   noStore();
   await syncOpenClawRunsFromStore();
-  return prisma.run.findMany({
+
+  const normalizedTake = Math.max(1, Math.min(take, 100));
+
+  const runs = await prisma.run.findMany({
     include: { agent: true },
+    where: agentId ? { agentId } : undefined,
     orderBy: latestRunOrder,
-    take: 20,
+    take: normalizedTake + 1,
+    ...(cursor
+      ? {
+          cursor: { id: cursor },
+          skip: 1,
+        }
+      : {}),
   });
+
+  const hasMore = runs.length > normalizedTake;
+  const pageRuns = hasMore ? runs.slice(0, normalizedTake) : runs;
+  const nextCursor = hasMore ? pageRuns[pageRuns.length - 1]?.id ?? null : null;
+
+  return {
+    runs: pageRuns,
+    hasMore,
+    nextCursor,
+  };
 };
 
 export const getEvents = async () => {
