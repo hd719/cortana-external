@@ -1,4 +1,3 @@
-import { RunStatus } from "@prisma/client";
 import { getDashboardSummary } from "@/lib/data";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatusBadge } from "@/components/status-badge";
@@ -44,8 +43,17 @@ export default async function Home() {
   const degradedAgents = data.agents.filter((a) =>
     ["degraded", "offline"].includes(a.status)
   ).length;
-  const activeRuns = data.runs.filter(
-    (r) => r.status === RunStatus.running || r.status === RunStatus.queued
+  const runIsActive = (r: (typeof data.runs)[number]) => {
+    const effective = (r.externalStatus || r.status).toString().toLowerCase();
+    return effective === "running" || effective === "queued";
+  };
+
+  const activeRuns = data.runs.filter(runIsActive).length;
+  const runningRuns = data.runs.filter(
+    (r) => (r.externalStatus || r.status).toString().toLowerCase() === "running"
+  ).length;
+  const queuedRuns = data.runs.filter(
+    (r) => (r.externalStatus || r.status).toString().toLowerCase() === "queued"
   ).length;
   const openAlerts =
     (data.metrics.alerts.bySeverity.warning || 0) +
@@ -136,13 +144,13 @@ export default async function Home() {
               <div className="rounded-lg border bg-card/50 p-3">
                 <p className="text-xs">Running</p>
                 <p className="text-xl font-semibold text-foreground">
-                  {data.metrics.runs.byStatus.running || 0}
+                  {runningRuns}
                 </p>
               </div>
               <div className="rounded-lg border bg-card/50 p-3">
                 <p className="text-xs">Queued</p>
                 <p className="text-xl font-semibold text-foreground">
-                  {data.metrics.runs.byStatus.queued || 0}
+                  {queuedRuns}
                 </p>
               </div>
               <div className="rounded-lg border bg-card/50 p-3">

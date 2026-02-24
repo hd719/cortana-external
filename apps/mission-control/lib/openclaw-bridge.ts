@@ -61,29 +61,43 @@ export async function ingestOpenClawLifecycleEvent(event: OpenClawLifecycleEvent
 
   const existing = await prisma.run.findFirst({
     where: { openclawRunId: event.runId },
-    select: { id: true, startedAt: true, externalStatus: true },
+    select: {
+      id: true,
+      startedAt: true,
+      completedAt: true,
+      externalStatus: true,
+      status: true,
+      agentId: true,
+      summary: true,
+    },
   });
 
   const status = runStatusFromLifecycle(normalizedStatus);
   const isTerminal = ["done", "failed", "timeout", "killed"].includes(normalizedStatus);
 
-  if (existing?.externalStatus === normalizedStatus) {
-    return prisma.run.findUniqueOrThrow({ where: { id: existing.id } });
-  }
+  const shouldUpdateRun =
+    !existing ||
+    existing.externalStatus !== normalizedStatus ||
+    existing.status !== status ||
+    (!!agentId && existing.agentId !== agentId) ||
+    (!!event.summary && event.summary !== existing.summary) ||
+    (isTerminal && !existing.completedAt);
 
   const run = existing
-    ? await prisma.run.update({
-        where: { id: existing.id },
-        data: {
-          agentId,
-          jobType: event.jobType ?? "openclaw-subagent",
-          status,
-          externalStatus: normalizedStatus,
-          summary: event.summary ?? undefined,
-          payload: event.metadata ?? undefined,
-          completedAt: isTerminal ? startedAt : null,
-        },
-      })
+    ? shouldUpdateRun
+      ? await prisma.run.update({
+          where: { id: existing.id },
+          data: {
+            agentId: agentId ?? existing.agentId,
+            jobType: event.jobType ?? "openclaw-subagent",
+            status,
+            externalStatus: normalizedStatus,
+            summary: event.summary ?? undefined,
+            payload: event.metadata ?? undefined,
+            completedAt: isTerminal ? existing.completedAt ?? startedAt : null,
+          },
+        })
+      : await prisma.run.findUniqueOrThrow({ where: { id: existing.id } })
     : await prisma.run.create({
         data: {
           openclawRunId: event.runId,
@@ -98,9 +112,13 @@ export async function ingestOpenClawLifecycleEvent(event: OpenClawLifecycleEvent
         },
       });
 
+  if (!shouldUpdateRun) {
+    return run;
+  }
+
   await prisma.event.create({
     data: {
-      agentId,
+      agentId: agentId ?? run.agentId,
       runId: run.id,
       type: `subagent.${normalizedStatus}`,
       severity: severityFromLifecycle(normalizedStatus),
