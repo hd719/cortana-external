@@ -5,7 +5,7 @@ Local HTTP server providing unified access to:
 - **Tonal** — strength workouts, strength scores
 - **Alpaca** — trading portfolio, positions, trade tracking
 
-Server runs on `localhost:8080` and handles all authentication automatically.
+Server runs on `localhost:3033` and handles all authentication automatically.
 
 ---
 
@@ -13,7 +13,7 @@ Server runs on `localhost:8080` and handles all authentication automatically.
 - Path: `apps/mission-control`
 - Stack: Next.js (App Router, TypeScript), shadcn/ui (Tailwind v4), PostgreSQL + Prisma
 - Package manager: **pnpm-first**
-- Docs: `apps/mission-control/docs/mission-control.md`
+- Docs: `apps/mission-control/docs/mission-control-next-ideas.md`
 
 ### Setup
 ```bash
@@ -64,12 +64,12 @@ If you see `Cannot find module "radix-ui"` or bad `ProgressPrimitive` imports:
 
 ### To Get Whoop Data (sleep, recovery, strain, HRV)
 ```bash
-curl http://localhost:8080/whoop/data
+curl http://localhost:3033/whoop/data
 ```
 
 ### To Get Tonal Data (workouts, strength scores)
 ```bash
-curl http://localhost:8080/tonal/data
+curl http://localhost:3033/tonal/data
 ```
 
 **No authentication headers needed.** The service handles everything internally.
@@ -261,7 +261,7 @@ curl http://localhost:8080/tonal/data
 | 502 | API error | Upstream service issue, try again later |
 
 If you get a 401 from Whoop, tell the user to run the OAuth flow:
-1. Visit `http://localhost:8080/auth/url`
+1. Visit `http://localhost:3033/auth/url`
 2. Open the returned URL in browser
 3. Authorize with Whoop
 
@@ -298,7 +298,7 @@ This means frequent calls within a 5-minute window will be nearly instantaneous 
 import requests
 
 # Get Whoop data
-whoop = requests.get("http://localhost:8080/whoop/data").json()
+whoop = requests.get("http://localhost:3033/whoop/data").json()
 recovery = whoop["recovery"][0]["score"]["recovery_score"]
 hrv = whoop["recovery"][0]["score"]["hrv_rmssd_milli"]
 strain = whoop["cycles"][0]["score"]["strain"]
@@ -307,7 +307,7 @@ sleep_perf = whoop["sleep"][0]["score"]["sleep_performance_percentage"]
 print(f"Recovery: {recovery}%, HRV: {hrv}ms, Strain: {strain}, Sleep: {sleep_perf}%")
 
 # Get Tonal data
-tonal = requests.get("http://localhost:8080/tonal/data").json()
+tonal = requests.get("http://localhost:3033/tonal/data").json()
 strength = next(s["score"] for s in tonal["strength_scores"]["current"] if s["muscleGroup"] == "FULL_BODY")
 total_workouts = tonal["workout_count"]
 last_workout = max(tonal["workouts"].values(), key=lambda w: w["beginTime"])
@@ -322,7 +322,7 @@ print(f"Strength: {strength}, Workouts: {total_workouts}, Last: {last_workout['w
 ```
 ~/Developer/cortana-external/
 ├── .env                     # Credentials (WHOOP_*, TONAL_*)
-├── main.go                  # Server entry point, runs on :8080
+├── main.go                  # Server entry point, runs on :3033 (default)
 ├── run.sh                   # Primary startup script
 ├── whoop_tokens.json        # Whoop OAuth tokens (auto-managed)
 ├── tonal_tokens.json        # Tonal auth tokens (auto-managed)
@@ -347,7 +347,7 @@ bash run.sh
 nohup bash run.sh &>/tmp/fitness-service.log &
 ```
 
-Server listens on `http://localhost:8080`.
+Server listens on `http://localhost:3033`.
 
 ## Launchd Service
 
@@ -386,18 +386,18 @@ The fitness service can run as a macOS launchd agent for automatic startup and c
 ### Quick Commands
 ```bash
 # Portfolio summary
-curl http://localhost:8080/alpaca/portfolio
+curl http://localhost:3033/alpaca/portfolio
 
 # Trading statistics
-curl http://localhost:8080/alpaca/stats
+curl http://localhost:3033/alpaca/stats
 
 # Log a trade recommendation
-curl -X POST http://localhost:8080/alpaca/trades \
+curl -X POST http://localhost:3033/alpaca/trades \
   -H "Content-Type: application/json" \
   -d '{"symbol":"CRWD","action":"BUY","score":10,"entry_price":382.50,"stop_loss":352.00,"shares":10,"reasoning":"CANSLIM breakout"}'
 
 # Update trade status (executed, declined, closed)
-curl -X PUT http://localhost:8080/alpaca/trades/T123 \
+curl -X PUT http://localhost:3033/alpaca/trades/T123 \
   -H "Content-Type: application/json" \
   -d '{"status":"executed","executed_price":382.50}'
 ```
@@ -453,9 +453,9 @@ API keys stored in `alpaca_keys.json`:
 
 ## Summary for Claude
 
-1. **Need sleep/recovery/strain/HRV?** → `curl http://localhost:8080/whoop/data`
-2. **Need workouts/strength scores?** → `curl http://localhost:8080/tonal/data`
-3. **Need portfolio/positions/trades?** → `curl http://localhost:8080/alpaca/portfolio`
+1. **Need sleep/recovery/strain/HRV?** → `curl http://localhost:3033/whoop/data`
+2. **Need workouts/strength scores?** → `curl http://localhost:3033/tonal/data`
+3. **Need portfolio/positions/trades?** → `curl http://localhost:3033/alpaca/portfolio`
 4. **No auth headers needed** - service handles tokens internally
 5. **Don't over-fetch** - once or twice per conversation is plenty
 6. **Parse the JSON** - key metrics listed in tables above
