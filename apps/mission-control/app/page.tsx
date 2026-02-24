@@ -6,6 +6,8 @@ import { StatCard } from "@/components/stat-card";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 
+export const dynamic = "force-dynamic";
+
 export default async function Home() {
   let data: Awaited<ReturnType<typeof getDashboardSummary>> | null = null;
   let error: string | null = null;

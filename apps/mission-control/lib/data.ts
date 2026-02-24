@@ -1,30 +1,34 @@
-import { cache } from "react";
 import prisma from "@/lib/prisma";
 import { AgentStatus, Prisma, RunStatus, Severity } from "@prisma/client";
+import { unstable_noStore as noStore } from "next/cache";
 
-export const getAgents = cache(async () => {
+export const getAgents = async () => {
+  noStore();
   return prisma.agent.findMany({
     orderBy: [{ status: "asc" }, { name: "asc" }],
   });
-});
+};
 
-export const getRuns = cache(async () => {
+export const getRuns = async () => {
+  noStore();
   return prisma.run.findMany({
     include: { agent: true },
     orderBy: { startedAt: "desc" },
     take: 20,
   });
-});
+};
 
-export const getEvents = cache(async () => {
+export const getEvents = async () => {
+  noStore();
   return prisma.event.findMany({
     include: { agent: true, run: true },
     orderBy: { createdAt: "desc" },
     take: 20,
   });
-});
+};
 
-export const getDashboardSummary = cache(async () => {
+export const getDashboardSummary = async () => {
+  noStore();
   const [agents, runs, events] = await Promise.all([
     getAgents(),
     prisma.run.findMany({
@@ -77,7 +81,7 @@ export const getDashboardSummary = cache(async () => {
       alerts: alertCounts,
     },
   };
-});
+};
 
 export type TaskBoardTask = Prisma.CortanaTaskGetPayload<{
   include: { epic: true };
@@ -95,7 +99,8 @@ const pillarFromMetadata = (metadata: Prisma.JsonValue | null): string => {
   return typeof pillar === "string" && pillar.length > 0 ? pillar : "Unspecified";
 };
 
-export const getTaskBoard = cache(async () => {
+export const getTaskBoard = async () => {
+  noStore();
   const tasks = await prisma.cortanaTask.findMany({
     include: { epic: true },
     orderBy: [{ dueAt: "asc" }, { priority: "asc" }, { createdAt: "desc" }],
@@ -191,4 +196,69 @@ export const getTaskBoard = cache(async () => {
     byPillar,
     recentOutcomes,
   };
-});
+};
+
+const minutesBetween = (start: Date, end: Date) =>
+  Math.max(0, Math.round((end.getTime() - start.getTime()) / 60000));
+
+const durationLabel = (minutes: number) => {
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  const remaining = minutes % 60;
+  return remaining > 0 ? `${hours}h ${remaining}m` : `${hours}h`;
+};
+
+export const getAgentDetail = async (agentId: string) => {
+  noStore();
+
+  const agent = await prisma.agent.findUnique({ where: { id: agentId } });
+  if (!agent) return null;
+
+  const [recentRuns, recentEvents] = await Promise.all([
+    prisma.run.findMany({
+      where: { agentId },
+      orderBy: { startedAt: "desc" },
+      take: 25,
+    }),
+    prisma.event.findMany({
+      where: { agentId },
+      include: { run: true },
+      orderBy: { createdAt: "desc" },
+      take: 30,
+    }),
+  ]);
+
+  const runSummaries = recentRuns.map((run) => {
+    const endTime = run.completedAt ?? new Date();
+    const minutes = minutesBetween(run.startedAt, endTime);
+    return {
+      ...run,
+      durationMinutes: minutes,
+      durationLabel: durationLabel(minutes),
+      timedOut:
+        run.status === "failed" &&
+        (run.summary?.toLowerCase().includes("timeout") ||
+          recentEvents.some(
+            (event) =>
+              event.runId === run.id &&
+              (event.type.toLowerCase().includes("timeout") ||
+                event.message.toLowerCase().includes("timeout"))
+          )),
+    };
+  });
+
+  const failureEvents = recentEvents.filter(
+    (event) =>
+      event.severity === "critical" ||
+      event.type.toLowerCase().includes("fail") ||
+      event.type.toLowerCase().includes("timeout") ||
+      event.message.toLowerCase().includes("timeout")
+  );
+
+  return {
+    agent,
+    recentRuns: runSummaries,
+    recentEvents,
+    failureEvents,
+  };
+};

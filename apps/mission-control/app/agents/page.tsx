@@ -1,4 +1,7 @@
+import Link from "next/link";
 import { getAgents } from "@/lib/data";
+
+export const dynamic = "force-dynamic";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatusBadge } from "@/components/status-badge";
 import { Badge } from "@/components/ui/badge";
@@ -38,12 +41,16 @@ export default async function AgentsPage() {
             </thead>
             <tbody>
               {agents.map((agent) => (
-                <tr key={agent.id} className="border-t">
+                <tr key={agent.id} className="border-t transition-colors hover:bg-muted/30">
                   <td className="px-3 py-3">
-                    <div className="font-semibold text-foreground">{agent.name}</div>
-                    <div className="text-xs text-muted-foreground">
-                      Last seen: {agent.lastSeen?.toLocaleString() || "Unknown"}
-                    </div>
+                    <Link href={`/agents/${agent.id}`} className="group block">
+                      <div className="font-semibold text-foreground group-hover:text-primary">
+                        {agent.name}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        Last seen: {agent.lastSeen?.toLocaleString() || "Unknown"}
+                      </div>
+                    </Link>
                   </td>
                   <td className="px-3 py-3 text-muted-foreground">{agent.role}</td>
                   <td className="px-3 py-3 text-sm text-muted-foreground">
