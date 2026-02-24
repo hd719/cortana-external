@@ -19,6 +19,8 @@ export const getAgents = async () => {
   noStore();
   await syncOpenClawRunsFromStore();
 
+  const taskPrisma = getTaskPrisma();
+
   const [agents, runs, tasks] = await Promise.all([
     prisma.agent.findMany({
       orderBy: [{ status: "asc" }, { name: "asc" }],
@@ -29,7 +31,7 @@ export const getAgents = async () => {
       take: 2000,
       orderBy: [{ updatedAt: "desc" }],
     }),
-    prisma.cortanaTask.findMany({
+    (taskPrisma ?? prisma).cortanaTask.findMany({
       where: { assignedTo: { not: null } },
       select: { assignedTo: true, status: true },
       take: 4000,
@@ -52,8 +54,25 @@ export const getAgents = async () => {
     return statsByAgent.get(agentId)!;
   };
 
+  const MAX_TERMINAL_RUNS_PER_AGENT = 60;
+  const terminalRunsCountByAgent = new Map<string, number>();
+
   for (const run of runs) {
     if (!run.agentId) continue;
+
+    if (
+      run.status !== RunStatus.completed &&
+      run.status !== RunStatus.failed &&
+      run.status !== RunStatus.cancelled
+    ) {
+      continue;
+    }
+
+    const counted = terminalRunsCountByAgent.get(run.agentId) || 0;
+    if (counted >= MAX_TERMINAL_RUNS_PER_AGENT) continue;
+
+    terminalRunsCountByAgent.set(run.agentId, counted + 1);
+
     const stats = ensureStats(run.agentId);
     if (run.status === RunStatus.completed) stats.completedRuns += 1;
     else if (run.status === RunStatus.failed) stats.failedRuns += 1;
@@ -70,6 +89,9 @@ export const getAgents = async () => {
     }
   }
 
+  const MAX_TERMINAL_TASKS_PER_AGENT = 80;
+  const terminalTasksCountByAgent = new Map<string, number>();
+
   for (const task of tasks) {
     const assigneeKey = normalizeIdentity(task.assignedTo);
     if (!assigneeKey) continue;
@@ -78,12 +100,22 @@ export const getAgents = async () => {
     if (matches.length === 0) continue;
 
     const normalizedTaskStatus = task.status.toLowerCase();
+    const isCompletedTask = ["done", "completed"].includes(normalizedTaskStatus);
+    const isFailedTask = ["failed", "cancelled", "canceled", "timeout", "killed"].includes(
+      normalizedTaskStatus
+    );
+
+    if (!isCompletedTask && !isFailedTask) continue;
+
     for (const agentId of matches) {
+      const counted = terminalTasksCountByAgent.get(agentId) || 0;
+      if (counted >= MAX_TERMINAL_TASKS_PER_AGENT) continue;
+
+      terminalTasksCountByAgent.set(agentId, counted + 1);
+
       const stats = ensureStats(agentId);
-      if (["done", "completed"].includes(normalizedTaskStatus)) stats.completedTasks += 1;
-      else if (["failed", "cancelled", "canceled", "timeout", "killed"].includes(normalizedTaskStatus)) {
-        stats.failedTasks += 1;
-      }
+      if (isCompletedTask) stats.completedTasks += 1;
+      else if (isFailedTask) stats.failedTasks += 1;
     }
   }
 

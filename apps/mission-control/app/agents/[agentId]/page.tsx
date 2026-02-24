@@ -48,7 +48,7 @@ export default async function AgentDetailPage({
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <StatusBadge value={agent.status} variant="agent" />
-            <Badge variant="outline">Health: {agent.healthScore ?? "—"}</Badge>
+            <Badge variant="outline">Health: {typeof agent.healthScore === "number" ? agent.healthScore.toFixed(1) : "—"}</Badge>
             <Badge variant="secondary">Last seen: {agent.lastSeen ? dtf.format(agent.lastSeen) : "Unknown"}</Badge>
           </div>
         </div>
