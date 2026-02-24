@@ -26,7 +26,7 @@ const agentSeeds = [
     role: "Scout",
     description: "Surfaces research summaries, benchmarks, and supporting evidence.",
     capabilities: "Research synthesis, comparisons, source tracking",
-    status: AgentStatus.idle,
+    status: AgentStatus.active,
     healthScore: 85,
     lastSeen: new Date(Date.now() - 1000 * 60 * 45),
   },

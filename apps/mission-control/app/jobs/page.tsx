@@ -70,9 +70,11 @@ export default async function JobsPage() {
                     {run.startedAt?.toLocaleString() || "—"}
                   </td>
                   <td className="px-3 py-3 text-xs text-muted-foreground">
-                    {run.status === RunStatus.completed && run.completedAt
+                    {run.completedAt
                       ? run.completedAt.toLocaleString()
-                      : "In progress"}
+                      : run.status === RunStatus.running
+                        ? "In progress"
+                        : "—"}
                   </td>
                 </tr>
               ))}
