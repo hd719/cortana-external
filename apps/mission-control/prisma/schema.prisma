@@ -72,3 +72,46 @@ model Event {
   createdAt    DateTime @default(now())
   acknowledged Boolean  @default(false)
 }
+
+model CortanaEpic {
+  id          Int           @id @default(autoincrement())
+  title       String
+  source      String?       @map("source")
+  status      String        @default("active")
+  deadline    DateTime?     @map("deadline")
+  createdAt   DateTime      @default(now()) @map("created_at")
+  completedAt DateTime?     @map("completed_at")
+  metadata    Json?         @map("metadata")
+  tasks       CortanaTask[]
+
+  @@map("cortana_epics")
+}
+
+model CortanaTask {
+  id             Int           @id @default(autoincrement())
+  title          String
+  description    String?       @map("description")
+  priority       Int           @default(3)
+  status         String        @default("pending")
+  dueAt          DateTime?     @map("due_at")
+  remindAt       DateTime?     @map("remind_at")
+  executeAt      DateTime?     @map("execute_at")
+  autoExecutable Boolean       @default(false) @map("auto_executable")
+  executionPlan  String?       @map("execution_plan")
+  dependsOn      Int[]         @default([]) @map("depends_on") @db.Integer
+  completedAt    DateTime?     @map("completed_at")
+  outcome        String?       @map("outcome")
+  metadata       Json?         @map("metadata")
+  epicId         Int?          @map("epic_id")
+  parentId       Int?          @map("parent_id")
+  assignedTo     String?       @map("assigned_to")
+  source         String?       @map("source")
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
+
+  epic           CortanaEpic?  @relation(fields: [epicId], references: [id])
+  parent         CortanaTask?  @relation("Subtasks", fields: [parentId], references: [id])
+  children       CortanaTask[] @relation("Subtasks")
+
+  @@map("cortana_tasks")
+}

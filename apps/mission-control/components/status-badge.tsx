@@ -6,7 +6,7 @@ type BadgeVariant = VariantProps<typeof badgeVariants>["variant"];
 
 type StatusBadgeProps = {
   value: AgentStatus | RunStatus | Severity | string;
-  variant?: "agent" | "run" | "severity" | "default";
+  variant?: "agent" | "run" | "severity" | "task" | "default";
 };
 
 const agentMap: Record<AgentStatus, BadgeVariant> = {
@@ -30,6 +30,16 @@ const severityMap: Record<Severity, BadgeVariant> = {
   critical: "destructive",
 };
 
+const taskMap: Record<string, BadgeVariant> = {
+  pending: "secondary",
+  in_progress: "warning",
+  blocked: "warning",
+  done: "success",
+  completed: "success",
+  cancelled: "outline",
+  failed: "destructive",
+};
+
 export function StatusBadge({ value, variant = "default" }: StatusBadgeProps) {
   const normalized = String(value).toLowerCase();
   const label = normalized.replace(/_/g, " ");
@@ -42,6 +52,8 @@ export function StatusBadge({ value, variant = "default" }: StatusBadgeProps) {
     badgeVariant = runMap[normalized as RunStatus];
   } else if (variant === "severity" && Object.hasOwn(severityMap, normalized)) {
     badgeVariant = severityMap[normalized as Severity];
+  } else if (variant === "task" && Object.hasOwn(taskMap, normalized)) {
+    badgeVariant = taskMap[normalized];
   }
 
   return (

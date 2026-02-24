@@ -110,10 +110,142 @@ const eventSeeds = [
   },
 ];
 
+const epicSeeds = [
+  {
+    name: "Reliability",
+    title: "Keep Cortana agents reliable and observable",
+    metadata: { pillar: "Career" },
+  },
+  {
+    name: "Time",
+    title: "Return time through automation",
+    metadata: { pillar: "Time" },
+  },
+  {
+    name: "Health",
+    title: "Health telemetry and habits",
+    metadata: { pillar: "Health" },
+  },
+];
+
+const taskSeeds = [
+  {
+    key: "uptime-playbook",
+    title: "Draft uptime playbook for gateway",
+    description: "Codify steps to recover from heartbeat misses.",
+    status: "pending",
+    priority: 2,
+    autoExecutable: false,
+    metadata: { pillar: "Career" },
+    epic: "Reliability",
+    dueAt: new Date(Date.now() + 1000 * 60 * 60 * 24 * 2),
+  },
+  {
+    key: "auto-remediation",
+    title: "Enable auto-remediation for heartbeat misses",
+    description: "Trigger restart + alert when uptime probes fail twice.",
+    status: "pending",
+    priority: 1,
+    autoExecutable: true,
+    dependsOnKeys: ["uptime-playbook"],
+    metadata: { pillar: "Career" },
+    epic: "Reliability",
+    dueAt: new Date(Date.now() + 1000 * 60 * 60 * 36),
+  },
+  {
+    key: "task-board-ui",
+    title: "Add task board to Mission Control",
+    description: "Expose ready, blocked, and pillar views for transparency.",
+    status: "in_progress",
+    priority: 2,
+    autoExecutable: false,
+    metadata: { pillar: "Career" },
+    epic: "Time",
+    dueAt: new Date(Date.now() + 1000 * 60 * 60 * 12),
+  },
+  {
+    key: "heartbeat-upgrade",
+    title: "Harden heartbeat checks",
+    description: "Add variance alerting and slack pings for degraded agents.",
+    status: "pending",
+    priority: 3,
+    autoExecutable: false,
+    metadata: { pillar: "Time" },
+    epic: "Time",
+  },
+  {
+    key: "sleep-sync",
+    title: "Sync sleep score into daily brief",
+    description: "Pull Whoop recovery + HRV into morning dashboard.",
+    status: "done",
+    priority: 3,
+    autoExecutable: true,
+    outcome: "Integrated recovery + HRV pull; adds 0.3s to brief generation.",
+    metadata: { pillar: "Health" },
+    epic: "Health",
+    completedAt: new Date(Date.now() - 1000 * 60 * 60 * 20),
+  },
+  {
+    key: "step-targets",
+    title: "Set step targets for weekdays",
+    description: "Auto-generate daily step target nudges.",
+    status: "pending",
+    priority: 4,
+    autoExecutable: true,
+    dependsOnKeys: ["sleep-sync"],
+    metadata: { pillar: "Health" },
+    epic: "Health",
+    dueAt: new Date(Date.now() - 1000 * 60 * 60 * 4),
+  },
+  {
+    key: "expense-ingest",
+    title: "Ingest last 30 days of expenses",
+    description: "Pull Plaid export and normalize merchants.",
+    status: "pending",
+    priority: 2,
+    autoExecutable: true,
+    metadata: { pillar: "Wealth" },
+    dueAt: new Date(Date.now() + 1000 * 60 * 60 * 6),
+  },
+  {
+    key: "budget-drift",
+    title: "Detect budget drift",
+    description: "Flag spend anomalies vs. targets and alert.",
+    status: "pending",
+    priority: 1,
+    autoExecutable: true,
+    dependsOnKeys: ["expense-ingest"],
+    metadata: { pillar: "Wealth" },
+  },
+  {
+    key: "weekly-review",
+    title: "Ship weekly review",
+    description: "Send recap across pillars with ready/blocked tasks.",
+    status: "in_progress",
+    priority: 3,
+    autoExecutable: false,
+    metadata: { pillar: "Time" },
+    dueAt: new Date(Date.now() + 1000 * 60 * 60 * 72),
+  },
+  {
+    key: "db-snapshots",
+    title: "DB snapshots",
+    description: "Nightly snapshots for task state.",
+    status: "done",
+    priority: 3,
+    autoExecutable: true,
+    outcome: "Nightly cron enabled; snapshots stored locally.",
+    metadata: { pillar: "Career" },
+    completedAt: new Date(Date.now() - 1000 * 60 * 60 * 30),
+  },
+];
+
 async function main() {
   await prisma.event.deleteMany();
   await prisma.run.deleteMany();
   await prisma.agent.deleteMany();
+  await prisma.cortanaTask.deleteMany();
+  await prisma.cortanaEpic.deleteMany();
 
   const agents = await Promise.all(
     agentSeeds.map((agent) => prisma.agent.create({ data: agent }))
@@ -160,6 +292,51 @@ async function main() {
       })
     )
   );
+
+  const epics = await Promise.all(
+    epicSeeds.map((epic) =>
+      prisma.cortanaEpic.create({
+        data: {
+          title: epic.title,
+          metadata: epic.metadata,
+          source: "seed",
+        },
+      })
+    )
+  );
+
+  const epicIdByName = epics.reduce<Record<string, number>>((acc, epic, index) => {
+    const name = epicSeeds[index]?.name || epic.title;
+    acc[name] = epic.id;
+    return acc;
+  }, {});
+
+  const createdTaskByKey: Record<string, number> = {};
+
+  for (const task of taskSeeds) {
+    const dependsOn = (task.dependsOnKeys || [])
+      .map((key) => createdTaskByKey[key])
+      .filter(Boolean);
+
+    const created = await prisma.cortanaTask.create({
+      data: {
+        title: task.title,
+        description: task.description,
+        status: task.status,
+        priority: task.priority,
+        autoExecutable: task.autoExecutable,
+        dependsOn,
+        metadata: task.metadata,
+        epicId: task.epic ? epicIdByName[task.epic] : null,
+        dueAt: task.dueAt,
+        completedAt: task.completedAt,
+        outcome: task.outcome,
+        source: "seed",
+      },
+    });
+
+    createdTaskByKey[task.key] = created.id;
+  }
 }
 
 main()

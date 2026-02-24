@@ -49,11 +49,24 @@ pnpm dev
 - `GET /api/agents` — agent roster
 - `GET /api/runs` — recent runs/jobs
 - `GET /api/events` — latest alerts/events
+- `GET /api/task-board` — task board slices (ready, blocked, due, pillar rollups, recent outcomes)
 
 ## Pages
 - `/` — Dashboard with stats, agent health widgets, runs table, and alerts feed
+- `/task-board` — Task board cards (Ready now, Blocked, Due soon/Overdue, By pillar, and Recent execution log)
 - `/agents` — Agent overview
 - `/jobs` — Runs/jobs list
+
+## Task board data model
+- Mission Control reads from the Cortana task queue tables when available: `cortana_tasks` and `cortana_epics` (see `prisma/schema.prisma`).
+- If your Postgres doesn't already expose these tables, running `pnpm db:migrate` will create adapter/read-model tables with the same names/columns:
+  - `cortana_epics`: id (serial), title, source, status, deadline, created_at, completed_at, metadata JSONB
+  - `cortana_tasks`: id (serial), title, description, priority (1-5), status (text), due_at, remind_at, execute_at, auto_executable, execution_plan, depends_on int[], completed_at, outcome, metadata JSONB, epic_id FK, parent_id FK, assigned_to, source, created_at, updated_at
+- Pillar grouping uses `metadata -> 'pillar'` (expected values: Time, Health, Wealth, Career; falls back to Unspecified).
+- Ready Now = `status = 'pending'` + `auto_executable = true` + dependencies either empty or all `done`.
+- Blocked = `status = 'pending'` with dependencies not marked `done`.
+- Due soon = pending + due within 48h; Overdue = pending + due_at in the past.
+- Recent outcomes list tasks with `completed_at` or `outcome` populated.
 
 ## Notes
 - Migrations are stored in `prisma/migrations`. Update schema in `prisma/schema.prisma`, then run `pnpm db:migrate`.
