@@ -7558,3 +7558,301 @@ INSERT 0 1
 2026-02-23 12:25:42 [info] Alerts sent to Telegram
 INSERT 0 1
 === Watchdog complete ===
+=== Watchdog run: Mon Feb 23 17:22:13 EST 2026 ===
+2026-02-23 17:22:13 [info] Cron quarantine check: none
+INSERT 0 1
+2026-02-23 17:22:13 [info] Cron health check complete
+INSERT 0 1
+2026-02-23 17:22:13 [info] Heartbeat pileup check: 0 processes
+INSERT 0 1
+2026-02-23 17:22:13 [info] Fitness endpoint base: http://localhost:3033
+INSERT 0 1
+2026-02-23 17:22:13 [info] gog: OK
+INSERT 0 1
+2026-02-23 17:22:14 [warning] Tonal health check failed (HTTP 000000), waiting for in-service refresh self-heal
+INSERT 0 1
+2026-02-23 17:22:19 [warning] Tonal still down after in-service self-heal (HTTP 000000)
+INSERT 0 1
+2026-02-23 17:22:19 [warning] Whoop health check failed (HTTP 000000)
+INSERT 0 1
+2026-02-23 17:22:19 [info] PostgreSQL: OK
+INSERT 0 1
+2026-02-23 17:22:20 [warning] API budget low: ~0% quota remaining
+INSERT 0 1
+2026-02-23 17:22:21 [info] Alerts sent to Telegram
+INSERT 0 1
+=== Watchdog complete ===
+=== Watchdog run: Mon Feb 23 17:37:21 EST 2026 ===
+2026-02-23 17:37:21 [info] Cron quarantine check: none
+INSERT 0 1
+2026-02-23 17:37:21 [info] Cron health check complete
+INSERT 0 1
+2026-02-23 17:37:21 [info] Heartbeat pileup check: 0 processes
+INSERT 0 1
+2026-02-23 17:37:21 [info] Fitness endpoint base: http://localhost:3033
+INSERT 0 1
+2026-02-23 17:37:21 [info] gog: OK
+INSERT 0 1
+2026-02-23 17:37:21 [info] Tonal: OK
+INSERT 0 1
+2026-02-23 17:37:21 [info] Whoop: OK
+INSERT 0 1
+2026-02-23 17:37:21 [info] PostgreSQL: OK
+INSERT 0 1
+2026-02-23 17:37:23 [info] Budget: 86% quota remaining
+INSERT 0 1
+=== Watchdog complete ===
+=== Watchdog run: Mon Feb 23 17:52:23 EST 2026 ===
+2026-02-23 17:52:23 [info] Cron quarantine check: none
+INSERT 0 1
+2026-02-23 17:52:23 [info] Cron health check complete
+INSERT 0 1
+2026-02-23 17:52:23 [info] Heartbeat pileup check: 0 processes
+INSERT 0 1
+2026-02-23 17:52:23 [info] Fitness endpoint base: http://localhost:3033
+INSERT 0 1
+2026-02-23 17:52:23 [info] gog: OK
+INSERT 0 1
+2026-02-23 17:52:24 [info] Tonal: OK
+INSERT 0 1
+2026-02-23 17:52:24 [info] Whoop: OK
+INSERT 0 1
+2026-02-23 17:52:25 [info] PostgreSQL: OK
+INSERT 0 1
+2026-02-23 17:52:26 [info] Budget: 86% quota remaining
+INSERT 0 1
+=== Watchdog complete ===
+=== Watchdog run: Mon Feb 23 18:07:26 EST 2026 ===
+2026-02-23 18:07:26 [info] Cron quarantine check: none
+INSERT 0 1
+2026-02-23 18:07:26 [info] Cron health check complete
+INSERT 0 1
+2026-02-23 18:07:26 [info] Heartbeat pileup check: 0 processes
+INSERT 0 1
+2026-02-23 18:07:26 [info] Fitness endpoint base: http://localhost:3033
+INSERT 0 1
+2026-02-23 18:07:26 [info] gog: OK
+INSERT 0 1
+2026-02-23 18:07:27 [info] Tonal: OK
+INSERT 0 1
+2026-02-23 18:07:27 [info] Whoop: OK
+INSERT 0 1
+2026-02-23 18:07:28 [info] PostgreSQL: OK
+INSERT 0 1
+2026-02-23 18:07:29 [info] Budget: 100% quota remaining
+INSERT 0 1
+=== Watchdog complete ===
+=== Watchdog run: Mon Feb 23 18:22:29 EST 2026 ===
+2026-02-23 18:22:29 [info] Cron quarantine check: none
+INSERT 0 1
+2026-02-23 18:22:29 [info] Cron health check complete
+INSERT 0 1
+2026-02-23 18:22:29 [info] Heartbeat pileup check: 0 processes
+INSERT 0 1
+2026-02-23 18:22:29 [info] Fitness endpoint base: http://localhost:3033
+INSERT 0 1
+2026-02-23 18:22:29 [info] gog: OK
+INSERT 0 1
+2026-02-23 18:22:30 [info] Tonal: OK
+INSERT 0 1
+2026-02-23 18:22:30 [info] Whoop: OK
+INSERT 0 1
+2026-02-23 18:22:30 [info] PostgreSQL: OK
+INSERT 0 1
+2026-02-23 18:22:31 [info] Budget: 100% quota remaining
+INSERT 0 1
+=== Watchdog complete ===
+=== Watchdog run: Mon Feb 23 18:37:31 EST 2026 ===
+2026-02-23 18:37:31 [info] Cron quarantine check: none
+INSERT 0 1
+2026-02-23 18:37:31 [info] Cron health check complete
+INSERT 0 1
+2026-02-23 18:37:31 [info] Heartbeat pileup check: 0 processes
+INSERT 0 1
+2026-02-23 18:37:31 [info] Fitness endpoint base: http://localhost:3033
+INSERT 0 1
+2026-02-23 18:37:32 [info] gog: OK
+INSERT 0 1
+2026-02-23 18:37:32 [info] Tonal: OK
+INSERT 0 1
+2026-02-23 18:37:32 [info] Whoop: OK
+INSERT 0 1
+2026-02-23 18:37:32 [info] PostgreSQL: OK
+INSERT 0 1
+2026-02-23 18:37:33 [info] Budget: 100% quota remaining
+INSERT 0 1
+=== Watchdog complete ===
+=== Watchdog run: Mon Feb 23 18:52:33 EST 2026 ===
+2026-02-23 18:52:33 [info] Cron quarantine check: none
+INSERT 0 1
+2026-02-23 18:52:33 [info] Cron health check complete
+INSERT 0 1
+2026-02-23 18:52:33 [info] Heartbeat pileup check: 0 processes
+INSERT 0 1
+2026-02-23 18:52:33 [info] Fitness endpoint base: http://localhost:3033
+INSERT 0 1
+2026-02-23 18:52:34 [info] gog: OK
+INSERT 0 1
+2026-02-23 18:52:34 [info] Tonal: OK
+INSERT 0 1
+2026-02-23 18:52:34 [info] Whoop: OK
+INSERT 0 1
+2026-02-23 18:52:34 [info] PostgreSQL: OK
+INSERT 0 1
+2026-02-23 18:52:35 [info] Budget: 100% quota remaining
+INSERT 0 1
+=== Watchdog complete ===
+=== Watchdog run: Mon Feb 23 19:07:35 EST 2026 ===
+2026-02-23 19:07:35 [info] Cron quarantine check: none
+INSERT 0 1
+2026-02-23 19:07:35 [info] Cron health check complete
+INSERT 0 1
+2026-02-23 19:07:35 [info] Heartbeat pileup check: 0 processes
+INSERT 0 1
+2026-02-23 19:07:35 [info] Fitness endpoint base: http://localhost:3033
+INSERT 0 1
+ID                DATE              FROM                                       SUBJECT                                                                                   LABELS                                   THREAD
+19c8cf5a05a483a9  2026-02-23 19:03  Golf Digest <golfdigest@s.golfdigest.com>  Scottie's staggering run, a friend's thrilling round and why we're betting Brooks Koepka  UNREAD,IMPORTANT,CATEGORY_UPDATES,INBOX  -
+2026-02-23 19:07:36 [info] gog: OK
+INSERT 0 1
+2026-02-23 19:07:36 [info] Tonal: OK
+INSERT 0 1
+2026-02-23 19:07:36 [info] Whoop: OK
+INSERT 0 1
+2026-02-23 19:07:36 [info] PostgreSQL: OK
+INSERT 0 1
+2026-02-23 19:07:38 [info] Budget: 99% quota remaining
+INSERT 0 1
+=== Watchdog complete ===
+=== Watchdog run: Mon Feb 23 19:22:38 EST 2026 ===
+2026-02-23 19:22:38 [info] Cron quarantine check: none
+INSERT 0 1
+2026-02-23 19:22:38 [info] Cron health check complete
+INSERT 0 1
+2026-02-23 19:22:38 [info] Heartbeat pileup check: 0 processes
+INSERT 0 1
+2026-02-23 19:22:38 [info] Fitness endpoint base: http://localhost:3033
+INSERT 0 1
+ID                DATE              FROM                                       SUBJECT                                                                                   LABELS                                   THREAD
+19c8cf5a05a483a9  2026-02-23 19:03  Golf Digest <golfdigest@s.golfdigest.com>  Scottie's staggering run, a friend's thrilling round and why we're betting Brooks Koepka  UNREAD,IMPORTANT,CATEGORY_UPDATES,INBOX  -
+2026-02-23 19:22:38 [info] gog: OK
+INSERT 0 1
+2026-02-23 19:22:39 [info] Tonal: OK
+INSERT 0 1
+2026-02-23 19:22:39 [info] Whoop: OK
+INSERT 0 1
+2026-02-23 19:22:39 [info] PostgreSQL: OK
+INSERT 0 1
+2026-02-23 19:22:40 [info] Budget: 98% quota remaining
+INSERT 0 1
+=== Watchdog complete ===
+=== Watchdog run: Mon Feb 23 19:37:40 EST 2026 ===
+2026-02-23 19:37:40 [info] Cron quarantine check: none
+INSERT 0 1
+2026-02-23 19:37:40 [info] Cron health check complete
+INSERT 0 1
+2026-02-23 19:37:40 [info] Heartbeat pileup check: 0 processes
+INSERT 0 1
+2026-02-23 19:37:40 [info] Fitness endpoint base: http://localhost:3033
+INSERT 0 1
+ID                DATE              FROM                                       SUBJECT                                                                                   LABELS                                   THREAD
+19c8cf5a05a483a9  2026-02-23 19:03  Golf Digest <golfdigest@s.golfdigest.com>  Scottie's staggering run, a friend's thrilling round and why we're betting Brooks Koepka  UNREAD,IMPORTANT,CATEGORY_UPDATES,INBOX  -
+2026-02-23 19:37:41 [info] gog: OK
+INSERT 0 1
+2026-02-23 19:37:41 [info] Tonal: OK
+INSERT 0 1
+2026-02-23 19:37:41 [info] Whoop: OK
+INSERT 0 1
+2026-02-23 19:37:41 [info] PostgreSQL: OK
+INSERT 0 1
+2026-02-23 19:37:42 [info] Budget: 98% quota remaining
+INSERT 0 1
+=== Watchdog complete ===
+=== Watchdog run: Mon Feb 23 19:52:42 EST 2026 ===
+2026-02-23 19:52:42 [info] Cron quarantine check: none
+INSERT 0 1
+2026-02-23 19:52:42 [info] Cron health check complete
+INSERT 0 1
+2026-02-23 19:52:42 [info] Heartbeat pileup check: 0 processes
+INSERT 0 1
+2026-02-23 19:52:42 [info] Fitness endpoint base: http://localhost:3033
+INSERT 0 1
+ID                DATE              FROM                                       SUBJECT                                                                                   LABELS                                   THREAD
+19c8cf5a05a483a9  2026-02-23 19:03  Golf Digest <golfdigest@s.golfdigest.com>  Scottie's staggering run, a friend's thrilling round and why we're betting Brooks Koepka  UNREAD,IMPORTANT,CATEGORY_UPDATES,INBOX  -
+2026-02-23 19:52:43 [info] gog: OK
+INSERT 0 1
+2026-02-23 19:52:44 [info] Tonal: OK
+INSERT 0 1
+2026-02-23 19:52:44 [info] Whoop: OK
+INSERT 0 1
+2026-02-23 19:52:44 [info] PostgreSQL: OK
+INSERT 0 1
+2026-02-23 19:52:46 [info] Budget: 98% quota remaining
+INSERT 0 1
+=== Watchdog complete ===
+=== Watchdog run: Mon Feb 23 20:07:46 EST 2026 ===
+2026-02-23 20:07:46 [info] Cron quarantine check: none
+INSERT 0 1
+2026-02-23 20:07:46 [info] Cron health check complete
+INSERT 0 1
+2026-02-23 20:07:46 [info] Heartbeat pileup check: 0 processes
+INSERT 0 1
+2026-02-23 20:07:46 [info] Fitness endpoint base: http://localhost:3033
+INSERT 0 1
+ID                DATE              FROM                                       SUBJECT                                                                                   LABELS                                   THREAD
+19c8cf5a05a483a9  2026-02-23 19:03  Golf Digest <golfdigest@s.golfdigest.com>  Scottie's staggering run, a friend's thrilling round and why we're betting Brooks Koepka  UNREAD,IMPORTANT,CATEGORY_UPDATES,INBOX  -
+2026-02-23 20:07:47 [info] gog: OK
+INSERT 0 1
+2026-02-23 20:07:47 [info] Tonal: OK
+INSERT 0 1
+2026-02-23 20:07:47 [info] Whoop: OK
+INSERT 0 1
+2026-02-23 20:07:47 [info] PostgreSQL: OK
+INSERT 0 1
+2026-02-23 20:07:48 [info] Budget: 98% quota remaining
+INSERT 0 1
+=== Watchdog complete ===
+=== Watchdog run: Mon Feb 23 20:22:49 EST 2026 ===
+2026-02-23 20:22:49 [info] Cron quarantine check: none
+INSERT 0 1
+2026-02-23 20:22:49 [info] Cron health check complete
+INSERT 0 1
+2026-02-23 20:22:49 [info] Heartbeat pileup check: 0 processes
+INSERT 0 1
+2026-02-23 20:22:49 [info] Fitness endpoint base: http://localhost:3033
+INSERT 0 1
+ID                DATE              FROM                                       SUBJECT                                                                                   LABELS                                   THREAD
+19c8cf5a05a483a9  2026-02-23 19:03  Golf Digest <golfdigest@s.golfdigest.com>  Scottie's staggering run, a friend's thrilling round and why we're betting Brooks Koepka  UNREAD,IMPORTANT,CATEGORY_UPDATES,INBOX  -
+2026-02-23 20:22:49 [info] gog: OK
+INSERT 0 1
+2026-02-23 20:22:49 [info] Tonal: OK
+INSERT 0 1
+2026-02-23 20:22:50 [info] Whoop: OK
+INSERT 0 1
+2026-02-23 20:22:50 [info] PostgreSQL: OK
+INSERT 0 1
+2026-02-23 20:22:51 [info] Budget: 97% quota remaining
+INSERT 0 1
+=== Watchdog complete ===
+=== Watchdog run: Mon Feb 23 20:37:51 EST 2026 ===
+2026-02-23 20:37:51 [info] Cron quarantine check: none
+INSERT 0 1
+2026-02-23 20:37:51 [info] Cron health check complete
+INSERT 0 1
+2026-02-23 20:37:51 [info] Heartbeat pileup check: 0 processes
+INSERT 0 1
+2026-02-23 20:37:51 [info] Fitness endpoint base: http://localhost:3033
+INSERT 0 1
+ID                DATE              FROM                                       SUBJECT                                                                                   LABELS                                   THREAD
+19c8cf5a05a483a9  2026-02-23 19:03  Golf Digest <golfdigest@s.golfdigest.com>  Scottie's staggering run, a friend's thrilling round and why we're betting Brooks Koepka  UNREAD,IMPORTANT,CATEGORY_UPDATES,INBOX  -
+2026-02-23 20:37:51 [info] gog: OK
+INSERT 0 1
+2026-02-23 20:37:53 [info] Tonal: OK
+INSERT 0 1
+2026-02-23 20:37:53 [info] Whoop: OK
+INSERT 0 1
+2026-02-23 20:37:53 [info] PostgreSQL: OK
+INSERT 0 1
+2026-02-23 20:37:55 [info] Budget: 97% quota remaining
+INSERT 0 1
+=== Watchdog complete ===

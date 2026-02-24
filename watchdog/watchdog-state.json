@@ -3,12 +3,24 @@
     "last_alert": 0,
     "first_failure": 0,
     "status": "recovered",
-    "last_recovery": 1771771979
+    "last_recovery": 1771885535
   },
   "postgresql": {
     "last_alert": 0,
     "first_failure": 0,
     "status": "recovered",
     "last_recovery": 1771867514
+  },
+  "whoop": {
+    "last_alert": 0,
+    "first_failure": 0,
+    "status": "recovered",
+    "last_recovery": 1771885535
+  },
+  "budget_low": {
+    "last_alert": 0,
+    "first_failure": 0,
+    "status": "recovered",
+    "last_recovery": 1771885536
   }
 }
