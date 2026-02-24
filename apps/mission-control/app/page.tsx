@@ -5,6 +5,7 @@ import { StatCard } from "@/components/stat-card";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { AutoRefresh } from "@/components/auto-refresh";
+import { HeartbeatPulse } from "@/components/heartbeat-pulse";
 
 export const dynamic = "force-dynamic";
 
@@ -73,7 +74,10 @@ export default async function Home() {
             Prisma.
           </p>
         </div>
-        <Badge variant="secondary" className="h-fit">Connected to Postgres</Badge>
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:items-end">
+          <HeartbeatPulse />
+          <Badge variant="secondary" className="h-fit">Connected to Postgres</Badge>
+        </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -252,6 +256,9 @@ export default async function Home() {
               </li>
               <li>
                 API: <code className="font-mono text-foreground">/api/runs</code>
+              </li>
+              <li>
+                API: <code className="font-mono text-foreground">/api/heartbeat-status</code>
               </li>
             </ul>
             <p className="text-xs">

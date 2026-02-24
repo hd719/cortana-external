@@ -124,3 +124,58 @@
     @apply bg-background text-foreground;
   }
 }
+@keyframes heartbeat-pulse-fast {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 oklch(0.7 0.2 150 / 0.45);
+  }
+  70% {
+    transform: scale(1.12);
+    box-shadow: 0 0 0 12px oklch(0.7 0.2 150 / 0);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 oklch(0.7 0.2 150 / 0);
+  }
+}
+
+@keyframes heartbeat-pulse-slow {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 oklch(0.84 0.17 92 / 0.4);
+  }
+  70% {
+    transform: scale(1.08);
+    box-shadow: 0 0 0 10px oklch(0.84 0.17 92 / 0);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 oklch(0.84 0.17 92 / 0);
+  }
+}
+
+.heartbeat-dot {
+  display: inline-flex;
+  width: 0.65rem;
+  height: 0.65rem;
+  border-radius: 9999px;
+  flex-shrink: 0;
+}
+
+.heartbeat-healthy {
+  background: oklch(0.72 0.2 149);
+  animation: heartbeat-pulse-fast 1.8s ease-out infinite;
+}
+
+.heartbeat-stale {
+  background: oklch(0.84 0.17 92);
+  animation: heartbeat-pulse-slow 2.8s ease-out infinite;
+}
+
+.heartbeat-missed {
+  background: oklch(0.64 0.24 28);
+}
+
+.heartbeat-unknown {
+  background: oklch(0.64 0 0);
+}
