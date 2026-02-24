@@ -41,8 +41,8 @@ export default async function Home() {
   const degradedAgents = data.agents.filter((a) =>
     ["degraded", "offline"].includes(a.status)
   ).length;
-  const activeRuns = data.runs.filter((r) =>
-    [RunStatus.running, RunStatus.queued].includes(r.status)
+  const activeRuns = data.runs.filter(
+    (r) => r.status === RunStatus.running || r.status === RunStatus.queued
   ).length;
   const openAlerts =
     (data.metrics.alerts.bySeverity.warning || 0) +
