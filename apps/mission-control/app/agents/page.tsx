@@ -59,7 +59,7 @@ export default async function AgentsPage() {
                     {agent.capabilities}
                   </td>
                   <td className="px-3 py-3 text-muted-foreground">
-                    {agent.healthScore ?? "—"}
+                    {typeof agent.healthScore === "number" ? agent.healthScore.toFixed(1) : "—"}
                   </td>
                   <td className="px-3 py-3">
                     <StatusBadge value={agent.status} variant="agent" />

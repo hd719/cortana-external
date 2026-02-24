@@ -18,10 +18,15 @@ export const computeHealthScore = (stats: AgentOperationalStats) => {
   const runTerminal = stats.completedRuns + stats.failedRuns + stats.cancelledRuns;
   const taskTerminal = stats.completedTasks + stats.failedTasks;
 
-  const runReliability = runTerminal > 0 ? stats.completedRuns / runTerminal : 0.6;
-  const taskReliability = taskTerminal > 0 ? stats.completedTasks / taskTerminal : 0.6;
+  const runReliability = runTerminal > 0 ? stats.completedRuns / runTerminal : null;
+  const taskReliability = taskTerminal > 0 ? stats.completedTasks / taskTerminal : null;
 
-  const reliabilityScore = (runReliability * 0.6 + taskReliability * 0.4) * 70;
+  const reliabilityBlend =
+    runReliability !== null && taskReliability !== null
+      ? runReliability * 0.6 + taskReliability * 0.4
+      : runReliability ?? taskReliability ?? 0.6;
+
+  const reliabilityScore = reliabilityBlend * 70;
 
   // Use a square-root curve so early wins matter without hitting a hard plateau after ~6 runs.
   // This keeps scores responsive to new successful runs for mature agents.
@@ -31,5 +36,5 @@ export const computeHealthScore = (stats: AgentOperationalStats) => {
   );
 
   const rawScore = Math.max(0, Math.min(100, reliabilityScore + completionVolume));
-  return Math.round(rawScore * 10) / 10;
+  return rawScore;
 };
