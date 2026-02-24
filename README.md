@@ -52,6 +52,14 @@ cd apps/mission-control && rm -rf .next && pnpm dev
 - `Ready now` = `status='pending'` + `auto_executable=true` + dependencies done
 - Pillars from `metadata -> 'pillar'` (Time, Health, Wealth, Career; default Unspecified)
 
+### Decision Traces integration (new)
+- Page: `/decisions`
+- Purpose: chronological decision timeline for autonomy introspection and ops review
+- Includes: reasoning summary, confidence score, outcome status, trigger linkage, and filtering controls
+- API route: `/api/decisions`
+- Data source: reads `cortana_decision_traces` and joins `cortana_events` for trigger/event context
+- Navigation: **Decision Traces** is now included in the main Mission Control nav
+
 ### Troubleshooting — Radix import mismatch
 If you see `Cannot find module "radix-ui"` or bad `ProgressPrimitive` imports:
 1) Use scoped packages (`@radix-ui/react-progress`, etc.)
