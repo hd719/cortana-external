@@ -1,4 +1,4 @@
-import { AgentStatus, PrismaClient, RunStatus, Severity } from "@prisma/client";
+import { AgentStatus, Prisma, PrismaClient, RunStatus, Severity } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
@@ -264,7 +264,7 @@ async function main() {
           status: run.status,
           summary: run.summary,
           payload: run.payload,
-          result: run.result,
+          result: run.result ?? Prisma.JsonNull,
           startedAt: run.startedAt,
           completedAt: run.completedAt,
           agentId: agentIdByName[run.agentName],
