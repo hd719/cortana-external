@@ -3,10 +3,133 @@ import { AgentStatus, Prisma, RunStatus, Severity } from "@prisma/client";
 import { unstable_noStore as noStore } from "next/cache";
 import { syncOpenClawRunsFromStore } from "@/lib/openclaw-sync";
 
+type AgentHealthBand = "healthy" | "degraded" | "critical";
+
+type AgentOperationalStats = {
+  completedRuns: number;
+  failedRuns: number;
+  cancelledRuns: number;
+  completedTasks: number;
+  failedTasks: number;
+};
+
+const normalizeIdentity = (value?: string | null) =>
+  (value || "").trim().toLowerCase();
+
+const deriveHealthBand = (score: number): AgentHealthBand => {
+  if (score >= 75) return "healthy";
+  if (score >= 45) return "degraded";
+  return "critical";
+};
+
+const computeHealthScore = (stats: AgentOperationalStats) => {
+  const runTerminal = stats.completedRuns + stats.failedRuns + stats.cancelledRuns;
+  const taskTerminal = stats.completedTasks + stats.failedTasks;
+
+  const runReliability = runTerminal > 0 ? stats.completedRuns / runTerminal : 0.6;
+  const taskReliability = taskTerminal > 0 ? stats.completedTasks / taskTerminal : 0.6;
+
+  const reliabilityScore = (runReliability * 0.6 + taskReliability * 0.4) * 70;
+  const completionVolume = Math.min(30, stats.completedRuns * 5 + stats.completedTasks * 2);
+
+  return Math.max(0, Math.min(100, Math.round(reliabilityScore + completionVolume)));
+};
+
 export const getAgents = async () => {
   noStore();
-  return prisma.agent.findMany({
-    orderBy: [{ status: "asc" }, { name: "asc" }],
+  await syncOpenClawRunsFromStore();
+
+  const [agents, runs, tasks] = await Promise.all([
+    prisma.agent.findMany({
+      orderBy: [{ status: "asc" }, { name: "asc" }],
+    }),
+    prisma.run.findMany({
+      where: { agentId: { not: null } },
+      select: { agentId: true, status: true },
+      take: 2000,
+      orderBy: [{ updatedAt: "desc" }],
+    }),
+    prisma.cortanaTask.findMany({
+      where: { assignedTo: { not: null } },
+      select: { assignedTo: true, status: true },
+      take: 4000,
+      orderBy: [{ updatedAt: "desc" }],
+    }),
+  ]);
+
+  const statsByAgent = new Map<string, AgentOperationalStats>();
+
+  const ensureStats = (agentId: string) => {
+    if (!statsByAgent.has(agentId)) {
+      statsByAgent.set(agentId, {
+        completedRuns: 0,
+        failedRuns: 0,
+        cancelledRuns: 0,
+        completedTasks: 0,
+        failedTasks: 0,
+      });
+    }
+    return statsByAgent.get(agentId)!;
+  };
+
+  for (const run of runs) {
+    if (!run.agentId) continue;
+    const stats = ensureStats(run.agentId);
+    if (run.status === RunStatus.completed) stats.completedRuns += 1;
+    else if (run.status === RunStatus.failed) stats.failedRuns += 1;
+    else if (run.status === RunStatus.cancelled) stats.cancelledRuns += 1;
+  }
+
+  const agentIdsByIdentity = new Map<string, string[]>();
+  for (const agent of agents) {
+    const keys = [agent.id, agent.name, agent.role].map(normalizeIdentity).filter(Boolean);
+    for (const key of keys) {
+      const existing = agentIdsByIdentity.get(key) || [];
+      if (!existing.includes(agent.id)) existing.push(agent.id);
+      agentIdsByIdentity.set(key, existing);
+    }
+  }
+
+  for (const task of tasks) {
+    const assigneeKey = normalizeIdentity(task.assignedTo);
+    if (!assigneeKey) continue;
+
+    const matches = agentIdsByIdentity.get(assigneeKey) || [];
+    if (matches.length === 0) continue;
+
+    const normalizedTaskStatus = task.status.toLowerCase();
+    for (const agentId of matches) {
+      const stats = ensureStats(agentId);
+      if (["done", "completed"].includes(normalizedTaskStatus)) stats.completedTasks += 1;
+      else if (["failed", "cancelled", "canceled", "timeout", "killed"].includes(normalizedTaskStatus)) {
+        stats.failedTasks += 1;
+      }
+    }
+  }
+
+  return agents.map((agent) => {
+    const stats = statsByAgent.get(agent.id) || {
+      completedRuns: 0,
+      failedRuns: 0,
+      cancelledRuns: 0,
+      completedTasks: 0,
+      failedTasks: 0,
+    };
+
+    const healthScore = computeHealthScore(stats);
+    const healthBand = deriveHealthBand(healthScore);
+
+    return {
+      ...agent,
+      healthScore,
+      status:
+        agent.status === AgentStatus.offline && healthBand === "critical"
+          ? AgentStatus.offline
+          : healthBand === "healthy"
+            ? AgentStatus.active
+            : AgentStatus.degraded,
+      healthBand,
+    };
   });
 };
 
