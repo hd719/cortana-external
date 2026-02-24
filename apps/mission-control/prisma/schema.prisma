@@ -1,0 +1,74 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum AgentStatus {
+  active
+  idle
+  degraded
+  offline
+}
+
+enum RunStatus {
+  queued
+  running
+  completed
+  failed
+  cancelled
+}
+
+enum Severity {
+  info
+  warning
+  critical
+}
+
+model Agent {
+  id           String      @id @default(uuid())
+  name         String
+  role         String
+  description  String?
+  capabilities String?
+  status       AgentStatus @default(active)
+  healthScore  Int?
+  lastSeen     DateTime?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  runs         Run[]
+  events       Event[]
+}
+
+model Run {
+  id          String    @id @default(uuid())
+  agentId     String?
+  agent       Agent?    @relation(fields: [agentId], references: [id])
+  jobType     String
+  status      RunStatus @default(queued)
+  summary     String?
+  payload     Json?
+  result      Json?
+  startedAt   DateTime  @default(now())
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  events      Event[]
+}
+
+model Event {
+  id           String   @id @default(uuid())
+  agentId      String?
+  agent        Agent?   @relation(fields: [agentId], references: [id])
+  runId        String?
+  run          Run?     @relation(fields: [runId], references: [id])
+  type         String
+  severity     Severity @default(info)
+  message      String
+  metadata     Json?
+  createdAt    DateTime @default(now())
+  acknowledged Boolean  @default(false)
+}
