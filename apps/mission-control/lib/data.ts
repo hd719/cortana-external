@@ -5,38 +5,15 @@ import { syncOpenClawRunsFromStore } from "@/lib/openclaw-sync";
 import { getTaskPrisma } from "@/lib/task-prisma";
 import { reconcileTaskBoardSources } from "@/lib/task-reconciliation";
 import { deriveEvidenceGrade, deriveLaunchPhase, extractProviderPath } from "@/lib/run-intelligence";
-
-type AgentHealthBand = "healthy" | "degraded" | "critical";
-
-type AgentOperationalStats = {
-  completedRuns: number;
-  failedRuns: number;
-  cancelledRuns: number;
-  completedTasks: number;
-  failedTasks: number;
-};
+import {
+  AgentOperationalStats,
+  computeHealthScore,
+  deriveHealthBand,
+} from "@/lib/agent-health";
 
 const normalizeIdentity = (value?: string | null) =>
   (value || "").trim().toLowerCase();
 
-const deriveHealthBand = (score: number): AgentHealthBand => {
-  if (score >= 75) return "healthy";
-  if (score >= 45) return "degraded";
-  return "critical";
-};
-
-const computeHealthScore = (stats: AgentOperationalStats) => {
-  const runTerminal = stats.completedRuns + stats.failedRuns + stats.cancelledRuns;
-  const taskTerminal = stats.completedTasks + stats.failedTasks;
-
-  const runReliability = runTerminal > 0 ? stats.completedRuns / runTerminal : 0.6;
-  const taskReliability = taskTerminal > 0 ? stats.completedTasks / taskTerminal : 0.6;
-
-  const reliabilityScore = (runReliability * 0.6 + taskReliability * 0.4) * 70;
-  const completionVolume = Math.min(30, stats.completedRuns * 5 + stats.completedTasks * 2);
-
-  return Math.max(0, Math.min(100, Math.round(reliabilityScore + completionVolume)));
-};
 
 export const getAgents = async () => {
   noStore();
