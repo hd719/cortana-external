@@ -9,7 +9,7 @@ This repo has two pieces:
 ## Mission Control (apps/mission-control)
 - Path: `apps/mission-control`
 - Stack: Next.js (App Router, TypeScript), shadcn/ui (Tailwind v4), PostgreSQL + Prisma
-- Package manager: **pnpm-first** (see scripts below)
+- Package manager: **pnpm-first**
 - Docs: `docs/mission-control.md`
 
 ### Setup
@@ -17,12 +17,12 @@ This repo has two pieces:
 cd apps/mission-control
 pnpm install
 cp .env.example .env.local
-# set DATABASE_URL to your Postgres instance (e.g., postgres://localhost:5432/mission_control)
+# set DATABASE_URL to your Postgres instance
 ```
 
 ### Database
 ```bash
-pnpm db:migrate   # apply migrations locally (creates cortana_* tables if missing)
+pnpm db:migrate   # apply migrations locally
 pnpm db:seed      # load starter agents/runs/events/task-board data
 pnpm db:deploy    # deploy migrations in prod
 pnpm db:generate  # regenerate Prisma client
@@ -36,26 +36,97 @@ pnpm start   # after build
 pnpm lint
 ```
 
+### Mission Control Operator Quick Actions
+```bash
+# open app
+open http://localhost:3000
+
+# verify DB connectivity
+cd apps/mission-control && pnpm db:generate
+
+# run dev with fresh build cache
+cd apps/mission-control && rm -rf .next && pnpm dev
+```
+
 ### Task Board integration
-- Page: `/task-board` (cards: Ready now, Blocked, Due soon/Overdue, By pillar, Recent outcomes)
-- Reads Postgres tables `cortana_tasks` and `cortana_epics` if they exist; otherwise migrations create compatible tables.
-- `Ready now` = `status = 'pending'` + `auto_executable = true` + dependencies done. Pillars read from `metadata -> 'pillar'` (Time, Health, Wealth, Career; defaults to Unspecified).
+- Page: `/task-board` (Ready now, Blocked, Due soon/Overdue, By pillar, Recent outcomes)
+- Reads `cortana_tasks` + `cortana_epics`
+- `Ready now` = `status='pending'` + `auto_executable=true` + dependencies done
+- Pillars read from `metadata -> 'pillar'` (Time, Health, Wealth, Career; defaults to Unspecified)
 
 ### Troubleshooting — Radix import mismatch
-If Next.js/Turbopack errors like `Cannot find module "radix-ui"` or references to `ProgressPrimitive` from `radix-ui`:
-1) Ensure imports use scoped packages (e.g., `@radix-ui/react-progress`, `@radix-ui/react-slot`, `@radix-ui/react-label`, `@radix-ui/react-tabs`, `@radix-ui/react-select`).
-2) Remove any lingering `radix-ui` imports; re-run `pnpm install`.
-3) Clear stale builds: `rm -rf .next` then `pnpm dev`.
+If Next.js/Turbopack errors like `Cannot find module "radix-ui"`:
+1) Ensure imports use scoped packages (`@radix-ui/react-progress`, etc.)
+2) Remove lingering `radix-ui` imports; re-run `pnpm install`
+3) Clear stale builds: `rm -rf .next` then `pnpm dev`
 
 ---
 
 ## Fitness/Trading API (Go)
-- Entry: `main.go`; run with `bash run.sh` (listens on `:8080`).
-- Key endpoints (no auth headers needed):
-  - `/whoop/data` — sleep, recovery, strain, HRV (Whoop OAuth handled locally)
-  - `/tonal/data` — workouts + strength scores (Tonal credentials from `.env`)
-  - `/alpaca/portfolio`, `/alpaca/stats`, `/alpaca/positions`, `/alpaca/trades` — portfolio + trade tracking
-- Launchd: optional plist `~/Library/LaunchAgents/com.cortana.fitness-service.plist` (uses `~/fitness-service-launch.sh`) for auto-restart; logs to `/tmp/fitness-service.log`.
+- Entry: `main.go`; run with `bash run.sh` (listens on `:8080`)
+- Key endpoints:
+  - `/whoop/data` — sleep, recovery, strain, HRV
+  - `/tonal/data` — workouts + strength scores
+  - `/alpaca/portfolio`, `/alpaca/stats`, `/alpaca/positions`, `/alpaca/trades`
+
+### Quick Reference
+
+### To Get Whoop Data (sleep, recovery, strain, HRV)
+```bash
+curl http://localhost:8080/whoop/data
+```
+
+### To Get Tonal Data (workouts, strength scores)
+```bash
+curl http://localhost:8080/tonal/data
+```
+
+**No auth headers needed** — service handles auth internally.
+
+### Key Whoop Metrics
+
+| Metric | Location | Interpretation |
+|--------|----------|----------------|
+| Recovery Score | `recovery[0].score.recovery_score` | 0-33 red, 34-66 yellow, 67-100 green |
+| HRV | `recovery[0].score.hrv_rmssd_milli` | Higher is generally better (individual baseline matters) |
+| Resting HR | `recovery[0].score.resting_heart_rate` | Lower is generally better fitness/recovery |
+| Strain | `cycles[0].score.strain` | 0-21 scale: light → all out |
+| Sleep Performance | `sleep[0].score.sleep_performance_percentage` | % of sleep need achieved |
+
+### Key Tonal Metrics
+
+| Metric | Location | Interpretation |
+|--------|----------|----------------|
+| Overall Strength | `strength_scores.current` (FULL_BODY) | Tonal strength measure, higher = stronger |
+| Total Volume | `profile.totalVolume` / workout totals | Total lbs lifted |
+| Workout Count | `workout_count` | Total cached workouts |
+| Last Workout | max `beginTime` in `workouts` | Most recent training session |
+
+### Tonal Data Notes
+- `workouts` is a map keyed by workout ID (not array)
+- `workout_count` grows as cache fills
+- Strength scores update after relevant workouts
+
+### Error Handling
+
+| Status | Meaning | Action |
+|--------|---------|--------|
+| 200 | Success | Parse and use data |
+| 401 | Auth failed | Whoop: re-auth via `/auth/url`; Tonal: verify `.env` creds |
+| 502 | Upstream error | Retry later |
+
+### Example Python Code
+
+```python
+import requests
+
+whoop = requests.get("http://localhost:8080/whoop/data").json()
+recovery = whoop["recovery"][0]["score"]["recovery_score"]
+
+tonal = requests.get("http://localhost:8080/tonal/data").json()
+print("Recovery:", recovery)
+print("Workouts cached:", tonal.get("workout_count"))
+```
 
 ---
 
