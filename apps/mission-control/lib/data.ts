@@ -9,11 +9,18 @@ export const getAgents = async () => {
   });
 };
 
+const latestRunOrder: Prisma.RunOrderByWithRelationInput[] = [
+  { createdAt: "desc" },
+  { updatedAt: "desc" },
+  { startedAt: "desc" },
+  { id: "desc" },
+];
+
 export const getRuns = async () => {
   noStore();
   return prisma.run.findMany({
     include: { agent: true },
-    orderBy: { startedAt: "desc" },
+    orderBy: latestRunOrder,
     take: 20,
   });
 };
@@ -33,7 +40,7 @@ export const getDashboardSummary = async () => {
     getAgents(),
     prisma.run.findMany({
       include: { agent: true },
-      orderBy: { startedAt: "desc" },
+      orderBy: latestRunOrder,
       take: 10,
     }),
     prisma.event.findMany({
@@ -217,7 +224,7 @@ export const getAgentDetail = async (agentId: string) => {
   const [recentRuns, recentEvents] = await Promise.all([
     prisma.run.findMany({
       where: { agentId },
-      orderBy: { startedAt: "desc" },
+      orderBy: latestRunOrder,
       take: 25,
     }),
     prisma.event.findMany({
