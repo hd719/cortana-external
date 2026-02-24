@@ -317,6 +317,14 @@ The fitness service can run as a macOS launchd agent for automatic startup and c
 
 ---
 
+## Mission Control (Next.js dashboard)
+- Path: `apps/mission-control`
+- Stack: Next.js (App Router) + PostgreSQL + Prisma + shadcn/ui
+- Setup: `cd apps/mission-control && pnpm install && cp .env.example .env.local` then update `DATABASE_URL`
+- DB: `pnpm db:migrate && pnpm db:seed`
+- Run locally: `pnpm dev` (http://localhost:3000)
+- Docs: `docs/mission-control.md`
+
 ---
 
 ## Alpaca Trading Data

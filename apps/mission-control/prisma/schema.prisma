@@ -1,0 +1,117 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum AgentStatus {
+  active
+  idle
+  degraded
+  offline
+}
+
+enum RunStatus {
+  queued
+  running
+  completed
+  failed
+  cancelled
+}
+
+enum Severity {
+  info
+  warning
+  critical
+}
+
+model Agent {
+  id           String      @id @default(uuid())
+  name         String
+  role         String
+  description  String?
+  capabilities String?
+  status       AgentStatus @default(active)
+  healthScore  Int?
+  lastSeen     DateTime?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  runs         Run[]
+  events       Event[]
+}
+
+model Run {
+  id          String    @id @default(uuid())
+  agentId     String?
+  agent       Agent?    @relation(fields: [agentId], references: [id])
+  jobType     String
+  status      RunStatus @default(queued)
+  summary     String?
+  payload     Json?
+  result      Json?
+  startedAt   DateTime  @default(now())
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  events      Event[]
+}
+
+model Event {
+  id           String   @id @default(uuid())
+  agentId      String?
+  agent        Agent?   @relation(fields: [agentId], references: [id])
+  runId        String?
+  run          Run?     @relation(fields: [runId], references: [id])
+  type         String
+  severity     Severity @default(info)
+  message      String
+  metadata     Json?
+  createdAt    DateTime @default(now())
+  acknowledged Boolean  @default(false)
+}
+
+model CortanaEpic {
+  id          Int           @id @default(autoincrement())
+  title       String
+  source      String?       @map("source")
+  status      String        @default("active")
+  deadline    DateTime?     @map("deadline")
+  createdAt   DateTime      @default(now()) @map("created_at")
+  completedAt DateTime?     @map("completed_at")
+  metadata    Json?         @map("metadata")
+  tasks       CortanaTask[]
+
+  @@map("cortana_epics")
+}
+
+model CortanaTask {
+  id             Int           @id @default(autoincrement())
+  title          String
+  description    String?       @map("description")
+  priority       Int           @default(3)
+  status         String        @default("pending")
+  dueAt          DateTime?     @map("due_at")
+  remindAt       DateTime?     @map("remind_at")
+  executeAt      DateTime?     @map("execute_at")
+  autoExecutable Boolean       @default(false) @map("auto_executable")
+  executionPlan  String?       @map("execution_plan")
+  dependsOn      Int[]         @default([]) @map("depends_on") @db.Integer
+  completedAt    DateTime?     @map("completed_at")
+  outcome        String?       @map("outcome")
+  metadata       Json?         @map("metadata")
+  epicId         Int?          @map("epic_id")
+  parentId       Int?          @map("parent_id")
+  assignedTo     String?       @map("assigned_to")
+  source         String?       @map("source")
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
+
+  epic           CortanaEpic?  @relation(fields: [epicId], references: [id])
+  parent         CortanaTask?  @relation("Subtasks", fields: [parentId], references: [id])
+  children       CortanaTask[] @relation("Subtasks")
+
+  @@map("cortana_tasks")
+}

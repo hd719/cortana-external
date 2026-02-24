@@ -13,3 +13,14 @@ __pycache__/
 
 # Data cache
 backtester/data/cache/
+
+# Node/Next.js
+node_modules
+apps/mission-control/node_modules
+apps/mission-control/.next
+apps/mission-control/.turbo
+apps/mission-control/.vercel
+apps/mission-control/.env.local
+apps/mission-control/.env
+apps/mission-control/.env.*
+npm-debug.log
