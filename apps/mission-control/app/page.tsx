@@ -6,6 +6,7 @@ import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { AutoRefresh } from "@/components/auto-refresh";
 import { HeartbeatPulse } from "@/components/heartbeat-pulse";
+import { ThinkingIndicator } from "@/components/thinking-indicator";
 import { ActivityFeed } from "@/components/activity-feed";
 
 export const dynamic = "force-dynamic";
@@ -77,6 +78,7 @@ export default async function Home() {
         </div>
         <div className="flex w-full flex-col gap-2 sm:w-auto sm:items-end">
           <HeartbeatPulse />
+          <ThinkingIndicator />
           <Badge variant="secondary" className="h-fit">Connected to Postgres</Badge>
         </div>
       </div>
@@ -236,6 +238,9 @@ export default async function Home() {
               </li>
               <li>
                 API: <code className="font-mono text-foreground">/api/heartbeat-status</code>
+              </li>
+              <li>
+                API: <code className="font-mono text-foreground">/api/thinking-status</code>
               </li>
             </ul>
             <p className="text-xs">
