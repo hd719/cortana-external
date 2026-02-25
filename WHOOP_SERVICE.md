@@ -12,7 +12,7 @@ Provides a single HTTP endpoint that returns all your Whoop data (profile, body 
 /services/
 ├── .env                    # WHOOP_CLIENT_ID, WHOOP_CLIENT_SECRET, WHOOP_REDIRECT_URL
 ├── go.mod
-├── main.go                 # Starts Gin server on :8080
+├── main.go                 # Starts Gin server on :3033
 ├── whoop_tokens.json             # OAuth tokens (created after first auth)
 └── whoop/
     ├── api.go              # Whoop API client
@@ -36,7 +36,7 @@ Provides a single HTTP endpoint that returns all your Whoop data (profile, body 
    source .env && go run main.go
    ```
 
-2. Visit `http://localhost:8080/auth/url` and open the returned URL in browser
+2. Visit `http://localhost:3033/auth/url` and open the returned URL in browser
 
 3. Authorize with Whoop - tokens are saved to `whoop_tokens.json`
 
@@ -49,7 +49,7 @@ cd /Users/hameldesai/Desktop/services
 source .env && go run main.go
 ```
 
-Server runs on `http://localhost:8080`
+Server runs on `http://localhost:3033`
 
 ---
 
@@ -59,7 +59,7 @@ Server runs on `http://localhost:8080`
 
 Make an HTTP GET request to:
 ```
-http://localhost:8080/whoop/data
+http://localhost:3033/whoop/data
 ```
 
 No authentication headers needed. The service handles everything.
@@ -139,7 +139,7 @@ The refresh token has a long lifespan. As long as the service is called periodic
 ## Example Usage (curl)
 
 ```bash
-curl http://localhost:8080/whoop/data
+curl http://localhost:3033/whoop/data
 ```
 
 ## Example Usage (Python)
@@ -147,7 +147,7 @@ curl http://localhost:8080/whoop/data
 ```python
 import requests
 
-response = requests.get("http://localhost:8080/whoop/data")
+response = requests.get("http://localhost:3033/whoop/data")
 data = response.json()
 
 # Access specific data

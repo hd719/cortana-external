@@ -11,7 +11,7 @@ Provides a single HTTP endpoint that returns all your Tonal data (profile, worko
 ```
 /services/
 ├── .env                    # TONAL_EMAIL, TONAL_PASSWORD
-├── main.go                 # Starts Gin server on :8080 (shared with Whoop)
+├── main.go                 # Starts Gin server on :3033 (shared with Whoop)
 ├── tonal_tokens.json       # OAuth tokens (created after first auth)
 ├── tonal_data.json         # Cached workout data (grows over time)
 └── tonal/
@@ -51,7 +51,7 @@ cd /Users/hameldesai/Desktop/services
 source .env && go run main.go
 ```
 
-Server runs on `http://localhost:8080`
+Server runs on `http://localhost:3033`
 
 ---
 
@@ -61,7 +61,7 @@ Server runs on `http://localhost:8080`
 
 Make an HTTP GET request to:
 ```
-http://localhost:8080/tonal/data
+http://localhost:3033/tonal/data
 ```
 
 No authentication headers needed. The service handles everything.
@@ -174,7 +174,7 @@ Tokens are short-lived (~24 hours), and the service handles refresh automaticall
 ## Example Usage (curl)
 
 ```bash
-curl http://localhost:8080/tonal/data
+curl http://localhost:3033/tonal/data
 ```
 
 ## Example Usage (Python)
@@ -182,7 +182,7 @@ curl http://localhost:8080/tonal/data
 ```python
 import requests
 
-response = requests.get("http://localhost:8080/tonal/data")
+response = requests.get("http://localhost:3033/tonal/data")
 data = response.json()
 
 # Access specific data
