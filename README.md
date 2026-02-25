@@ -22,19 +22,21 @@ If `~/clawd` is the brain/policy workspace, this repo is the **service edge**: H
 ~/Developer/cortana-external
 ├── README.md
 ├── main.go / run.sh / launchd-run.sh      # Go service entrypoints
-├── .env                                   # runtime secrets (local only)
+├── go.mod / go.sum                         # Go module dependencies
+├── .env                                    # runtime secrets (local only)
 │
-├── whoop/                                 # Whoop OAuth + data handlers
-├── tonal/                                 # Tonal auth/data handlers + cache logic
-├── alpaca/                                # Alpaca service handlers
+├── whoop/                                  # Whoop OAuth + data handlers
+├── tonal/                                  # Tonal auth/data handlers + cache logic
+├── alpaca/                                 # Alpaca service handlers
+├── fitness-services/                       # Legacy/support service assets
 │
 ├── apps/
-│   └── mission-control/                   # Next.js ops dashboard
+│   └── mission-control/                    # Next.js ops dashboard
 │
-├── backtester/                            # Python CANSLIM engine
-├── watchdog/                              # reliability monitor + launchd plist
-├── docs/                                  # runbooks/notes
-├── TONAL_SERVICE.md / WHOOP_SERVICE.md    # service-specific docs
+├── backtester/                             # Python CANSLIM engine
+├── watchdog/                               # reliability monitor + launchd plist
+├── docs/                                   # runbooks/notes
+├── TONAL_SERVICE.md / WHOOP_SERVICE.md     # service-specific docs
 └── alpaca_keys.json, *_tokens.json, tonal_data.json
 ```
 
@@ -119,6 +121,11 @@ pnpm dev
 - `/decisions` (decision traces)
 - `/api/live` SSE refresh
 - OpenClaw subagent lifecycle ingestion endpoint
+
+### Mission Control updates (2026-02-25)
+- **PR #32:** Agent labels now render on the Mission Control runs/jobs page for clearer operator attribution.
+- **PR #33:** Mission Control dashboard responsiveness improved for mobile layouts.
+- **PR #34:** Removed the system mood widget from the dashboard to simplify the primary view.
 
 ---
 
