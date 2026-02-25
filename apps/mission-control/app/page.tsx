@@ -9,6 +9,7 @@ import { ThinkingIndicator } from "@/components/thinking-indicator";
 import { ActivityFeed } from "@/components/activity-feed";
 import { TodayStatsCard } from "@/components/today-stats-card";
 import { MoodRing } from "@/components/mood-ring";
+import { AutonomyGauge } from "@/components/autonomy-gauge";
 import { AgentStatusCard } from "@/components/agent-status-card";
 
 export const dynamic = "force-dynamic";
@@ -110,7 +111,10 @@ export default async function Home() {
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">
-        <TodayStatsCard />
+        <div className="space-y-4">
+          <TodayStatsCard />
+          <AutonomyGauge />
+        </div>
 
         <AgentStatusCard />
 
