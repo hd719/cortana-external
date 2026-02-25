@@ -1,142 +1,137 @@
 # cortana-external (`~/Developer/cortana-external`)
 
-External runtime/services layer for Cortana.
+Runtime edge for Cortana: services, apps, and reliability infrastructure that support the `~/clawd` command brain.
 
-If `~/clawd` is the brain/policy workspace, this repo is the **service edge**: HTTP APIs, watchdog reliability monitor, trading/backtesting tools, and Mission Control UI.
-
----
-
-## 1) What lives here
-
-- Go HTTP service (Whoop + Tonal + Alpaca endpoints) on localhost
-- Mission Control web app (Next.js + Prisma)
-- Python CANSLIM backtester/advisor
-- Watchdog launchd monitor (`com.cortana.watchdog`)
-- service docs/runbooks
+If `~/clawd` is strategy/memory/policy, **cortana-external is execution runtime**.
 
 ---
 
-## 2) Top-level layout
+## 1) What this repo contains
+
+- Go service exposing **Whoop + Tonal + Alpaca** APIs (loopback on port `3033`)
+- Mission Control dashboard app (`apps/mission-control`, Next.js)
+- CANSLIM backtester/advisor (`backtester/`)
+- Watchdog reliability service (`watchdog/`, launchd)
+- Supporting docs and stock-discovery scripts
+
+---
+
+## 2) Verified directory structure
 
 ```text
 ~/Developer/cortana-external
 ├── README.md
-├── main.go / run.sh / launchd-run.sh      # Go service entrypoints
-├── go.mod / go.sum                         # Go module dependencies
-├── .env                                    # runtime secrets (local only)
+├── .env
+├── main.go
+├── run.sh
+├── launchd-run.sh
+├── go.mod / go.sum
 │
-├── whoop/                                  # Whoop OAuth + data handlers
-├── tonal/                                  # Tonal auth/data handlers + cache logic
-├── alpaca/                                 # Alpaca service handlers
-├── fitness-services/                       # Legacy/support service assets
-│
+├── whoop/                       # Whoop API/auth handlers
+├── tonal/                       # Tonal auth/data/health handlers
+├── alpaca/                      # Alpaca service handlers
+├── backtester/                  # CANSLIM engine + alerts
+├── watchdog/                    # launchd reliability monitor
 ├── apps/
-│   └── mission-control/                    # Next.js ops dashboard
-│
-├── backtester/                             # Python CANSLIM engine
-├── watchdog/                               # reliability monitor + launchd plist
-├── docs/                                   # runbooks/notes
-├── TONAL_SERVICE.md / WHOOP_SERVICE.md     # service-specific docs
-└── alpaca_keys.json, *_tokens.json, tonal_data.json
+│   └── mission-control/         # Next.js ops dashboard
+├── tools/
+│   └── stock-discovery/         # stock discovery helper scripts
+└── docs/                        # runbooks + architecture notes
 ```
 
----
-
-## 3) Go API service (Whoop/Tonal/Alpaca)
-
-### Runtime
-- Entrypoint: `main.go`
-- Framework: `gin`
-- Bind: `127.0.0.1:${PORT}`
-- Default port: `3033`
-- Start command: `bash run.sh`
-
-### Endpoints
-
-#### Whoop
-- `GET /auth/url`
-- `GET /auth/callback`
-- `GET /whoop/data`
-
-#### Tonal
-- `GET /tonal/health`
-- `GET /tonal/data`
-
-#### Alpaca
-- `GET /alpaca/health`
-- `GET /alpaca/account`
-- `GET /alpaca/positions`
-- `GET /alpaca/portfolio`
-- `GET /alpaca/trades`
-- `POST /alpaca/trades`
-- `PUT /alpaca/trades/:id`
-- `GET /alpaca/stats`
-
-### Required env/config
-From `.env` / local files:
-- `WHOOP_CLIENT_ID`, `WHOOP_CLIENT_SECRET`, `WHOOP_REDIRECT_URL`
-- `TONAL_EMAIL`, `TONAL_PASSWORD`
-- `PORT` (optional; defaults to `3033`)
-
-Token/data files used at repo root:
-- `whoop_tokens.json`
-- `tonal_tokens.json`
-- `tonal_data.json`
-- `alpaca_keys.json`
-- `alpaca_trades.json` (created at runtime when tracking trades)
-
-### Current state notes
-- Service binds to loopback only (`127.0.0.1`) by design
-- Tonal client warns if env credentials are missing
-- Tonal request pacing set to `500ms` delay between upstream calls
+Note: there is currently **no top-level `services/` or `scripts/` directory** in this repo; service entrypoints are at repo root and in feature folders above.
 
 ---
 
-## 4) Mission Control app (`apps/mission-control`)
+## 3) Service/app catalog
 
-Next.js operations dashboard for agents/runs/events/task board/decision traces.
+## A) Go fitness + trading API service
+
+### What it does
+Single HTTP service for:
+- Whoop auth + data
+- Tonal health/data
+- Alpaca account/positions/portfolio/trade tracking
+
+### Entry points
+- `main.go`
+- `run.sh` (loads `.env`, then `go run main.go`)
+- `launchd-run.sh` (launchd-safe runner, enforces `PORT=3033` default)
+
+### Bind/port
+- `127.0.0.1:${PORT}`
+- Default: `127.0.0.1:3033`
+
+### API surface (from `main.go`)
+- Whoop: `/auth/url`, `/auth/callback`, `/whoop/data`
+- Tonal: `/tonal/health`, `/tonal/data`
+- Alpaca: `/alpaca/health`, `/alpaca/account`, `/alpaca/positions`, `/alpaca/portfolio`, `/alpaca/trades` (GET/POST/PUT), `/alpaca/stats`
+
+### Run locally
+```bash
+cd ~/Developer/cortana-external
+bash run.sh
+```
+
+### Dependencies
+- Go toolchain
+- `.env` values (Whoop/Tonal creds)
+- Local token/key files (`whoop_tokens.json`, `tonal_tokens.json`, `alpaca_keys.json`)
+
+---
+
+## B) Mission Control (`apps/mission-control`)
+
+### What it does
+Next.js dashboard for agent/runs/events/task-board visibility and lifecycle telemetry.
 
 ### Stack
-- Next.js 16 + React 19
-- TypeScript
+- Next.js 16 + React 19 + TypeScript
 - Prisma + PostgreSQL
-- shadcn/ui + Tailwind v4
-- package manager: pnpm
+- Tailwind/shadcn UI
 
-### Local run
+### Run
 ```bash
-cd apps/mission-control
+cd ~/Developer/cortana-external/apps/mission-control
 pnpm install
 cp .env.example .env.local
 pnpm db:migrate
 pnpm db:seed
 pnpm dev
-# http://localhost:3000
 ```
 
-### Key pages/features
-- `/` dashboard (system mood widget removed in PR #34 to reduce visual noise)
-- `/task-board` (reads `cortana_tasks` + `cortana_epics`)
-- `/jobs`, `/agents` (runs/jobs now include agent labels from PR #32)
-- Mobile responsiveness improvements across Mission Control layouts (PR #33)
-- `/decisions` (decision traces)
-- `/api/live` SSE refresh
-- OpenClaw subagent lifecycle ingestion endpoint
+### Port/access
+- Local: `http://127.0.0.1:3000`
+- Tailscale: access via host tailnet IP (example observed in dev logs: `100.120.198.12:3000`)
+- To verify current tailnet IP:
+```bash
+tailscale ip -4
+```
 
-### Mission Control updates (2026-02-25)
-- **PR #32:** Agent labels now render on the Mission Control runs/jobs page for clearer operator attribution.
-- **PR #33:** Mission Control dashboard responsiveness improved for mobile layouts.
-- **PR #34:** Removed the system mood widget from the dashboard to simplify the primary view.
+### What it shows
+- Dashboard (`/`): system metrics + recent activity
+- Agents (`/agents`)
+- Jobs/runs (`/jobs`)
+- Task board (`/task-board`)
+- Live updates via SSE (`/api/live`)
+- OpenClaw subagent lifecycle ingestion (`/api/openclaw/subagent-events`)
 
 ---
 
-## 5) Backtester (`backtester/`)
+## C) Backtester (`backtester/`)
 
-Python CANSLIM advisor + backtesting engine.
+### What it does
+Python CANSLIM advisor/backtesting engine with Telegram-ready alert output.
 
-### Typical usage
+### Core files
+- `advisor.py` (market/symbol analysis)
+- `canslim_alert.py` (signal summary)
+- `main.py`, `backtest.py`, `strategies/canslim.py`
+- `data/fetcher.py`, `data/fundamentals.py`, `data/market_regime.py`
+
+### Run
 ```bash
-cd backtester
+cd ~/Developer/cortana-external/backtester
 source venv/bin/activate
 python advisor.py --market
 python advisor.py --symbol NVDA
@@ -145,32 +140,32 @@ python main.py --symbol AAPL --years 2 --compare
 ```
 
 ### Dependencies
-- Python venv in `backtester/venv`
-- packages from `requirements.txt` (`pandas`, `numpy`, `yfinance`, `requests`, etc.)
+- Python venv (`backtester/venv`)
+- `requirements.txt` (pandas, numpy, yfinance, requests, etc.)
+- Alpaca credentials via `alpaca_keys.json`
 
 ---
 
-## 6) Watchdog service (`watchdog/`)
+## D) Watchdog (`watchdog/`)
 
-Reliability monitor for cron/runtime health.
+### What it does
+Local reliability monitor (every 15 min) for service/cron/agent health.
 
-### launchd config (versioned in repo)
-- plist: `watchdog/com.cortana.watchdog.plist`
-- label: `com.cortana.watchdog`
-- interval: `900s` (15 min)
-- script: `/Users/hd/Developer/cortana-external/watchdog/watchdog.sh`
-- logs: `watchdog/logs/watchdog.log`
-- `RunAtLoad: true`
+### LaunchAgent
+- Label: `com.cortana.watchdog`
+- Versioned plist: `watchdog/com.cortana.watchdog.plist`
+- Installed runtime plist: `~/Library/LaunchAgents/com.cortana.watchdog.plist`
+- Script: `watchdog/watchdog.sh`
 
-### What it checks
+### What it monitors
 - OpenClaw cron quarantine markers
-- repeated cron failures
-- heartbeat process health and drift
-- degraded mission-control agents
+- Cron consecutive failures
+- Heartbeat process health/drift/restarts
+- Degraded Mission Control agents
 - gog/Gmail availability
-- Tonal and Whoop health
-- PostgreSQL availability
-- budget threshold warnings
+- Tonal/Whoop health
+- PostgreSQL health
+- API budget thresholds
 
 ### Manage
 ```bash
@@ -181,66 +176,119 @@ launchctl list | grep cortana.watchdog
 
 ---
 
-## 7) launchd vs systemd
+## 4) LaunchAgent configs in use
 
-### launchd (macOS)
-- **Versioned here:** watchdog plist (`watchdog/com.cortana.watchdog.plist`)
-- **Referenced by docs, typically installed under `~/Library/LaunchAgents`:** fitness service launcher using `launchd-run.sh`
+Observed on host (`~/Library/LaunchAgents`):
+- `com.cortana.watchdog.plist`
+- `com.cortana.fitness-service.plist`
 
-### systemd
-- No systemd unit files currently tracked in this repo.
-- If deploying to Linux later, create `docs/runbooks/` + `systemd/` unit templates (not present yet).
+### Fitness LaunchAgent details
+- Label: `com.cortana.fitness-service`
+- Program: `/bin/bash /Users/hd/fitness-service-launch.sh`
+- Wrapper script delegates to repo `launchd-run.sh`
+- Working directory: `/Users/hd/Developer/cortana-external`
+- KeepAlive + RunAtLoad enabled
 
----
-
-## 8) Ports and local dependencies
-
-| Component | Default | Notes |
-|---|---:|---|
-| Go fitness/trading API | `127.0.0.1:3033` | Whoop/Tonal/Alpaca endpoints |
-| Mission Control | `127.0.0.1:3000` | Next.js dev/prod app |
-| Postgres | local service | used by mission-control and Cortana DB integrations |
-
-External dependencies:
-- Whoop OAuth/API
-- Tonal API
-- Alpaca API
-- Yahoo Finance (via backtester)
-- local Postgres
-
----
-
-## 9) Quick health checks
-
+Restart command:
 ```bash
-# core API
-curl -s http://127.0.0.1:3033/tonal/health
-curl -s http://127.0.0.1:3033/whoop/data | head
-curl -s http://127.0.0.1:3033/alpaca/health
-
-# mission control
-curl -s http://127.0.0.1:3000/api/dashboard | head
-
-# watchdog
-tail -n 50 watchdog/logs/watchdog.log
+launchctl kickstart -k gui/$(id -u)/com.cortana.fitness-service
 ```
 
 ---
 
-## 10) Historical context (still relevant)
+## 5) Deployment / restart operations
 
-- This repo started as a fitness-service host (Whoop + Tonal) and expanded to include Alpaca + mission-control + watchdog.
-- It remains intentionally local-first (loopback binding, local token/cache files, launchd automation).
+## Fitness API service
+```bash
+# Preferred (launchd-managed)
+launchctl kickstart -k gui/$(id -u)/com.cortana.fitness-service
+
+# Quick health check
+curl -s http://127.0.0.1:3033/tonal/health
+```
+
+## Mission Control
+```bash
+cd apps/mission-control
+pnpm build
+pnpm start
+# or pnpm dev for local dev
+```
+
+## Watchdog
+```bash
+launchctl kickstart -k gui/$(id -u)/com.cortana.watchdog
+tail -n 50 watchdog/logs/watchdog.log
+```
+
+## Backtester (on-demand)
+```bash
+cd backtester && source venv/bin/activate
+python canslim_alert.py --limit 8 --min-score 6
+```
 
 ---
 
-## 11) Maintenance rules for this README
+## 6) Environment variables and local secrets
 
-Update when any of these change:
-- endpoint surface in `main.go`
-- service bind/port model
-- launchd/service supervision config
-- mission-control major pages/data model links
-- backtester execution path/dependencies
+## Root `.env` (Go service)
+- `WHOOP_CLIENT_ID`
+- `WHOOP_CLIENT_SECRET`
+- `WHOOP_REDIRECT_URL`
+- `TONAL_EMAIL`
+- `TONAL_PASSWORD`
+- `PORT` (optional; defaults to `3033`)
 
-Last refreshed: **2026-02-25**
+## Mission Control `.env.local`
+- `DATABASE_URL` (typically `mission_control` DB)
+- `CORTANA_DATABASE_URL` (typically `cortana` DB)
+
+## Local file-based credentials/tokens
+- `whoop_tokens.json`
+- `tonal_tokens.json`
+- `tonal_data.json`
+- `alpaca_keys.json`
+- `alpaca_trades.json` (generated at runtime)
+
+---
+
+## 7) Quick health checks
+
+```bash
+# Go service
+curl -s http://127.0.0.1:3033/tonal/health
+curl -s http://127.0.0.1:3033/alpaca/health
+
+# Mission Control
+curl -s http://127.0.0.1:3000/api/dashboard | head
+
+# Watchdog
+tail -n 30 ~/Developer/cortana-external/watchdog/logs/watchdog.log
+
+# LaunchAgents
+launchctl list | grep -E "cortana.watchdog|cortana.fitness-service"
+```
+
+---
+
+## 8) Recent additions (high impact)
+
+- Mission Control reliability upgrades (SSE live updates, lifecycle ingestion, reconciliation paths)
+- Post-merge task auto-close workflow (`.github/workflows/post-merge-task-autoclose.yml`)
+- Watchdog heartbeat classifier improvements and richer health checks
+- Continued CANSLIM alerting integration with scheduled OpenClaw jobs
+- Stock discovery helper tooling (`tools/stock-discovery/trend_sweep.sh`)
+
+---
+
+## 9) Maintenance rules for this README
+
+Update whenever any of these change:
+- Endpoint surface in `main.go`
+- Service ports/bind model
+- LaunchAgent scripts/plists
+- Mission Control routes/runtime model
+- Backtester entrypoints/dependencies
+- New top-level services/apps/tools
+
+Last refreshed: **2026-02-25** (filesystem + launchd + code cross-check)
