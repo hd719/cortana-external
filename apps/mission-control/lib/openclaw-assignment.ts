@@ -1,6 +1,6 @@
 import { Prisma } from "@prisma/client";
 
-export const OPENCLAW_AGENT_PREFIXES = ["Monitor", "Huragok", "Oracle", "Librarian"] as const;
+export const OPENCLAW_AGENT_PREFIXES = ["Monitor", "Huragok", "Oracle", "Librarian", "Researcher"] as const;
 
 type AgentRecord = {
   id: string;
