@@ -84,7 +84,7 @@ export function TodayStatsCard() {
   }, [data]);
 
   return (
-    <Card className="lg:col-span-3">
+    <Card>
       <CardHeader>
         <CardTitle className="flex items-center justify-between text-base">
           Today&apos;s stats
@@ -100,14 +100,14 @@ export function TodayStatsCard() {
             return (
               <div
                 key={item.key}
-                className={`rounded-lg border px-3 py-3 transition-colors ${
+                className={`rounded-lg border px-4 py-3 transition-colors ${
                   highlight
                     ? "border-emerald-500/40 bg-emerald-500/10"
                     : "border-border bg-card/50"
                 }`}
               >
                 <div className="mb-2 flex items-center gap-2 text-xs uppercase tracking-wide text-muted-foreground">
-                  <Icon className={`h-3.5 w-3.5 ${highlight ? "text-emerald-300" : ""}`} />
+                  <Icon className={`h-3.5 w-3.5 shrink-0 ${highlight ? "text-emerald-300" : ""}`} />
                   <span>{item.label}</span>
                 </div>
                 <p className={`text-2xl font-semibold tracking-tight ${highlight ? "text-emerald-200" : "text-foreground"}`}>

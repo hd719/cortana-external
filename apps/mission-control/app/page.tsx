@@ -79,11 +79,14 @@ export default async function Home() {
             Prisma.
           </p>
         </div>
-        <div className="flex w-full flex-wrap items-stretch gap-3 sm:w-auto sm:justify-end">
+        <div className="grid w-full grid-cols-2 gap-3 sm:w-auto sm:grid-cols-5">
           <MoodRing />
           <HeartbeatPulse />
           <ThinkingIndicator />
-          <Badge variant="secondary" className="h-fit">Connected to Postgres</Badge>
+          <div className="flex h-full flex-col justify-center rounded-lg border bg-card/60 px-3 py-2 shadow-sm">
+            <Badge variant="secondary">Connected to Postgres</Badge>
+          </div>
+          <AutonomyGauge />
         </div>
       </div>
 
@@ -110,17 +113,12 @@ export default async function Home() {
         />
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-3">
-        <div className="space-y-4">
-          <TodayStatsCard />
-          <AutonomyGauge />
-        </div>
+      <TodayStatsCard />
+      <AgentStatusCard />
 
-        <AgentStatusCard />
-
-        <Card className="lg:col-span-2">
-          <CardHeader>
-            <CardTitle className="text-base">Runs & jobs</CardTitle>
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Runs & jobs</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-3 gap-4 text-sm text-muted-foreground">
@@ -184,7 +182,6 @@ export default async function Home() {
             </div>
           </CardContent>
         </Card>
-      </div>
 
       <div className="grid gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2">
