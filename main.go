@@ -69,6 +69,7 @@ func main() {
 	router.POST("/alpaca/trades", alpacaSvc.RecordTradeHandler)
 	router.PUT("/alpaca/trades/:id", alpacaSvc.UpdateTradeHandler)
 	router.GET("/alpaca/stats", alpacaSvc.StatsHandler)
+	router.GET("/alpaca/performance", alpacaSvc.PerformanceHandler)
 
 	port := os.Getenv("PORT")
 	if port == "" {

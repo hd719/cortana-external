@@ -143,9 +143,13 @@ export function JobsRunsTable({
 
               <div className="mt-3 flex flex-wrap items-center gap-2">
                 <Badge className={role.className}>{role.label}</Badge>
-                <span className="truncate text-xs text-muted-foreground">
-                  {getTaskSlug(run.assignmentLabel, run.agent?.name)}
-                </span>
+                {(() => {
+                  const slug = getTaskSlug(run.assignmentLabel, run.agent?.name);
+                  const isRedundant = slug.toLowerCase() === role.label.toLowerCase() || slug === "unassigned";
+                  return !isRedundant ? (
+                    <span className="truncate text-xs text-muted-foreground">{slug}</span>
+                  ) : null;
+                })()}
                 {run.launchPhase === "phase2_running_unconfirmed" && (
                   <Badge variant="warning">launch unconfirmed</Badge>
                 )}
@@ -237,9 +241,13 @@ export function JobsRunsTable({
                   <td className="px-3 py-3 text-muted-foreground">
                     <div className="flex items-center gap-2">
                       <Badge className={role.className}>{role.label}</Badge>
-                      <span className="truncate">
-                        {getTaskSlug(run.assignmentLabel, run.agent?.name)}
-                      </span>
+                      {(() => {
+                        const slug = getTaskSlug(run.assignmentLabel, run.agent?.name);
+                        const isRedundant = slug.toLowerCase() === role.label.toLowerCase() || slug === "unassigned";
+                        return !isRedundant ? (
+                          <span className="truncate">{slug}</span>
+                        ) : null;
+                      })()}
                     </div>
                   </td>
                   <td className="px-3 py-3">

@@ -2,7 +2,10 @@ module services
 
 go 1.25.5
 
-require github.com/gin-gonic/gin v1.11.0
+require (
+	github.com/gin-gonic/gin v1.11.0
+	github.com/lib/pq v1.11.2
+)
 
 require (
 	github.com/bytedance/gopkg v0.1.3 // indirect

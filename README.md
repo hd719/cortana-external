@@ -65,7 +65,15 @@ Single HTTP service for:
 ### API surface (from `main.go`)
 - Whoop: `/auth/url`, `/auth/callback`, `/whoop/data`
 - Tonal: `/tonal/health`, `/tonal/data`
-- Alpaca: `/alpaca/health`, `/alpaca/account`, `/alpaca/positions`, `/alpaca/portfolio`, `/alpaca/trades` (GET/POST/PUT), `/alpaca/stats`
+- Alpaca: `/alpaca/health`, `/alpaca/account`, `/alpaca/positions`, `/alpaca/portfolio`, `/alpaca/trades` (GET/POST/PUT), `/alpaca/stats`, `/alpaca/performance`
+
+### Alpaca trade execution + analytics (new)
+- `POST /alpaca/trades` now **places a real Alpaca order** (`/v2/orders`) and then logs the trade thesis + metadata to Postgres (`cortana_trades`).
+- `GET /alpaca/performance` returns strategy performance summary (win rate, avg return, best/worst trade), signal-source breakdown, and current open positions.
+
+`cortana_trades` table (auto-created if missing):
+- `id`, `timestamp`, `symbol`, `side`, `qty`, `notional`, `entry_price`, `target_price`, `stop_loss`
+- `thesis`, `signal_source`, `status`, `exit_price`, `exit_timestamp`, `pnl`, `pnl_pct`, `outcome`, `metadata (jsonb)`
 
 ### Run locally
 ```bash

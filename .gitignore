@@ -5,6 +5,7 @@ alpaca_keys.*
 .env
 .DS_Store
 fitness-services
+cortana-external
 *.json.backup
 
 # Python
