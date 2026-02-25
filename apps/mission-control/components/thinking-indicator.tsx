@@ -74,7 +74,7 @@ export function ThinkingIndicator() {
         </p>
       </div>
 
-      <p className="thinking-text mt-1 text-sm font-medium text-foreground">
+      <p className="mt-1 text-sm font-medium text-foreground">
         {currentText}
       </p>
 
