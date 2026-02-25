@@ -79,7 +79,7 @@ export default async function Home() {
             Prisma.
           </p>
         </div>
-        <div className="flex w-full flex-wrap items-center gap-3 sm:w-auto sm:justify-end">
+        <div className="flex w-full flex-wrap items-stretch gap-3 sm:w-auto sm:justify-end">
           <MoodRing />
           <HeartbeatPulse />
           <ThinkingIndicator />

@@ -66,7 +66,7 @@ export function ThinkingIndicator() {
   const isIdle = payload?.idle ?? true;
 
   return (
-    <div className="rounded-lg border bg-card/60 px-3 py-2 shadow-sm">
+    <div className="flex h-full flex-col justify-center rounded-lg border bg-card/60 px-3 py-2 shadow-sm">
       <div className="flex items-center gap-2">
         <span className={`thinking-dot ${isIdle ? "thinking-idle" : "thinking-active"}`} aria-hidden="true" />
         <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">

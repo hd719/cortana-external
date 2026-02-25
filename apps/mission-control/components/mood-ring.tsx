@@ -65,22 +65,32 @@ export function MoodRing() {
     };
   }, [mood]);
 
+  const moodLabel = mood.replaceAll("_", " ");
+
   return (
-    <div
-      aria-label={`System mood: ${mood.replaceAll("_", " ")}`}
-      title={`System mood: ${mood.replaceAll("_", " ")}`}
-      className="relative h-12 w-12 rounded-full border-2 transition-[border-color,box-shadow,filter] duration-700 ease-in-out"
-      style={style}
-    >
-      <span
-        aria-hidden="true"
-        className="absolute inset-1 rounded-full border border-white/20 opacity-70"
-      />
-      <span
-        aria-hidden="true"
-        className="absolute -inset-2 rounded-full blur-xl transition-colors duration-700"
-        style={{ backgroundColor: moodStyles[mood].glow }}
-      />
+    <div className="flex h-full flex-col justify-center rounded-lg border bg-card/60 px-3 py-2 shadow-sm">
+      <div className="flex items-center gap-3">
+        <div
+          aria-label={`System mood: ${moodLabel}`}
+          title={`System mood: ${moodLabel}`}
+          className="relative h-8 w-8 shrink-0 rounded-full border-2 transition-[border-color,box-shadow,filter] duration-700 ease-in-out"
+          style={style}
+        >
+          <span
+            aria-hidden="true"
+            className="absolute inset-0.5 rounded-full border border-white/20 opacity-70"
+          />
+          <span
+            aria-hidden="true"
+            className="absolute -inset-1.5 rounded-full blur-lg transition-colors duration-700"
+            style={{ backgroundColor: moodStyles[mood].glow }}
+          />
+        </div>
+        <div>
+          <p className="text-sm font-medium text-foreground capitalize">{moodLabel}</p>
+          <p className="text-xs text-muted-foreground">System mood</p>
+        </div>
+      </div>
     </div>
   );
 }

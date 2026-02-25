@@ -82,7 +82,7 @@ export function HeartbeatPulse() {
   }, [status]);
 
   return (
-    <div className="rounded-lg border bg-card/60 px-3 py-2 shadow-sm">
+    <div className="flex h-full flex-col justify-center rounded-lg border bg-card/60 px-3 py-2 shadow-sm">
       <div className="flex items-center gap-2">
         <span
           className={`heartbeat-dot heartbeat-${status}`}
