@@ -1,6 +1,6 @@
-import { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { getTaskPrisma } from "@/lib/task-prisma";
+import { upsertEpicFromSource, upsertTaskFromSource } from "@/lib/task-sync";
 
 type ReconcileReport = {
   ranAt: string;
@@ -17,7 +17,7 @@ type ReconcileReport = {
   };
 };
 
-const RECONCILE_INTERVAL_MS = 1000 * 60 * 3;
+const RECONCILE_INTERVAL_MS = 1000 * 60 * 15;
 
 let lastRunAt = 0;
 let cached: ReconcileReport | null = null;
@@ -47,8 +47,8 @@ export async function reconcileTaskBoardSources(): Promise<ReconcileReport | nul
 
   if (drift) {
     const [preferredEpics, preferredTasks] = await Promise.all([
-      preferred.cortanaEpic.findMany(),
-      preferred.cortanaTask.findMany(),
+      preferred.cortanaEpic.findMany({ select: { id: true } }),
+      preferred.cortanaTask.findMany({ select: { id: true } }),
     ]);
 
     const preferredEpicIds = preferredEpics.map((epic) => epic.id);
@@ -56,77 +56,11 @@ export async function reconcileTaskBoardSources(): Promise<ReconcileReport | nul
 
     await prisma.$transaction(async (tx) => {
       for (const epic of preferredEpics) {
-        await tx.cortanaEpic.upsert({
-          where: { id: epic.id },
-          create: {
-            id: epic.id,
-            title: epic.title,
-            source: epic.source,
-            status: epic.status,
-            deadline: epic.deadline,
-            createdAt: epic.createdAt,
-            completedAt: epic.completedAt,
-            metadata: epic.metadata === null ? Prisma.JsonNull : (epic.metadata as Prisma.InputJsonValue),
-          },
-          update: {
-            title: epic.title,
-            source: epic.source,
-            status: epic.status,
-            deadline: epic.deadline,
-            createdAt: epic.createdAt,
-            completedAt: epic.completedAt,
-            metadata: epic.metadata === null ? Prisma.JsonNull : (epic.metadata as Prisma.InputJsonValue),
-          },
-        });
+        await upsertEpicFromSource(preferred, epic.id);
       }
 
       for (const task of preferredTasks) {
-        await tx.cortanaTask.upsert({
-          where: { id: task.id },
-          create: {
-            id: task.id,
-            title: task.title,
-            description: task.description,
-            priority: task.priority,
-            status: task.status,
-            dueAt: task.dueAt,
-            remindAt: task.remindAt,
-            executeAt: task.executeAt,
-            autoExecutable: task.autoExecutable,
-            executionPlan: task.executionPlan,
-            dependsOn: task.dependsOn ?? [],
-            completedAt: task.completedAt,
-            outcome: task.outcome,
-            metadata: task.metadata === null ? Prisma.JsonNull : (task.metadata as Prisma.InputJsonValue),
-            epicId: task.epicId,
-            parentId: task.parentId,
-            assignedTo: task.assignedTo,
-            source: task.source,
-            createdAt: task.createdAt,
-            updatedAt: task.updatedAt,
-          },
-          update: {
-            title: task.title,
-            description: task.description,
-            priority: task.priority,
-            status: task.status,
-            dueAt: task.dueAt,
-            remindAt: task.remindAt,
-            executeAt: task.executeAt,
-            autoExecutable: task.autoExecutable,
-            executionPlan: task.executionPlan,
-            dependsOn: task.dependsOn ?? [],
-            completedAt: task.completedAt,
-            outcome: task.outcome,
-            metadata: task.metadata === null ? Prisma.JsonNull : (task.metadata as Prisma.InputJsonValue),
-            epicId: task.epicId,
-            parentId: task.parentId,
-            assignedTo: task.assignedTo,
-            source: task.source,
-            createdAt: task.createdAt,
-            updatedAt: task.updatedAt,
-          },
-        });
+        await upsertTaskFromSource(preferred, task.id);
       }
 
       const removedTasks = await tx.cortanaTask.deleteMany({

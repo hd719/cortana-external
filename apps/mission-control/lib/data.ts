@@ -4,6 +4,7 @@ import { unstable_noStore as noStore } from "next/cache";
 import { syncOpenClawRunsFromStore } from "@/lib/openclaw-sync";
 import { getTaskPrisma } from "@/lib/task-prisma";
 import { reconcileTaskBoardSources } from "@/lib/task-reconciliation";
+import { getTaskListenerStatus } from "@/lib/task-listener";
 import { deriveEvidenceGrade, deriveLaunchPhase, extractProviderPath } from "@/lib/run-intelligence";
 import {
   AgentOperationalStats,
@@ -301,7 +302,7 @@ const pruneLegacyGhostTask = async () => {
 };
 
 type TaskBoardWarning = {
-  code: "task_db_fallback" | "task_source_drift";
+  code: "task_db_fallback" | "task_source_drift" | "task_listener_disconnected";
   message: string;
   cause?: string;
 };
@@ -350,12 +351,23 @@ export const getTaskBoard = async () => {
     tasks = await readTaskBoardTasks(prisma, { pruneGhostTask: true });
   }
 
+  const listener = getTaskListenerStatus();
+
   const reconcileReport = await reconcileTaskBoardSources();
-  if (reconcileReport?.drift) {
+  if (reconcileReport?.drift && !listener.connected) {
     warnings.push({
       code: "task_source_drift",
       message: `Source-of-truth drift detected (preferred=${reconcileReport.preferredCount}, app=${reconcileReport.appCount}). Auto-reconcile is monitoring and this UI is anchored to ${taskSource}.`,
       cause: `missingInApp=${reconcileReport.missingInAppSample.join(",") || "none"}; missingInPreferred=${reconcileReport.missingInPreferredSample.join(",") || "none"}`,
+    });
+  }
+
+  if (listener.enabled && listener.started && !listener.connected) {
+    warnings.push({
+      code: "task_listener_disconnected",
+      message:
+        "Live task sync listener is disconnected. Falling back to periodic reconciliation until connection recovers.",
+      cause: listener.lastError ?? undefined,
     });
   }
 
@@ -452,6 +464,7 @@ export const getTaskBoard = async () => {
       source: taskSource,
       warnings,
       reconciliation: reconcileReport,
+      listener,
     },
   };
 };

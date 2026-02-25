@@ -65,6 +65,11 @@ pnpm dev
 ## Task board data model
 - Mission Control reads from the Cortana task queue tables when available: `cortana_tasks` and `cortana_epics` (see `prisma/schema.prisma`).
 - Task board reads can use a dedicated Cortana DB URL (`CORTANA_DATABASE_URL`). If unset and `DATABASE_URL` points to `mission_control`, Mission Control automatically tries the same Postgres instance with database `cortana` for task reads to avoid stale adapter copies.
+- Enable live sync triggers in Cortana DB:
+  ```bash
+  export PATH="/opt/homebrew/opt/postgresql@17/bin:$PATH"
+  psql cortana -f scripts/sql/task-change-triggers.sql
+  ```
 - If your Postgres doesn't already expose these tables, running `pnpm db:migrate` will create adapter/read-model tables with the same names/columns:
   - `cortana_epics`: id (serial), title, source, status, deadline, created_at, completed_at, metadata JSONB
   - `cortana_tasks`: id (serial), title, description, priority (1-5), status (text), due_at, remind_at, execute_at, auto_executable, execution_plan, depends_on int[], completed_at, outcome, metadata JSONB, epic_id FK, parent_id FK, assigned_to, source, created_at, updated_at
@@ -84,7 +89,8 @@ pnpm dev
 - Reliability/autonomy controls now implemented:
   - **Two-phase launch confirmation**: queued (phase 1) and running (phase 2). Running without prior queue evidence is marked `phase2_running_unconfirmed` and emits warning events.
   - **Stale UI guard + auto-reconcile**: long-running states not present in live run store are auto-marked `stale` and emit `subagent.reconciled_stale` events.
-  - **Source-of-truth reconciliation job**: Task Board periodically compares dedicated Cortana DB vs app DB and surfaces drift warnings in the UI.
+  - **Event-driven live sync**: PostgreSQL LISTEN/NOTIFY (`task_change`) streams `cortana_tasks` / `cortana_epics` inserts, updates, and deletes into Mission Control immediately.
+- **Source-of-truth reconciliation job**: fallback guardrail runs every 15 minutes to catch missed updates and surfaces drift warnings when listener is disconnected.
   - **Fallback transparency layer**: Jobs/Agent detail display provider/model/auth path and explicit fallback-path badges when detected in run payload metadata.
   - **Evidence-graded status messaging**: each run gets confidence grade (`high|medium|low`) based on observed lifecycle evidence.
 - Upserts runs by `Run.openclaw_run_id`, stores raw lifecycle in `Run.external_status`, and writes `Event` rows (`subagent.<status>`).

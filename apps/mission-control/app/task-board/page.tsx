@@ -118,6 +118,7 @@ export default async function TaskBoardPage() {
   }
 
   const { readyNow, blocked, dueSoon, overdue, byPillar, recentOutcomes, tasks, metadata } = data;
+  const liveSyncActive = metadata.listener?.connected;
 
   const pillarEntries = Object.entries(byPillar).sort((a, b) => a[0].localeCompare(b[0]));
 
@@ -136,7 +137,23 @@ export default async function TaskBoardPage() {
         </div>
       </div>
 
-      {metadata.warnings.length > 0 && (
+      {liveSyncActive ? (
+        <Card className="border-success/40 bg-success/10">
+          <CardHeader>
+            <CardTitle className="text-base">Live sync active</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-1 text-sm text-muted-foreground">
+            <p>
+              PostgreSQL LISTEN/NOTIFY is connected. Task and epic updates replicate to Mission Control in real time.
+            </p>
+            {metadata.listener?.lastEventAt && (
+              <p className="text-xs">
+                Last event: {new Date(metadata.listener.lastEventAt).toLocaleString()}
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      ) : metadata.warnings.length > 0 ? (
         <Card className="border-warning/40 bg-warning/10">
           <CardHeader>
             <CardTitle className="text-base">Task Board running in fallback mode</CardTitle>
@@ -153,7 +170,7 @@ export default async function TaskBoardPage() {
             )}
           </CardContent>
         </Card>
-      )}
+      ) : null}
 
       <TaskStatusFilters tasks={tasks} />
 
