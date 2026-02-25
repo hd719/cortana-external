@@ -1,470 +1,238 @@
-# Hamel's Services
+# cortana-external (`~/Developer/cortana-external`)
 
-Local HTTP server providing unified access to:
-- **Whoop** — sleep, recovery, strain, HRV
-- **Tonal** — strength workouts, strength scores
-- **Alpaca** — trading portfolio, positions, trade tracking
+External runtime/services layer for Cortana.
 
-Server runs on `localhost:3033` and handles all authentication automatically.
+If `~/clawd` is the brain/policy workspace, this repo is the **service edge**: HTTP APIs, watchdog reliability monitor, trading/backtesting tools, and Mission Control UI.
 
 ---
 
-## Mission Control (apps/mission-control)
-- Path: `apps/mission-control`
-- Stack: Next.js (App Router, TypeScript), shadcn/ui (Tailwind v4), PostgreSQL + Prisma
-- Package manager: **pnpm-first**
-- Docs: `apps/mission-control/docs/mission-control-next-ideas.md`
+## 1) What lives here
 
-### Setup
+- Go HTTP service (Whoop + Tonal + Alpaca endpoints) on localhost
+- Mission Control web app (Next.js + Prisma)
+- Python CANSLIM backtester/advisor
+- Watchdog launchd monitor (`com.cortana.watchdog`)
+- service docs/runbooks
+
+---
+
+## 2) Top-level layout
+
+```text
+~/Developer/cortana-external
+├── README.md
+├── main.go / run.sh / launchd-run.sh      # Go service entrypoints
+├── .env                                   # runtime secrets (local only)
+│
+├── whoop/                                 # Whoop OAuth + data handlers
+├── tonal/                                 # Tonal auth/data handlers + cache logic
+├── alpaca/                                # Alpaca service handlers
+│
+├── apps/
+│   └── mission-control/                   # Next.js ops dashboard
+│
+├── backtester/                            # Python CANSLIM engine
+├── watchdog/                              # reliability monitor + launchd plist
+├── docs/                                  # runbooks/notes
+├── TONAL_SERVICE.md / WHOOP_SERVICE.md    # service-specific docs
+└── alpaca_keys.json, *_tokens.json, tonal_data.json
+```
+
+---
+
+## 3) Go API service (Whoop/Tonal/Alpaca)
+
+### Runtime
+- Entrypoint: `main.go`
+- Framework: `gin`
+- Bind: `127.0.0.1:${PORT}`
+- Default port: `3033`
+- Start command: `bash run.sh`
+
+### Endpoints
+
+#### Whoop
+- `GET /auth/url`
+- `GET /auth/callback`
+- `GET /whoop/data`
+
+#### Tonal
+- `GET /tonal/health`
+- `GET /tonal/data`
+
+#### Alpaca
+- `GET /alpaca/health`
+- `GET /alpaca/account`
+- `GET /alpaca/positions`
+- `GET /alpaca/portfolio`
+- `GET /alpaca/trades`
+- `POST /alpaca/trades`
+- `PUT /alpaca/trades/:id`
+- `GET /alpaca/stats`
+
+### Required env/config
+From `.env` / local files:
+- `WHOOP_CLIENT_ID`, `WHOOP_CLIENT_SECRET`, `WHOOP_REDIRECT_URL`
+- `TONAL_EMAIL`, `TONAL_PASSWORD`
+- `PORT` (optional; defaults to `3033`)
+
+Token/data files used at repo root:
+- `whoop_tokens.json`
+- `tonal_tokens.json`
+- `tonal_data.json`
+- `alpaca_keys.json`
+- `alpaca_trades.json` (created at runtime when tracking trades)
+
+### Current state notes
+- Service binds to loopback only (`127.0.0.1`) by design
+- Tonal client warns if env credentials are missing
+- Tonal request pacing set to `500ms` delay between upstream calls
+
+---
+
+## 4) Mission Control app (`apps/mission-control`)
+
+Next.js operations dashboard for agents/runs/events/task board/decision traces.
+
+### Stack
+- Next.js 16 + React 19
+- TypeScript
+- Prisma + PostgreSQL
+- shadcn/ui + Tailwind v4
+- package manager: pnpm
+
+### Local run
 ```bash
 cd apps/mission-control
 pnpm install
 cp .env.example .env.local
-# set DATABASE_URL to your Postgres instance
-```
-
-### Database
-```bash
 pnpm db:migrate
 pnpm db:seed
-pnpm db:deploy
-pnpm db:generate
-```
-
-### Run / Build / Lint
-```bash
 pnpm dev
-pnpm build
-pnpm start
-pnpm lint
+# http://localhost:3000
 ```
 
-### Mission Control Operator Quick Actions
+### Key pages/features
+- `/` dashboard
+- `/task-board` (reads `cortana_tasks` + `cortana_epics`)
+- `/jobs`, `/agents`
+- `/decisions` (decision traces)
+- `/api/live` SSE refresh
+- OpenClaw subagent lifecycle ingestion endpoint
+
+---
+
+## 5) Backtester (`backtester/`)
+
+Python CANSLIM advisor + backtesting engine.
+
+### Typical usage
 ```bash
-open http://localhost:3000
-cd apps/mission-control && pnpm db:generate
-cd apps/mission-control && rm -rf .next && pnpm dev
+cd backtester
+source venv/bin/activate
+python advisor.py --market
+python advisor.py --symbol NVDA
+python canslim_alert.py --limit 8 --min-score 6
+python main.py --symbol AAPL --years 2 --compare
 ```
 
-### Task Board integration
-- Page: `/task-board` (Ready now, Blocked, Due soon/Overdue, By pillar, Recent outcomes)
-- Reads `cortana_tasks` + `cortana_epics`
-- `Ready now` = `status='pending'` + `auto_executable=true` + dependencies done
-- Pillars from `metadata -> 'pillar'` (Time, Health, Wealth, Career; default Unspecified)
-
-### Decision Traces integration (new)
-- Page: `/decisions`
-- Purpose: chronological decision timeline for autonomy introspection and ops review
-- Includes: reasoning summary, confidence score, outcome status, trigger linkage, and filtering controls
-- API route: `/api/decisions`
-- Data source: reads `cortana_decision_traces` and joins `cortana_events` for trigger/event context
-- Navigation: **Decision Traces** is now included in the main Mission Control nav
-
-### Troubleshooting — Radix import mismatch
-If you see `Cannot find module "radix-ui"` or bad `ProgressPrimitive` imports:
-1) Use scoped packages (`@radix-ui/react-progress`, etc.)
-2) Remove lingering `radix-ui` imports and re-run `pnpm install`
-3) Clear cache: `rm -rf .next` then `pnpm dev`
+### Dependencies
+- Python venv in `backtester/venv`
+- packages from `requirements.txt` (`pandas`, `numpy`, `yfinance`, `requests`, etc.)
 
 ---
 
-## Quick Reference for Claude
+## 6) Watchdog service (`watchdog/`)
 
-### To Get Whoop Data (sleep, recovery, strain, HRV)
+Reliability monitor for cron/runtime health.
+
+### launchd config (versioned in repo)
+- plist: `watchdog/com.cortana.watchdog.plist`
+- label: `com.cortana.watchdog`
+- interval: `900s` (15 min)
+- script: `/Users/hd/Developer/cortana-external/watchdog/watchdog.sh`
+- logs: `watchdog/logs/watchdog.log`
+- `RunAtLoad: true`
+
+### What it checks
+- OpenClaw cron quarantine markers
+- repeated cron failures
+- heartbeat process health and drift
+- degraded mission-control agents
+- gog/Gmail availability
+- Tonal and Whoop health
+- PostgreSQL availability
+- budget threshold warnings
+
+### Manage
 ```bash
-curl http://localhost:3033/whoop/data
-```
-
-### To Get Tonal Data (workouts, strength scores)
-```bash
-curl http://localhost:3033/tonal/data
-```
-
-**No authentication headers needed.** The service handles everything internally.
-
----
-
-## When to Fetch Each Service
-
-| Question to Answer | Service | Endpoint |
-|--------------------|---------|----------|
-| How did Hamel sleep last night? | Whoop | `/whoop/data` |
-| What's Hamel's recovery score? | Whoop | `/whoop/data` |
-| What's Hamel's HRV? | Whoop | `/whoop/data` |
-| How much strain did Hamel accumulate? | Whoop | `/whoop/data` |
-| What Tonal workouts has Hamel done? | Tonal | `/tonal/data` |
-| What's Hamel's strength score? | Tonal | `/tonal/data` |
-| How much volume has Hamel lifted? | Tonal | `/tonal/data` |
-
-**Whoop** = Passive 24/7 health monitoring (sleep, recovery, strain, heart rate)
-**Tonal** = Active workout data (strength training sessions, strength scores)
-
----
-
-## Whoop Data Structure
-
-```json
-{
-  "profile": {
-    "user_id": 123456,
-    "first_name": "Hamel",
-    "last_name": "Desai",
-    "email": "..."
-  },
-  "body_measurement": {
-    "height_meter": 1.83,
-    "weight_kilogram": 82.5,
-    "max_heart_rate": 190
-  },
-  "cycles": [
-    {
-      "id": 123,
-      "start": "2024-01-15T00:00:00Z",
-      "end": "2024-01-16T00:00:00Z",
-      "score": {
-        "strain": 12.5,
-        "kilojoules": 8500
-      }
-    }
-  ],
-  "recovery": [
-    {
-      "cycle_id": 123,
-      "score": {
-        "recovery_score": 85,
-        "hrv_rmssd_milli": 45.2,
-        "resting_heart_rate": 52,
-        "spo2_percentage": 98.5
-      }
-    }
-  ],
-  "sleep": [
-    {
-      "id": 456,
-      "start": "2024-01-15T22:00:00Z",
-      "end": "2024-01-16T06:30:00Z",
-      "score": {
-        "stage_summary": {
-          "total_light_sleep_time_milli": 14400000,
-          "total_slow_wave_sleep_time_milli": 7200000,
-          "total_rem_sleep_time_milli": 5400000,
-          "total_awake_time_milli": 1800000
-        },
-        "sleep_performance_percentage": 88,
-        "sleep_efficiency_percentage": 92
-      }
-    }
-  ],
-  "workouts": [
-    {
-      "id": 789,
-      "sport_id": 1,
-      "start": "2024-01-15T07:00:00Z",
-      "end": "2024-01-15T08:00:00Z",
-      "score": {
-        "strain": 15.2,
-        "average_heart_rate": 145,
-        "max_heart_rate": 175,
-        "kilojoule": 2500
-      }
-    }
-  ]
-}
-```
-
-### Key Whoop Metrics
-
-| Metric | Location | Interpretation |
-|--------|----------|----------------|
-| Recovery Score | `recovery[0].score.recovery_score` | 0-33 red (poor), 34-66 yellow (moderate), 67-100 green (good) |
-| HRV | `recovery[0].score.hrv_rmssd_milli` | Higher = better recovery, varies by individual |
-| Resting HR | `recovery[0].score.resting_heart_rate` | Lower generally = better fitness |
-| Strain | `cycles[0].score.strain` | 0-21 scale. Light: 0-9, Moderate: 10-13, Hard: 14-17, All Out: 18-21 |
-| Sleep Performance | `sleep[0].score.sleep_performance_percentage` | % of sleep need achieved |
-
-### Whoop Data Notes
-- Data is sorted most recent first
-- `cycles` = 24-hour periods (day strain)
-- `recovery` = morning recovery assessment
-- `sleep` = individual sleep sessions
-- `workouts` = detected or logged activities (not Tonal-specific)
-
----
-
-## Tonal Data Structure
-
-```json
-{
-  "profile": {
-    "userId": "abc123",
-    "firstName": "Hamel",
-    "lastName": "Desai",
-    "totalWorkouts": 150,
-    "totalVolume": 1250000,
-    "memberSince": "2022-01-15T00:00:00Z"
-  },
-  "workouts": {
-    "workout-uuid-1": {
-      "id": "workout-uuid-1",
-      "workoutType": "CUSTOM",
-      "workoutName": "Full Body Strength",
-      "beginTime": "2024-01-15T18:00:00Z",
-      "endTime": "2024-01-15T18:45:00Z",
-      "totalVolume": 8500,
-      "totalReps": 120,
-      "totalSets": 24,
-      "totalTime": 2700
-    }
-  },
-  "workout_count": 150,
-  "strength_scores": {
-    "current": [
-      {"muscleGroup": "FULL_BODY", "score": 450},
-      {"muscleGroup": "UPPER", "score": 425},
-      {"muscleGroup": "CORE", "score": 380},
-      {"muscleGroup": "LOWER", "score": 520}
-    ],
-    "history": [
-      {"date": "2024-01-15", "muscleGroup": "FULL_BODY", "score": 450},
-      {"date": "2024-01-08", "muscleGroup": "FULL_BODY", "score": 445}
-    ]
-  },
-  "last_updated": "2024-01-15T19:00:00Z"
-}
-```
-
-### Key Tonal Metrics
-
-| Metric | Location | Interpretation |
-|--------|----------|----------------|
-| Overall Strength | `strength_scores.current` (FULL_BODY) | Tonal's strength measure, higher = stronger |
-| Total Volume | `profile.totalVolume` or sum workout volumes | Total lbs lifted (lifetime or per workout) |
-| Workout Count | `workout_count` | Total cached workouts |
-| Last Workout | Find max `beginTime` in `workouts` | Most recent training session |
-
-### Tonal Data Notes
-- **Workouts are cached incrementally** - each API call fetches recent workouts and merges them into the cache
-- `workouts` is a map keyed by workout ID (not an array)
-- `workout_count` reflects total cached workouts, grows over time
-- Strength scores update after workouts that test relevant muscle groups
-- `totalVolume` in workouts = total weight lifted in that session (reps × weight)
-
-### Workout Types
-| Type | Description |
-|------|-------------|
-| PROGRAM | Guided Tonal program |
-| CUSTOM | User-created workout |
-| QUICK_FIT | Quick session |
-| FREE_LIFT | Free lifting mode |
-| MOVEMENT | Mobility focused |
-
----
-
-## Error Handling
-
-| Status | Meaning | Action |
-|--------|---------|--------|
-| 200 | Success | Parse and use the data |
-| 401 | Auth failed | Whoop: need to re-auth via browser. Tonal: check credentials in .env |
-| 502 | API error | Upstream service issue, try again later |
-
-If you get a 401 from Whoop, tell the user to run the OAuth flow:
-1. Visit `http://localhost:3033/auth/url`
-2. Open the returned URL in browser
-3. Authorize with Whoop
-
-Tonal 401 means credentials in `.env` are wrong.
-
----
-
-## Rate Limiting
-
-**Whoop**: 100 requests/minute, 10,000/day. Each `/whoop/data` call uses ~6 internal requests.
-
-**Tonal**: Unknown limits. Service adds 500ms delay between calls. Each `/tonal/data` call makes ~5-6 internal requests.
-
-**Recommendation**: Don't call either endpoint more than a few times per minute. For typical usage (checking once or twice a day), you'll never hit limits.
-
----
-
-## Whoop Caching
-
-The `/whoop/data` endpoint includes a 5-minute in-memory cache to reduce API load and improve response times:
-
-- **Cache initialization**: Lazy init with `sync.RWMutex` for thread safety
-- **Performance**: First request hits Whoop API (~6.5s), subsequent requests return cached data (~3ms)
-- **TTL**: 5-minute expiration, configurable via `defaultCacheTTL` constant in `whoop/handler.go`
-- **Auto-refresh**: Cache refreshes automatically after TTL expires on the next request
-
-This means frequent calls within a 5-minute window will be nearly instantaneous without hitting Whoop's rate limits.
-
----
-
-## Example Python Code
-
-```python
-import requests
-
-# Get Whoop data
-whoop = requests.get("http://localhost:3033/whoop/data").json()
-recovery = whoop["recovery"][0]["score"]["recovery_score"]
-hrv = whoop["recovery"][0]["score"]["hrv_rmssd_milli"]
-strain = whoop["cycles"][0]["score"]["strain"]
-sleep_perf = whoop["sleep"][0]["score"]["sleep_performance_percentage"]
-
-print(f"Recovery: {recovery}%, HRV: {hrv}ms, Strain: {strain}, Sleep: {sleep_perf}%")
-
-# Get Tonal data
-tonal = requests.get("http://localhost:3033/tonal/data").json()
-strength = next(s["score"] for s in tonal["strength_scores"]["current"] if s["muscleGroup"] == "FULL_BODY")
-total_workouts = tonal["workout_count"]
-last_workout = max(tonal["workouts"].values(), key=lambda w: w["beginTime"])
-
-print(f"Strength: {strength}, Workouts: {total_workouts}, Last: {last_workout['workoutName']}")
+launchctl load ~/Library/LaunchAgents/com.cortana.watchdog.plist
+launchctl unload ~/Library/LaunchAgents/com.cortana.watchdog.plist
+launchctl list | grep cortana.watchdog
 ```
 
 ---
 
-## Architecture
+## 7) launchd vs systemd
 
-```
-~/Developer/cortana-external/
-├── .env                     # Credentials (WHOOP_*, TONAL_*)
-├── main.go                  # Server entry point, runs on :3033 (default)
-├── run.sh                   # Primary startup script
-├── whoop_tokens.json        # Whoop OAuth tokens (auto-managed)
-├── tonal_tokens.json        # Tonal auth tokens (auto-managed)
-├── tonal_data.json          # Tonal workout cache (grows over time)
-├── whoop/
-│   ├── api.go               # Whoop API client
-│   ├── handler.go           # /whoop/data, /auth/url, /auth/callback
-│   └── token_store.go       # Token persistence
-└── tonal/
-    ├── api.go               # Tonal API client + auth
-    ├── handler.go           # /tonal/data handler
-    └── store.go             # Token + cache persistence
-```
+### launchd (macOS)
+- **Versioned here:** watchdog plist (`watchdog/com.cortana.watchdog.plist`)
+- **Referenced by docs, typically installed under `~/Library/LaunchAgents`:** fitness service launcher using `launchd-run.sh`
 
-## Running the Server
+### systemd
+- No systemd unit files currently tracked in this repo.
+- If deploying to Linux later, create `docs/runbooks/` + `systemd/` unit templates (not present yet).
+
+---
+
+## 8) Ports and local dependencies
+
+| Component | Default | Notes |
+|---|---:|---|
+| Go fitness/trading API | `127.0.0.1:3033` | Whoop/Tonal/Alpaca endpoints |
+| Mission Control | `127.0.0.1:3000` | Next.js dev/prod app |
+| Postgres | local service | used by mission-control and Cortana DB integrations |
+
+External dependencies:
+- Whoop OAuth/API
+- Tonal API
+- Alpaca API
+- Yahoo Finance (via backtester)
+- local Postgres
+
+---
+
+## 9) Quick health checks
 
 ```bash
-cd ~/Developer/cortana-external
-bash run.sh
+# core API
+curl -s http://127.0.0.1:3033/tonal/health
+curl -s http://127.0.0.1:3033/whoop/data | head
+curl -s http://127.0.0.1:3033/alpaca/health
 
-# Or run in background:
-nohup bash run.sh &>/tmp/fitness-service.log &
-```
+# mission control
+curl -s http://127.0.0.1:3000/api/dashboard | head
 
-Server listens on `http://localhost:3033`.
-
-## Launchd Service
-
-The fitness service can run as a macOS launchd agent for automatic startup and crash recovery:
-
-**Files:**
-- Plist location: `~/Library/LaunchAgents/com.cortana.fitness-service.plist`
-- Wrapper script: `~/fitness-service-launch.sh`
-
-**Management:**
-- Start: `launchctl load ~/Library/LaunchAgents/com.cortana.fitness-service.plist`
-- Stop: `launchctl unload ~/Library/LaunchAgents/com.cortana.fitness-service.plist`  
-- Restart: unload then load
-- Check status: `launchctl list | grep cortana.fitness`
-- Logs: `/tmp/fitness-service.log`
-
-**Auto-restart:** Service automatically restarts on crash via KeepAlive setting.
-
----
-
----
-
-## Alpaca Trading Data
-
-### Endpoints
-
-| Endpoint | Description |
-|----------|-------------|
-| `/alpaca/health` | Check API connection status |
-| `/alpaca/account` | Account balances, buying power |
-| `/alpaca/positions` | Current holdings with P&L |
-| `/alpaca/portfolio` | Combined account + positions |
-| `/alpaca/trades` | Trade recommendations tracked |
-| `/alpaca/stats` | Win rate, total P&L |
-
-### Quick Commands
-```bash
-# Portfolio summary
-curl http://localhost:3033/alpaca/portfolio
-
-# Trading statistics
-curl http://localhost:3033/alpaca/stats
-
-# Log a trade recommendation
-curl -X POST http://localhost:3033/alpaca/trades \
-  -H "Content-Type: application/json" \
-  -d '{"symbol":"CRWD","action":"BUY","score":10,"entry_price":382.50,"stop_loss":352.00,"shares":10,"reasoning":"CANSLIM breakout"}'
-
-# Update trade status (executed, declined, closed)
-curl -X PUT http://localhost:3033/alpaca/trades/T123 \
-  -H "Content-Type: application/json" \
-  -d '{"status":"executed","executed_price":382.50}'
-```
-
-### Portfolio Response
-```json
-{
-  "account": {
-    "cash": "100000",
-    "equity": "100000",
-    "buying_power": "200000",
-    "status": "ACTIVE"
-  },
-  "positions": [
-    {
-      "symbol": "AAPL",
-      "qty": "10",
-      "market_value": "2500",
-      "unrealized_pl": "125",
-      "unrealized_plpc": "5.2"
-    }
-  ],
-  "timestamp": "2026-02-15T20:00:00-05:00"
-}
-```
-
-### Trade Tracking Stats
-```json
-{
-  "total_recommendations": 12,
-  "executed": 8,
-  "declined": 4,
-  "closed": 5,
-  "wins": 3,
-  "losses": 2,
-  "win_rate": 60,
-  "total_pnl": 1250.50
-}
-```
-
-### Configuration
-API keys stored in `alpaca_keys.json`:
-```json
-{
-  "key_id": "YOUR_KEY",
-  "secret_key": "YOUR_SECRET",
-  "base_url": "https://paper-api.alpaca.markets",
-  "data_url": "https://data.alpaca.markets"
-}
+# watchdog
+tail -n 50 watchdog/logs/watchdog.log
 ```
 
 ---
 
-## Summary for Claude
+## 10) Historical context (still relevant)
 
-1. **Need sleep/recovery/strain/HRV?** → `curl http://localhost:3033/whoop/data`
-2. **Need workouts/strength scores?** → `curl http://localhost:3033/tonal/data`
-3. **Need portfolio/positions/trades?** → `curl http://localhost:3033/alpaca/portfolio`
-4. **No auth headers needed** - service handles tokens internally
-5. **Don't over-fetch** - once or twice per conversation is plenty
-6. **Parse the JSON** - key metrics listed in tables above
-7. **Errors?** - 401 = auth issue, 502 = upstream problem
+- This repo started as a fitness-service host (Whoop + Tonal) and expanded to include Alpaca + mission-control + watchdog.
+- It remains intentionally local-first (loopback binding, local token/cache files, launchd automation).
+
+---
+
+## 11) Maintenance rules for this README
+
+Update when any of these change:
+- endpoint surface in `main.go`
+- service bind/port model
+- launchd/service supervision config
+- mission-control major pages/data model links
+- backtester execution path/dependencies
+
+Last refreshed: **2026-02-25**
