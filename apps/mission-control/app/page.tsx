@@ -50,6 +50,12 @@ export default async function Home() {
   const degradedAgents = data.agents.filter((a) =>
     ["degraded", "offline"].includes(a.status)
   ).length;
+  const agentsDescription =
+    degradedAgents === 0
+      ? `${activeAgents} active`
+      : degradedAgents === 1
+        ? `${activeAgents} active · 1 needs attention`
+        : `${activeAgents} active · ${degradedAgents} need attention`;
   const runIsActive = (r: (typeof data.runs)[number]) => {
     const effective = (r.externalStatus || r.status).toString().toLowerCase();
     return effective === "running" || effective === "queued";
@@ -90,11 +96,11 @@ export default async function Home() {
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StatCard
           title="Agents"
           value={totalAgents}
-          description={`${activeAgents} active · ${degradedAgents} needs attention`}
+          description={agentsDescription}
         />
         <StatCard
           title="Active runs"
