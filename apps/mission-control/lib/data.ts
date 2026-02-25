@@ -15,6 +15,38 @@ import {
 const normalizeIdentity = (value?: string | null) =>
   (value || "").trim().toLowerCase();
 
+const asObject = (value: Prisma.JsonValue | null | undefined): Record<string, unknown> | null => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
+};
+
+const stringValue = (value: unknown): string | null =>
+  typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+
+const deriveAssignmentLabel = (run: {
+  agent?: { name: string } | null;
+  payload?: Prisma.JsonValue | null;
+  jobType: string;
+}): string | null => {
+  if (run.agent?.name) return run.agent.name;
+
+  const payload = asObject(run.payload);
+  const metadata = asObject((payload?.metadata as Prisma.JsonValue | undefined) ?? null);
+
+  const candidates = [
+    stringValue(payload?.assigned_to),
+    stringValue(metadata?.assigned_to),
+    stringValue(payload?.agent),
+    stringValue(metadata?.agent),
+    stringValue(payload?.role),
+    stringValue(metadata?.role),
+    stringValue(payload?.label),
+    stringValue(metadata?.label),
+    run.jobType && run.jobType !== "openclaw-subagent" ? run.jobType : null,
+  ];
+
+  return candidates.find(Boolean) ?? null;
+};
 
 export const getAgents = async () => {
   noStore();
@@ -193,6 +225,7 @@ export const getRuns = async ({ take = 20, cursor, agentId }: GetRunsInput = {})
     confidence: deriveEvidenceGrade(run),
     launchPhase: deriveLaunchPhase(run),
     providerPath: extractProviderPath(run.payload ?? null),
+    assignmentLabel: deriveAssignmentLabel(run),
   }));
 
   return {
@@ -259,7 +292,10 @@ export const getDashboardSummary = async () => {
 
   return {
     agents,
-    runs,
+    runs: runs.map((run) => ({
+      ...run,
+      assignmentLabel: deriveAssignmentLabel(run),
+    })),
     events,
     metrics: {
       agents: agentCounts,

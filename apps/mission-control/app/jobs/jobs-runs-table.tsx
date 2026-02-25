@@ -14,6 +14,7 @@ type RunRecord = {
   confidence?: "high" | "medium" | "low";
   launchPhase?: string;
   providerPath?: { label: string; fallback?: boolean };
+  assignmentLabel?: string | null;
   startedAt: string | Date | null;
   completedAt: string | Date | null;
   agent: { id: string; name: string } | null;
@@ -96,7 +97,7 @@ export function JobsRunsTable({
                   <div className="text-[11px] text-muted-foreground">Path: {run.providerPath.label}</div>
                 )}
               </td>
-              <td className="px-3 py-3 text-muted-foreground">{run.agent?.name || "Unassigned"}</td>
+              <td className="px-3 py-3 text-muted-foreground">{run.assignmentLabel || run.agent?.name || "Unassigned"}</td>
               <td className="px-3 py-3">
                 <div className="flex items-center gap-2">
                   <StatusBadge value={run.externalStatus || run.status} variant="run" />
