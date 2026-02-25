@@ -1,15 +1,38 @@
 "use client";
 
-import { useMemo, useState, type ComponentType } from "react";
-import { Loader2, Play, RefreshCcw, Wallet, HeartPulse } from "lucide-react";
+import { useState, type ComponentType } from "react";
+import { Loader2, Play, RefreshCcw, Wallet, HeartPulse, X } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 type ActionKey = "chaos-test" | "reflection-sweep" | "check-budget" | "force-heartbeat";
 
-type ActionStatus = {
+type ActionState = {
   state: "idle" | "loading" | "success" | "error";
+  data?: unknown;
   message?: string;
+};
+
+type HealthCheckResult = {
+  name: string;
+  passed: boolean;
+  details: string;
+};
+
+type ReflectionItem = {
+  id: number;
+  title: string;
+  status: string;
+  completed_at: string | null;
+  outcome: string | null;
 };
 
 const ACTIONS: Array<{ key: ActionKey; label: string; icon: ComponentType<{ className?: string }> }> = [
@@ -19,23 +42,114 @@ const ACTIONS: Array<{ key: ActionKey; label: string; icon: ComponentType<{ clas
   { key: "force-heartbeat", label: "Force Heartbeat", icon: HeartPulse },
 ];
 
+const prettyJson = (value: unknown) => JSON.stringify(value, null, 2);
+
+const formatNumber = (value: unknown) => {
+  if (typeof value !== "number" || Number.isNaN(value)) return "—";
+  return value.toFixed(2);
+};
+
+function renderActionResult(action: ActionKey, data: unknown) {
+  if (!data || typeof data !== "object") {
+    return <pre className="text-xs leading-5">{prettyJson(data)}</pre>;
+  }
+
+  const payload = data as Record<string, unknown>;
+
+  if (action === "chaos-test") {
+    const checks = (payload.checks as HealthCheckResult[] | undefined) ?? [];
+    return (
+      <div className="space-y-2 font-mono text-xs leading-5">
+        {checks.map((check) => (
+          <div key={check.name} className="rounded-md border border-border/60 bg-background/70 p-2">
+            <div className={check.passed ? "text-emerald-300" : "text-destructive"}>
+              {check.passed ? "PASS" : "FAIL"} · {check.name}
+            </div>
+            <div className="mt-1 whitespace-pre-wrap text-muted-foreground">{check.details}</div>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  if (action === "reflection-sweep") {
+    const rows = (payload.reflections as ReflectionItem[] | undefined) ?? [];
+    if (rows.length === 0) {
+      return <p className="text-sm text-muted-foreground">No completed tasks in the last 24 hours.</p>;
+    }
+
+    return (
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>ID</TableHead>
+            <TableHead>Title</TableHead>
+            <TableHead>Status</TableHead>
+            <TableHead>Completed</TableHead>
+            <TableHead>Outcome</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {rows.map((row) => (
+            <TableRow key={row.id}>
+              <TableCell>{row.id}</TableCell>
+              <TableCell className="max-w-[260px] truncate" title={row.title}>
+                {row.title}
+              </TableCell>
+              <TableCell>{row.status}</TableCell>
+              <TableCell>
+                {row.completed_at ? new Date(row.completed_at).toLocaleString() : "—"}
+              </TableCell>
+              <TableCell className="max-w-[320px] truncate" title={row.outcome || ""}>
+                {row.outcome || "—"}
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    );
+  }
+
+  if (action === "check-budget") {
+    const budget = (payload.budget as Record<string, unknown> | undefined) ?? {};
+    return (
+      <pre className="overflow-x-auto rounded-md border border-border/60 bg-background/70 p-3 font-mono text-xs leading-5">
+{`source: ${String(budget.source ?? "unknown")}
+used: ${formatNumber(budget.used)}
+remaining: ${formatNumber(budget.remaining)}
+burnRate: ${formatNumber(budget.burnRate)}
+checkedAt: ${String(payload.checkedAt ?? "")}`}
+      </pre>
+    );
+  }
+
+  if (action === "force-heartbeat") {
+    return (
+      <pre className="overflow-x-auto rounded-md border border-border/60 bg-background/70 p-3 font-mono text-xs leading-5">
+{`status: ok
+message: ${String(payload.message ?? "Manual heartbeat inserted")}
+timestamp: ${String(payload.timestamp ?? "")}`}
+      </pre>
+    );
+  }
+
+  return <pre className="text-xs leading-5">{prettyJson(payload)}</pre>;
+}
+
 export function QuickActionsCard() {
-  const [statuses, setStatuses] = useState<Record<ActionKey, ActionStatus>>({
+  const [statuses, setStatuses] = useState<Record<ActionKey, ActionState>>({
     "chaos-test": { state: "idle" },
     "reflection-sweep": { state: "idle" },
     "check-budget": { state: "idle" },
     "force-heartbeat": { state: "idle" },
   });
-
-  const anyRunning = useMemo(
-    () => Object.values(statuses).some((s) => s.state === "loading"),
-    [statuses]
-  );
+  const [activeAction, setActiveAction] = useState<ActionKey | null>(null);
 
   const runAction = async (action: ActionKey) => {
+    setActiveAction(action);
     setStatuses((prev) => ({
       ...prev,
-      [action]: { state: "loading" },
+      [action]: { state: "loading", message: "Running..." },
     }));
 
     try {
@@ -44,7 +158,7 @@ export function QuickActionsCard() {
         headers: { "content-type": "application/json" },
       });
 
-      const payload = (await response.json()) as { ok?: boolean; message?: string };
+      const payload = (await response.json()) as { ok?: boolean; message?: string } & Record<string, unknown>;
 
       if (!response.ok || !payload.ok) {
         throw new Error(payload.message || "Action failed");
@@ -54,6 +168,7 @@ export function QuickActionsCard() {
         ...prev,
         [action]: {
           state: "success",
+          data: payload,
           message: payload.message || "Action completed",
         },
       }));
@@ -67,6 +182,8 @@ export function QuickActionsCard() {
       }));
     }
   };
+
+  const activeStatus = activeAction ? statuses[activeAction] : null;
 
   return (
     <Card>
@@ -95,20 +212,47 @@ export function QuickActionsCard() {
                   )}
                   {action.label}
                 </Button>
-
-                {status.state === "success" ? (
-                  <p className="mt-2 text-xs text-emerald-300">✓ {status.message}</p>
-                ) : null}
-                {status.state === "error" ? (
-                  <p className="mt-2 text-xs text-destructive">✕ {status.message}</p>
-                ) : null}
               </div>
             );
           })}
         </div>
 
+        {activeAction && activeStatus ? (
+          <div className="rounded-lg border border-border/70 bg-card/40 p-4">
+            <div className="mb-3 flex items-center justify-between">
+              <p className="text-sm font-medium">
+                {ACTIONS.find((item) => item.key === activeAction)?.label} results
+              </p>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => setActiveAction(null)}
+              >
+                <X className="h-4 w-4" />
+                Close
+              </Button>
+            </div>
+
+            {activeStatus.state === "loading" ? (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Running action...
+              </div>
+            ) : null}
+
+            {activeStatus.state === "error" ? (
+              <p className="text-sm text-destructive">✕ {activeStatus.message}</p>
+            ) : null}
+
+            {activeStatus.state === "success" ? (
+              <div className="space-y-2">{renderActionResult(activeAction, activeStatus.data)}</div>
+            ) : null}
+          </div>
+        ) : null}
+
         <p className="text-xs text-muted-foreground">
-          {anyRunning ? "Running action…" : "Actions call stub API endpoints for now."}
+          Click any action to run it and inspect full results below.
         </p>
       </CardContent>
     </Card>
