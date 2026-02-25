@@ -34,6 +34,18 @@ function getAgentRole(assignmentLabel?: string | null, fallbackName?: string | n
   return { label: "Cortana", className: "agent-role-cortana" };
 }
 
+function getTaskSlug(assignmentLabel?: string | null, fallbackName?: string | null): string {
+  const source = (assignmentLabel || fallbackName || "").trim();
+  const parts = source.split(/[-_\s]/);
+  const prefix = parts[0]?.toLowerCase();
+
+  if (prefix && AGENT_ROLE_VARIANTS[prefix] && parts.length > 1) {
+    return parts.slice(1).join("-");
+  }
+
+  return source || "unassigned";
+}
+
 function getRunToneClass(statusValue: string) {
   const status = statusValue.toLowerCase();
 
@@ -203,9 +215,9 @@ export default async function Home() {
 
                   <div className="mt-3 flex flex-wrap items-center gap-2">
                     <Badge className={role.className}>{role.label}</Badge>
-                    <Badge variant="outline" className="max-w-full font-mono text-[10px]">
-                      {(run.assignmentLabel || run.agent?.name || "unassigned").slice(0, 8)}
-                    </Badge>
+                    <span className="truncate text-xs text-muted-foreground">
+                      {getTaskSlug(run.assignmentLabel, run.agent?.name)}
+                    </span>
                     {(run.externalStatus === "timeout" || run.externalStatus === "failed") && (
                       <Badge variant="destructive">attention</Badge>
                     )}
@@ -254,7 +266,7 @@ export default async function Home() {
                         <div className="flex items-center gap-2">
                           <Badge className={role.className}>{role.label}</Badge>
                           <span className="truncate">
-                            {run.assignmentLabel || run.agent?.name || "Unassigned"}
+                            {getTaskSlug(run.assignmentLabel, run.agent?.name)}
                           </span>
                         </div>
                       </td>

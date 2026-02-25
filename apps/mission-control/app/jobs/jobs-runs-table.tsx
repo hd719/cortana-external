@@ -46,6 +46,19 @@ function getAgentRole(assignmentLabel?: string | null, fallbackName?: string | n
   return { label: "Cortana", className: "agent-role-cortana" };
 }
 
+/** Extract the task slug from an assignment label by stripping the agent-role prefix */
+function getTaskSlug(assignmentLabel?: string | null, fallbackName?: string | null): string {
+  const source = (assignmentLabel || fallbackName || "").trim();
+  const parts = source.split(/[-_\s]/);
+  const prefix = parts[0]?.toLowerCase();
+
+  if (prefix && AGENT_ROLE_VARIANTS[prefix] && parts.length > 1) {
+    return parts.slice(1).join("-");
+  }
+
+  return source || "unassigned";
+}
+
 function getRunToneClass(statusValue: string) {
   const status = statusValue.toLowerCase();
 
@@ -130,9 +143,9 @@ export function JobsRunsTable({
 
               <div className="mt-3 flex flex-wrap items-center gap-2">
                 <Badge className={role.className}>{role.label}</Badge>
-                <Badge variant="outline" className="max-w-full font-mono text-[10px]">
-                  {(run.assignmentLabel || run.agent?.name || "unassigned").slice(0, 8)}
-                </Badge>
+                <span className="truncate text-xs text-muted-foreground">
+                  {getTaskSlug(run.assignmentLabel, run.agent?.name)}
+                </span>
                 {run.launchPhase === "phase2_running_unconfirmed" && (
                   <Badge variant="warning">launch unconfirmed</Badge>
                 )}
@@ -225,7 +238,7 @@ export function JobsRunsTable({
                     <div className="flex items-center gap-2">
                       <Badge className={role.className}>{role.label}</Badge>
                       <span className="truncate">
-                        {run.assignmentLabel || run.agent?.name || "Unassigned"}
+                        {getTaskSlug(run.assignmentLabel, run.agent?.name)}
                       </span>
                     </div>
                   </td>
