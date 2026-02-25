@@ -165,7 +165,7 @@ export default async function Home() {
                         </div>
                       </td>
                       <td className="px-3 py-2 text-muted-foreground">
-                        {run.agent?.name || "Unassigned"}
+                        {run.assignmentLabel || run.agent?.name || "Unassigned"}
                       </td>
                       <td className="px-3 py-2">
                         <div className="flex items-center gap-2">
