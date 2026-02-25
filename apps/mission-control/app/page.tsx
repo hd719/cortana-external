@@ -11,6 +11,7 @@ import { TodayStatsCard } from "@/components/today-stats-card";
 import { MoodRing } from "@/components/mood-ring";
 import { AutonomyGauge } from "@/components/autonomy-gauge";
 import { AgentStatusCard } from "@/components/agent-status-card";
+import { QuickActionsCard } from "@/components/quick-actions-card";
 
 export const dynamic = "force-dynamic";
 
@@ -114,6 +115,8 @@ export default async function Home() {
       </div>
 
       <TodayStatsCard />
+      <QuickActionsCard />
+
       <AgentStatusCard />
 
       <Card>
@@ -195,7 +198,7 @@ export default async function Home() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Quick actions</CardTitle>
+            <CardTitle className="text-base">API endpoints</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3 text-sm text-muted-foreground">
             <p>Use server actions or API routes to pull live data.</p>
