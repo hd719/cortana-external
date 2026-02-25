@@ -92,7 +92,7 @@ export function TodayStatsCard() {
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
           {items.map((item) => {
             const Icon = item.icon;
             const highlight = item.emphasizeOnNonZero && item.value > 0;
