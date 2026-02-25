@@ -9,6 +9,7 @@ import { HeartbeatPulse } from "@/components/heartbeat-pulse";
 import { ThinkingIndicator } from "@/components/thinking-indicator";
 import { ActivityFeed } from "@/components/activity-feed";
 import { TodayStatsCard } from "@/components/today-stats-card";
+import { MoodRing } from "@/components/mood-ring";
 
 export const dynamic = "force-dynamic";
 
@@ -78,6 +79,9 @@ export default async function Home() {
           </p>
         </div>
         <div className="flex w-full flex-col gap-2 sm:w-auto sm:items-end">
+          <div className="flex w-full justify-end sm:w-auto">
+            <MoodRing />
+          </div>
           <HeartbeatPulse />
           <ThinkingIndicator />
           <Badge variant="secondary" className="h-fit">Connected to Postgres</Badge>
