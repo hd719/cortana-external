@@ -23,7 +23,7 @@ Then we score each candidate on CANSLIM factors to find the best setups.
 import pandas as pd
 import numpy as np
 import yfinance as yf
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Set
 from datetime import datetime, timedelta
 import json
 from pathlib import Path
@@ -173,21 +173,80 @@ class UniverseScreener:
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(exist_ok=True)
     
+    def _dynamic_watchlist_path(self) -> Path:
+        """Path to dynamic watchlist JSON in this module directory."""
+        return Path(__file__).parent / "dynamic_watchlist.json"
+
+    def _load_dynamic_watchlist(self) -> List[Dict]:
+        """
+        Load dynamic ticker entries from disk.
+
+        Returns an empty list if file is missing/corrupt.
+        """
+        path = self._dynamic_watchlist_path()
+        if not path.exists():
+            return []
+
+        try:
+            payload = json.loads(path.read_text())
+            tickers = payload.get("tickers", [])
+            if not isinstance(tickers, list):
+                return []
+            return tickers
+        except Exception:
+            return []
+
+    def get_dynamic_tickers(self, include_growth: bool = True) -> List[str]:
+        """
+        Return only dynamic ticker symbols that are not already in static lists.
+        """
+        static_universe: Set[str] = set(SP500_TICKERS)
+        if include_growth:
+            static_universe.update(GROWTH_WATCHLIST)
+
+        dynamic_symbols: Set[str] = set()
+        for item in self._load_dynamic_watchlist():
+            symbol = str(item.get("symbol", "")).upper().strip()
+            if symbol:
+                dynamic_symbols.add(symbol)
+
+        return sorted(list(dynamic_symbols - static_universe))
+
+    def get_universe_stats(self, include_growth: bool = True) -> Dict[str, int]:
+        """
+        Return static/dynamic/total ticker counts for the active universe.
+        """
+        static_universe: Set[str] = set(SP500_TICKERS)
+        if include_growth:
+            static_universe.update(GROWTH_WATCHLIST)
+
+        dynamic_only = set(self.get_dynamic_tickers(include_growth=include_growth))
+        total = static_universe | dynamic_only
+
+        return {
+            "static": len(static_universe),
+            "dynamic": len(dynamic_only),
+            "total": len(total),
+        }
+
     def get_universe(self, include_growth: bool = True) -> List[str]:
         """
         Get the list of tickers to screen.
-        
+
         Args:
             include_growth: Include growth watchlist stocks
-        
+
         Returns:
             List of ticker symbols
         """
-        universe = set(SP500_TICKERS)
-        
+        universe: Set[str] = set(SP500_TICKERS)
+
         if include_growth:
             universe.update(GROWTH_WATCHLIST)
-        
+
+        # Merge dynamic social-discovery symbols (safe fallback to static-only).
+        universe.update(self.get_dynamic_tickers(include_growth=include_growth))
+
         return sorted(list(universe))
     
     def get_stock_info(self, symbol: str) -> Optional[Dict]:
