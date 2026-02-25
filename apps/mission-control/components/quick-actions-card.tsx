@@ -37,7 +37,7 @@ type ReflectionItem = {
 
 const ACTIONS: Array<{ key: ActionKey; label: string; icon: ComponentType<{ className?: string }> }> = [
   { key: "chaos-test", label: "Run Chaos Test", icon: Play },
-  { key: "reflection-sweep", label: "Trigger Reflection Sweep", icon: RefreshCcw },
+  { key: "reflection-sweep", label: "Reflection Sweep", icon: RefreshCcw },
   { key: "check-budget", label: "Check Budget", icon: Wallet },
   { key: "force-heartbeat", label: "Force Heartbeat", icon: HeartPulse },
 ];
@@ -203,7 +203,7 @@ export function QuickActionsCard() {
                   onClick={() => runAction(action.key)}
                   disabled={isLoading}
                   variant="outline"
-                  className="w-full justify-start border-border/70 bg-background/60"
+                  className="w-full justify-start truncate border-border/70 bg-background/60"
                 >
                   {isLoading ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
