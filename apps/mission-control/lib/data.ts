@@ -8,6 +8,7 @@ import { getTaskListenerStatus } from "@/lib/task-listener";
 import { deriveEvidenceGrade, deriveLaunchPhase, extractProviderPath } from "@/lib/run-intelligence";
 import {
   AgentOperationalStats,
+  AgentRecentRun,
   computeHealthScore,
   deriveHealthBand,
 } from "@/lib/agent-health";
@@ -48,9 +49,60 @@ const deriveAssignmentLabel = (run: {
   return candidates.find(Boolean) ?? null;
 };
 
+const STALE_RUNNING_RECONCILE_MS = 1000 * 60 * 60 * 2;
+const STALE_RUNNING_RECONCILE_NOTE = "auto-reconciled: stale running state";
+let lastStaleRunReconcileAt = 0;
+
+const appendReconcileNote = (summary: string | null) => {
+  if (!summary || summary.trim().length === 0) return STALE_RUNNING_RECONCILE_NOTE;
+  return summary.includes(STALE_RUNNING_RECONCILE_NOTE)
+    ? summary
+    : `${summary} | ${STALE_RUNNING_RECONCILE_NOTE}`;
+};
+
+const reconcileStaleRunningRuns = async () => {
+  const now = Date.now();
+  if (now - lastStaleRunReconcileAt < 60_000) return 0;
+
+  const staleBefore = new Date(now - STALE_RUNNING_RECONCILE_MS);
+  const staleRuns = await prisma.run.findMany({
+    where: {
+      status: RunStatus.running,
+      updatedAt: { lt: staleBefore },
+    },
+    select: {
+      id: true,
+      summary: true,
+    },
+  });
+
+  if (staleRuns.length === 0) {
+    lastStaleRunReconcileAt = now;
+    return 0;
+  }
+
+  await prisma.$transaction(
+    staleRuns.map((run) =>
+      prisma.run.update({
+        where: { id: run.id },
+        data: {
+          status: RunStatus.failed,
+          summary: appendReconcileNote(run.summary),
+          completedAt: new Date(),
+          externalStatus: "failed",
+        },
+      })
+    )
+  );
+
+  lastStaleRunReconcileAt = now;
+  return staleRuns.length;
+};
+
 export const getAgents = async () => {
   noStore();
   await syncOpenClawRunsFromStore();
+  await reconcileStaleRunningRuns();
 
   const taskPrisma = getTaskPrisma();
 
@@ -60,7 +112,7 @@ export const getAgents = async () => {
     }),
     prisma.run.findMany({
       where: { agentId: { not: null } },
-      select: { agentId: true, status: true },
+      select: { agentId: true, status: true, updatedAt: true },
       take: 2000,
       orderBy: [{ updatedAt: "desc" }],
     }),
@@ -89,6 +141,7 @@ export const getAgents = async () => {
 
   const MAX_TERMINAL_RUNS_PER_AGENT = 60;
   const terminalRunsCountByAgent = new Map<string, number>();
+  const recentRunsByAgent = new Map<string, AgentRecentRun[]>();
 
   for (const run of runs) {
     if (!run.agentId) continue;
@@ -110,6 +163,18 @@ export const getAgents = async () => {
     if (run.status === RunStatus.completed) stats.completedRuns += 1;
     else if (run.status === RunStatus.failed) stats.failedRuns += 1;
     else if (run.status === RunStatus.cancelled) stats.cancelledRuns += 1;
+
+    const recentRuns = recentRunsByAgent.get(run.agentId) || [];
+    recentRuns.push({
+      status:
+        run.status === RunStatus.completed
+          ? "completed"
+          : run.status === RunStatus.failed
+            ? "failed"
+            : "cancelled",
+      timestamp: run.updatedAt,
+    });
+    recentRunsByAgent.set(run.agentId, recentRuns);
   }
 
   const agentIdsByIdentity = new Map<string, string[]>();
@@ -161,7 +226,7 @@ export const getAgents = async () => {
       failedTasks: 0,
     };
 
-    const healthScore = computeHealthScore(stats);
+    const healthScore = computeHealthScore(stats, recentRunsByAgent.get(agent.id));
     const healthBand = deriveHealthBand(healthScore);
 
     return {
