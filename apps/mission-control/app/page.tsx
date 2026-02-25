@@ -8,6 +8,7 @@ import { AutoRefresh } from "@/components/auto-refresh";
 import { HeartbeatPulse } from "@/components/heartbeat-pulse";
 import { ThinkingIndicator } from "@/components/thinking-indicator";
 import { ActivityFeed } from "@/components/activity-feed";
+import { TodayStatsCard } from "@/components/today-stats-card";
 
 export const dynamic = "force-dynamic";
 
@@ -107,6 +108,8 @@ export default async function Home() {
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">
+        <TodayStatsCard />
+
         <Card className="lg:col-span-1">
           <CardHeader>
             <CardTitle className="flex items-center justify-between text-base">
