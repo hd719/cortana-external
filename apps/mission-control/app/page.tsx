@@ -2,7 +2,6 @@ import { getDashboardSummary } from "@/lib/data";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatusBadge } from "@/components/status-badge";
 import { StatCard } from "@/components/stat-card";
-import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { AutoRefresh } from "@/components/auto-refresh";
 import { HeartbeatPulse } from "@/components/heartbeat-pulse";
@@ -10,6 +9,7 @@ import { ThinkingIndicator } from "@/components/thinking-indicator";
 import { ActivityFeed } from "@/components/activity-feed";
 import { TodayStatsCard } from "@/components/today-stats-card";
 import { MoodRing } from "@/components/mood-ring";
+import { AgentStatusCard } from "@/components/agent-status-card";
 
 export const dynamic = "force-dynamic";
 
@@ -78,10 +78,8 @@ export default async function Home() {
             Prisma.
           </p>
         </div>
-        <div className="flex w-full flex-col gap-2 sm:w-auto sm:items-end">
-          <div className="flex w-full justify-end sm:w-auto">
-            <MoodRing />
-          </div>
+        <div className="flex w-full flex-wrap items-center gap-3 sm:w-auto sm:justify-end">
+          <MoodRing />
           <HeartbeatPulse />
           <ThinkingIndicator />
           <Badge variant="secondary" className="h-fit">Connected to Postgres</Badge>
@@ -114,40 +112,7 @@ export default async function Home() {
       <div className="grid gap-4 lg:grid-cols-3">
         <TodayStatsCard />
 
-        <Card className="lg:col-span-1">
-          <CardHeader>
-            <CardTitle className="flex items-center justify-between text-base">
-              Agent health
-              <Badge variant="outline">live</Badge>
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {data.agents.map((agent) => (
-              <div
-                key={agent.id}
-                className="rounded-lg border bg-card/60 px-3 py-3 shadow-sm"
-              >
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="font-medium leading-tight">{agent.name}</p>
-                    <p className="text-xs text-muted-foreground">{agent.role}</p>
-                  </div>
-                  <StatusBadge value={agent.status} variant="agent" />
-                </div>
-                <div className="mt-3 space-y-2 text-xs text-muted-foreground">
-                  <div className="flex items-center justify-between">
-                    <span>Health</span>
-                    <span className="font-medium text-foreground">
-                      {agent.healthScore ?? "—"}
-                    </span>
-                  </div>
-                  <Progress value={agent.healthScore ?? 0} />
-                  <p className="leading-tight">{agent.description}</p>
-                </div>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
+        <AgentStatusCard />
 
         <Card className="lg:col-span-2">
           <CardHeader>
