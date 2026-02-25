@@ -104,6 +104,16 @@ const gatherAssignmentCandidates = (source: AssignmentSource): string[] => {
     if (prefix) out.push(prefix);
   }
 
+  // Scan task text for known agent name mentions (e.g., "Spawn a Huragok to...")
+  const taskText = stringFromUnknown(metadata?.task) ?? stringFromUnknown(payload?.task);
+  if (taskText) {
+    for (const prefix of OPENCLAW_AGENT_PREFIXES) {
+      if (taskText.toLowerCase().includes(prefix.toLowerCase())) {
+        out.push(prefix);
+      }
+    }
+  }
+
   return [...new Set(out.map((v) => v.trim()).filter(Boolean))];
 };
 
