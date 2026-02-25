@@ -34,7 +34,7 @@ func main() {
 	tonalEmail := os.Getenv("TONAL_EMAIL")
 	tonalPassword := os.Getenv("TONAL_PASSWORD")
 	if tonalEmail == "" || tonalPassword == "" {
-		log.Println("[tonal] WARNING: TONAL_EMAIL or TONAL_PASSWORD not set - /tonal/data will fail")
+		log.Println("[tonal] NOTICE: TONAL_EMAIL or TONAL_PASSWORD not set; existing token file will still work. Fresh auth/refresh fallback may fail without env credentials")
 	}
 
 	tonalSvc := &tonal.Service{
