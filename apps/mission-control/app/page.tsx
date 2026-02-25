@@ -9,7 +9,8 @@ import { ThinkingIndicator } from "@/components/thinking-indicator";
 import { ActivityFeed } from "@/components/activity-feed";
 import { TodayStatsCard } from "@/components/today-stats-card";
 import { AutonomyGauge } from "@/components/autonomy-gauge";
-import { AgentStatusCard } from "@/components/agent-status-card";
+// Agent status moved to /agents roster page
+// import { AgentStatusCard } from "@/components/agent-status-card";
 import { QuickActionsCard } from "@/components/quick-actions-card";
 
 export const dynamic = "force-dynamic";
@@ -114,8 +115,6 @@ export default async function Home() {
 
       <TodayStatsCard />
       <QuickActionsCard />
-
-      <AgentStatusCard />
 
       <Card>
         <CardHeader>
