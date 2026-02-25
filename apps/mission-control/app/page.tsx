@@ -15,6 +15,37 @@ import { QuickActionsCard } from "@/components/quick-actions-card";
 
 export const dynamic = "force-dynamic";
 
+const AGENT_ROLE_VARIANTS: Record<string, { label: string; className: string }> = {
+  huragok: { label: "Huragok", className: "agent-role-huragok" },
+  researcher: { label: "Researcher", className: "agent-role-researcher" },
+  monitor: { label: "Monitor", className: "agent-role-monitor" },
+  oracle: { label: "Oracle", className: "agent-role-oracle" },
+  librarian: { label: "Librarian", className: "agent-role-librarian" },
+};
+
+function getAgentRole(assignmentLabel?: string | null, fallbackName?: string | null) {
+  const source = (assignmentLabel || fallbackName || "").toLowerCase().trim();
+  const prefix = source.split(/[-_\s]/)[0];
+
+  if (prefix && AGENT_ROLE_VARIANTS[prefix]) {
+    return AGENT_ROLE_VARIANTS[prefix];
+  }
+
+  return { label: "Cortana", className: "agent-role-cortana" };
+}
+
+function getRunToneClass(statusValue: string) {
+  const status = statusValue.toLowerCase();
+
+  if (status === "running") return "run-card-running";
+  if (status === "queued") return "run-card-queued";
+  if (status === "failed") return "run-card-failed";
+  if (status === "done" || status === "completed") return "run-card-done";
+  if (status === "timeout" || status === "stale") return "run-card-timeout";
+
+  return "run-card-default";
+}
+
 export default async function Home() {
   let data: Awaited<ReturnType<typeof getDashboardSummary>> | null = null;
   let error: string | null = null;
@@ -36,9 +67,15 @@ export default async function Home() {
           <p>{error}</p>
           <ol className="list-decimal space-y-1 pl-5">
             <li>Copy .env.example to .env.local and update DATABASE_URL.</li>
-            <li>Run <code className="font-mono">pnpm db:migrate</code>.</li>
-            <li>Seed starter data with <code className="font-mono">pnpm db:seed</code>.</li>
-            <li>Restart the dev server: <code className="font-mono">pnpm dev</code>.</li>
+            <li>
+              Run <code className="font-mono">pnpm db:migrate</code>.
+            </li>
+            <li>
+              Seed starter data with <code className="font-mono">pnpm db:seed</code>.
+            </li>
+            <li>
+              Restart the dev server: <code className="font-mono">pnpm dev</code>.
+            </li>
           </ol>
         </CardContent>
       </Card>
@@ -97,11 +134,7 @@ export default async function Home() {
       </div>
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <StatCard
-          title="Agents"
-          value={totalAgents}
-          description={agentsDescription}
-        />
+        <StatCard title="Agents" value={totalAgents} description={agentsDescription} />
         <StatCard
           title="Active runs"
           value={activeRuns}
@@ -125,50 +158,105 @@ export default async function Home() {
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Runs & jobs</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-3 gap-4 text-sm text-muted-foreground">
-              <div className="rounded-lg border bg-card/50 p-3">
-                <p className="text-xs">Running</p>
-                <p className="text-xl font-semibold text-foreground">
-                  {runningRuns}
-                </p>
-              </div>
-              <div className="rounded-lg border bg-card/50 p-3">
-                <p className="text-xs">Queued</p>
-                <p className="text-xl font-semibold text-foreground">
-                  {queuedRuns}
-                </p>
-              </div>
-              <div className="rounded-lg border bg-card/50 p-3">
-                <p className="text-xs">Failed (24h)
-                </p>
-                <p className="text-xl font-semibold text-destructive">
-                  {data.metrics.runs.byStatus.failed || 0}
-                </p>
-              </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-3 gap-3 text-sm">
+            <div className="rounded-lg border border-emerald-200/70 bg-emerald-50/70 p-3 dark:border-emerald-900/70 dark:bg-emerald-950/20">
+              <p className="text-xs text-emerald-800 dark:text-emerald-300">Running</p>
+              <p className="text-xl font-semibold text-emerald-700 dark:text-emerald-200">
+                {runningRuns}
+              </p>
             </div>
-            <div className="overflow-x-auto rounded-md border">
-              <table className="min-w-[640px] w-full text-sm">
-                <thead className="bg-muted/70 text-left text-xs uppercase tracking-wide text-muted-foreground">
-                  <tr>
-                    <th className="px-3 py-2">Run</th>
-                    <th className="px-3 py-2">Agent</th>
-                    <th className="px-3 py-2">Status</th>
-                    <th className="px-3 py-2">Started</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.runs.map((run) => (
+            <div className="rounded-lg border border-amber-200/70 bg-amber-50/70 p-3 dark:border-amber-900/70 dark:bg-amber-950/20">
+              <p className="text-xs text-amber-800 dark:text-amber-300">Queued</p>
+              <p className="text-xl font-semibold text-amber-700 dark:text-amber-200">
+                {queuedRuns}
+              </p>
+            </div>
+            <div className="rounded-lg border border-red-200/70 bg-red-50/70 p-3 dark:border-red-900/70 dark:bg-red-950/20">
+              <p className="text-xs text-red-800 dark:text-red-300">Failed (24h)</p>
+              <p className="text-xl font-semibold text-red-700 dark:text-red-200">
+                {data.metrics.runs.byStatus.failed || 0}
+              </p>
+            </div>
+          </div>
+
+          <div className="space-y-3 md:hidden">
+            {data.runs.map((run) => {
+              const effectiveStatus = (run.externalStatus || run.status).toString().toLowerCase();
+              const role = getAgentRole(run.assignmentLabel, run.agent?.name);
+
+              return (
+                <div
+                  key={run.id}
+                  className={`rounded-lg border p-3 shadow-sm ${getRunToneClass(effectiveStatus)}`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-foreground">{run.jobType}</p>
+                      <p className="line-clamp-2 break-words text-xs text-muted-foreground">
+                        {run.summary || "No summary"}
+                      </p>
+                    </div>
+                    <StatusBadge value={run.externalStatus || run.status} variant="run" />
+                  </div>
+
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <Badge className={role.className}>{role.label}</Badge>
+                    <Badge variant="outline" className="max-w-full font-mono text-[10px]">
+                      {(run.assignmentLabel || run.agent?.name || "unassigned").slice(0, 8)}
+                    </Badge>
+                    {(run.externalStatus === "timeout" || run.externalStatus === "failed") && (
+                      <Badge variant="destructive">attention</Badge>
+                    )}
+                  </div>
+
+                  <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-muted-foreground">
+                    <div>
+                      <p className="text-[10px] uppercase tracking-wide">Run ID</p>
+                      <p className="font-mono text-foreground">{run.id.slice(0, 8)}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] uppercase tracking-wide">Started</p>
+                      <p className="break-words">{run.startedAt.toLocaleString()}</p>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="hidden rounded-md border md:block">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/70 text-left text-xs uppercase tracking-wide text-muted-foreground">
+                <tr>
+                  <th className="px-3 py-2">Run</th>
+                  <th className="px-3 py-2">Agent</th>
+                  <th className="px-3 py-2">Status</th>
+                  <th className="px-3 py-2">Started</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.runs.map((run) => {
+                  const role = getAgentRole(run.assignmentLabel, run.agent?.name);
+                  return (
                     <tr key={run.id} className="border-t">
                       <td className="px-3 py-2 font-medium text-foreground">
                         {run.jobType}
-                        <div className="text-xs text-muted-foreground">
+                        <div className="line-clamp-1 max-w-[320px] text-xs text-muted-foreground">
                           {run.summary || "No summary"}
+                        </div>
+                        <div className="mt-1 text-[10px] font-mono text-muted-foreground">
+                          {run.id}
                         </div>
                       </td>
                       <td className="px-3 py-2 text-muted-foreground">
-                        {run.assignmentLabel || run.agent?.name || "Unassigned"}
+                        <div className="flex items-center gap-2">
+                          <Badge className={role.className}>{role.label}</Badge>
+                          <span className="truncate">
+                            {run.assignmentLabel || run.agent?.name || "Unassigned"}
+                          </span>
+                        </div>
                       </td>
                       <td className="px-3 py-2">
                         <div className="flex items-center gap-2">
@@ -182,12 +270,13 @@ export default async function Home() {
                         {run.startedAt.toLocaleString()}
                       </td>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </CardContent>
-        </Card>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
 
       <div className="grid gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2">
