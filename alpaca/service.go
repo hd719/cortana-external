@@ -24,51 +24,64 @@ type Keys struct {
 
 // Account represents Alpaca account info
 type Account struct {
-	ID               string  `json:"id"`
-	AccountNumber    string  `json:"account_number"`
-	Status           string  `json:"status"`
-	Currency         string  `json:"currency"`
-	Cash             string  `json:"cash"`
-	PortfolioValue   string  `json:"portfolio_value"`
-	BuyingPower      string  `json:"buying_power"`
-	Equity           string  `json:"equity"`
-	LastEquity       string  `json:"last_equity"`
-	DaytradeCount    int     `json:"daytrade_count"`
-	PatternDayTrader bool    `json:"pattern_day_trader"`
+	ID               string `json:"id"`
+	AccountNumber    string `json:"account_number"`
+	Status           string `json:"status"`
+	Currency         string `json:"currency"`
+	Cash             string `json:"cash"`
+	PortfolioValue   string `json:"portfolio_value"`
+	BuyingPower      string `json:"buying_power"`
+	Equity           string `json:"equity"`
+	LastEquity       string `json:"last_equity"`
+	DaytradeCount    int    `json:"daytrade_count"`
+	PatternDayTrader bool   `json:"pattern_day_trader"`
 }
 
 // Position represents a single position in the portfolio
 type Position struct {
-	Symbol           string `json:"symbol"`
-	Qty              string `json:"qty"`
-	Side             string `json:"side"`
-	MarketValue      string `json:"market_value"`
-	CostBasis        string `json:"cost_basis"`
-	UnrealizedPL     string `json:"unrealized_pl"`
-	UnrealizedPLPC   string `json:"unrealized_plpc"`
-	CurrentPrice     string `json:"current_price"`
-	AvgEntryPrice    string `json:"avg_entry_price"`
-	ChangeToday      string `json:"change_today"`
+	Symbol         string `json:"symbol"`
+	Qty            string `json:"qty"`
+	Side           string `json:"side"`
+	MarketValue    string `json:"market_value"`
+	CostBasis      string `json:"cost_basis"`
+	UnrealizedPL   string `json:"unrealized_pl"`
+	UnrealizedPLPC string `json:"unrealized_plpc"`
+	CurrentPrice   string `json:"current_price"`
+	AvgEntryPrice  string `json:"avg_entry_price"`
+	ChangeToday    string `json:"change_today"`
+}
+
+// LatestTrade represents Alpaca latest trade payload
+type LatestTrade struct {
+	P float64 `json:"p"`
+	T string  `json:"t"`
+}
+
+// LatestQuote represents Alpaca latest quote payload
+type LatestQuote struct {
+	BP float64 `json:"bp"`
+	AP float64 `json:"ap"`
+	T  string  `json:"t"`
 }
 
 // Trade represents a tracked trade recommendation
 type Trade struct {
-	ID           string    `json:"id"`
-	Symbol       string    `json:"symbol"`
-	Action       string    `json:"action"`        // BUY, SELL
-	Status       string    `json:"status"`        // recommended, executed, declined, closed
-	Score        int       `json:"score"`         // CANSLIM score
-	EntryPrice   float64   `json:"entry_price"`
-	StopLoss     float64   `json:"stop_loss"`
-	Shares       int       `json:"shares"`
-	Reasoning    string    `json:"reasoning"`
-	RecommendedAt time.Time `json:"recommended_at"`
-	ExecutedAt   *time.Time `json:"executed_at,omitempty"`
-	ExecutedPrice *float64  `json:"executed_price,omitempty"`
-	ClosedAt     *time.Time `json:"closed_at,omitempty"`
-	ClosedPrice  *float64   `json:"closed_price,omitempty"`
-	PnL          *float64   `json:"pnl,omitempty"`
-	PnLPct       *float64   `json:"pnl_pct,omitempty"`
+	ID            string     `json:"id"`
+	Symbol        string     `json:"symbol"`
+	Action        string     `json:"action"` // BUY, SELL
+	Status        string     `json:"status"` // recommended, executed, declined, closed
+	Score         int        `json:"score"`  // CANSLIM score
+	EntryPrice    float64    `json:"entry_price"`
+	StopLoss      float64    `json:"stop_loss"`
+	Shares        int        `json:"shares"`
+	Reasoning     string     `json:"reasoning"`
+	RecommendedAt time.Time  `json:"recommended_at"`
+	ExecutedAt    *time.Time `json:"executed_at,omitempty"`
+	ExecutedPrice *float64   `json:"executed_price,omitempty"`
+	ClosedAt      *time.Time `json:"closed_at,omitempty"`
+	ClosedPrice   *float64   `json:"closed_price,omitempty"`
+	PnL           *float64   `json:"pnl,omitempty"`
+	PnLPct        *float64   `json:"pnl_pct,omitempty"`
 }
 
 // TradeLog stores all tracked trades
@@ -83,9 +96,9 @@ type Service struct {
 	KeysPath   string
 	TradesPath string
 
-	keys     *Keys
-	trades   *TradeLog
-	mu       sync.RWMutex
+	keys   *Keys
+	trades *TradeLog
+	mu     sync.RWMutex
 }
 
 // LoadKeys loads API keys from file
@@ -111,6 +124,7 @@ func (s *Service) LoadKeys() error {
 	if keys.DataURL == "" {
 		keys.DataURL = "https://data.alpaca.markets"
 	}
+	keys.DataURL = strings.TrimRight(keys.DataURL, "/")
 
 	s.keys = &keys
 	return nil
@@ -322,6 +336,141 @@ func (s *Service) PortfolioHandler(c *gin.Context) {
 	})
 }
 
+// QuoteHandler returns latest quote + latest trade for symbol.
+func (s *Service) QuoteHandler(c *gin.Context) {
+	if err := s.ensureKeysLoaded(); err != nil {
+		s.Logger.Printf("failed to load Alpaca keys in /alpaca/quote: %v", err)
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
+		return
+	}
+
+	symbol := strings.ToUpper(strings.TrimSpace(c.Param("symbol")))
+	if symbol == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "symbol is required"})
+		return
+	}
+
+	quoteURL := fmt.Sprintf("%s/v2/stocks/%s/quotes/latest", s.keys.DataURL, symbol)
+	quoteData, err := s.makeRequest("GET", quoteURL)
+	if err != nil {
+		s.Logger.Printf("alpaca quote request failed for %s: %v", symbol, err)
+		c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
+		return
+	}
+
+	var quoteResp struct {
+		Quote LatestQuote `json:"quote"`
+	}
+	if err := json.Unmarshal(quoteData, &quoteResp); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	tradeURL := fmt.Sprintf("%s/v2/stocks/%s/trades/latest", s.keys.DataURL, symbol)
+	tradeData, err := s.makeRequest("GET", tradeURL)
+	if err != nil {
+		s.Logger.Printf("alpaca latest trade request failed for %s: %v", symbol, err)
+		c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
+		return
+	}
+
+	var tradeResp struct {
+		Trade LatestTrade `json:"trade"`
+	}
+	if err := json.Unmarshal(tradeData, &tradeResp); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	timestamp := quoteResp.Quote.T
+	if timestamp == "" {
+		timestamp = tradeResp.Trade.T
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"symbol":     symbol,
+		"bid":        quoteResp.Quote.BP,
+		"ask":        quoteResp.Quote.AP,
+		"last_price": tradeResp.Trade.P,
+		"timestamp":  timestamp,
+	})
+}
+
+// SnapshotHandler returns market snapshot for symbol.
+func (s *Service) SnapshotHandler(c *gin.Context) {
+	if err := s.ensureKeysLoaded(); err != nil {
+		s.Logger.Printf("failed to load Alpaca keys in /alpaca/snapshot: %v", err)
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
+		return
+	}
+
+	symbol := strings.ToUpper(strings.TrimSpace(c.Param("symbol")))
+	if symbol == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "symbol is required"})
+		return
+	}
+
+	url := fmt.Sprintf("%s/v2/stocks/%s/snapshot", s.keys.DataURL, symbol)
+	data, err := s.makeRequest("GET", url)
+	if err != nil {
+		s.Logger.Printf("alpaca snapshot request failed for %s: %v", symbol, err)
+		c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
+		return
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(data, &payload); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"symbol":         symbol,
+		"latest_trade":   payload["latestTrade"],
+		"latest_quote":   payload["latestQuote"],
+		"minute_bar":     payload["minuteBar"],
+		"daily_bar":      payload["dailyBar"],
+		"prev_daily_bar": payload["prevDailyBar"],
+	})
+}
+
+// BarsHandler returns latest daily bars (OHLCV) for symbol.
+func (s *Service) BarsHandler(c *gin.Context) {
+	if err := s.ensureKeysLoaded(); err != nil {
+		s.Logger.Printf("failed to load Alpaca keys in /alpaca/bars: %v", err)
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
+		return
+	}
+
+	symbol := strings.ToUpper(strings.TrimSpace(c.Param("symbol")))
+	if symbol == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "symbol is required"})
+		return
+	}
+
+	url := fmt.Sprintf("%s/v2/stocks/%s/bars?timeframe=1Day&limit=5", s.keys.DataURL, symbol)
+	data, err := s.makeRequest("GET", url)
+	if err != nil {
+		s.Logger.Printf("alpaca bars request failed for %s: %v", symbol, err)
+		c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
+		return
+	}
+
+	var barsResp struct {
+		Bars []map[string]any `json:"bars"`
+	}
+	if err := json.Unmarshal(data, &barsResp); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"symbol": symbol,
+		"bars":   barsResp.Bars,
+		"count":  len(barsResp.Bars),
+	})
+}
+
 // TradesHandler returns trade history
 func (s *Service) TradesHandler(c *gin.Context) {
 	if err := s.LoadTrades(); err != nil {
@@ -439,13 +588,13 @@ func (s *Service) StatsHandler(c *gin.Context) {
 	defer s.mu.RUnlock()
 
 	var (
-		total      int
-		executed   int
-		declined   int
-		closed     int
-		wins       int
-		losses     int
-		totalPnL   float64
+		total    int
+		executed int
+		declined int
+		closed   int
+		wins     int
+		losses   int
+		totalPnL float64
 	)
 
 	for _, t := range s.trades.Trades {
