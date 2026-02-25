@@ -179,3 +179,57 @@
 .heartbeat-unknown {
   background: oklch(0.64 0 0);
 }
+
+@keyframes thinking-drift {
+  0%,
+  100% {
+    opacity: 0.55;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.08);
+  }
+}
+
+@keyframes thinking-shimmer {
+  0% {
+    background-position: 120% 0;
+  }
+  100% {
+    background-position: -120% 0;
+  }
+}
+
+.thinking-dot {
+  display: inline-flex;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 9999px;
+  flex-shrink: 0;
+}
+
+.thinking-active {
+  background: oklch(0.68 0.2 251);
+  animation: thinking-drift 2.2s ease-in-out infinite;
+}
+
+.thinking-idle {
+  background: oklch(0.68 0 0);
+  animation: thinking-drift 4s ease-in-out infinite;
+}
+
+.thinking-text {
+  background-image: linear-gradient(
+    100deg,
+    oklch(0.985 0 0 / 0.88) 15%,
+    oklch(0.72 0.16 257 / 0.96) 45%,
+    oklch(0.985 0 0 / 0.88) 75%
+  );
+  background-size: 220% 100%;
+  background-position: 120% 0;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: thinking-shimmer 4.5s linear infinite;
+}
