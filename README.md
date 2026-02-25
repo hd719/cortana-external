@@ -115,9 +115,10 @@ pnpm dev
 ```
 
 ### Key pages/features
-- `/` dashboard
+- `/` dashboard (system mood widget removed in PR #34 to reduce visual noise)
 - `/task-board` (reads `cortana_tasks` + `cortana_epics`)
-- `/jobs`, `/agents`
+- `/jobs`, `/agents` (runs/jobs now include agent labels from PR #32)
+- Mobile responsiveness improvements across Mission Control layouts (PR #33)
 - `/decisions` (decision traces)
 - `/api/live` SSE refresh
 - OpenClaw subagent lifecycle ingestion endpoint
