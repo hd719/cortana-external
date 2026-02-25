@@ -8,7 +8,6 @@ import { HeartbeatPulse } from "@/components/heartbeat-pulse";
 import { ThinkingIndicator } from "@/components/thinking-indicator";
 import { ActivityFeed } from "@/components/activity-feed";
 import { TodayStatsCard } from "@/components/today-stats-card";
-import { MoodRing } from "@/components/mood-ring";
 import { AutonomyGauge } from "@/components/autonomy-gauge";
 import { AgentStatusCard } from "@/components/agent-status-card";
 import { QuickActionsCard } from "@/components/quick-actions-card";
@@ -80,8 +79,7 @@ export default async function Home() {
             Prisma.
           </p>
         </div>
-        <div className="grid w-full grid-cols-2 gap-3 sm:w-auto sm:grid-cols-5">
-          <MoodRing />
+        <div className="grid w-full grid-cols-2 gap-3 sm:w-auto sm:grid-cols-4">
           <HeartbeatPulse />
           <ThinkingIndicator />
           <div className="flex h-full flex-col justify-center rounded-lg border bg-card/60 px-3 py-2 shadow-sm">
