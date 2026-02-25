@@ -14,6 +14,9 @@ __pycache__/
 # Data cache
 backtester/data/cache/
 
+# Watchdog logs
+watchdog/logs/
+
 # Node/Next.js
 node_modules
 apps/mission-control/node_modules
