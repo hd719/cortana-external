@@ -145,8 +145,8 @@ export default async function Home() {
                 </p>
               </div>
             </div>
-            <div className="overflow-hidden rounded-md border">
-              <table className="w-full text-sm">
+            <div className="overflow-x-auto rounded-md border">
+              <table className="min-w-[640px] w-full text-sm">
                 <thead className="bg-muted/70 text-left text-xs uppercase tracking-wide text-muted-foreground">
                   <tr>
                     <th className="px-3 py-2">Run</th>
