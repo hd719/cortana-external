@@ -35,6 +35,9 @@ const severityMap: Record<Severity, BadgeVariant> = {
 };
 
 const taskMap: Record<string, BadgeVariant> = {
+  backlog: "outline",
+  scheduled: "secondary",
+  ready: "success",
   pending: "secondary",
   in_progress: "warning",
   blocked: "warning",

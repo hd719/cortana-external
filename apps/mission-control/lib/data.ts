@@ -436,9 +436,13 @@ const completionTime = (task: TaskBoardTask) => task.completedAt?.getTime() ?? t
 const activeTaskSortRank = (task: TaskBoardTask) => {
   if (task.status === "in_progress") return 0;
   if (task.status === "blocked") return 1;
-  if (task.status === "pending" && !task.dependencyReady) return 1;
-  if (task.status === "pending") return 2;
-  return 3;
+  if (task.status === "ready" && !task.dependencyReady) return 1;
+  if (task.status === "ready") return 2;
+  if (task.status === "scheduled") return 3;
+  if (task.status === "backlog") return 4;
+  if (task.status === "pending" && !task.dependencyReady) return 5;
+  if (task.status === "pending") return 6;
+  return 7;
 };
 
 export const getTaskBoard = async ({
@@ -555,21 +559,21 @@ export const getTaskBoard = async ({
 
   const readyNow = activeTasks.filter(
     (task) =>
-      task.status === "pending" &&
+      (task.status === "ready" || task.status === "pending") &&
       task.autoExecutable &&
       task.dependencyReady
   );
 
   const blocked = activeTasks.filter(
     (task) =>
-      task.status === "pending" &&
+      (task.status === "ready" || task.status === "pending") &&
       (task.dependsOn?.length || 0) > 0 &&
       !task.dependencyReady
   );
 
   const dueSoon = activeTasks.filter(
     (task) =>
-      task.status === "pending" &&
+      (task.status === "ready" || task.status === "pending" || task.status === "scheduled") &&
       task.dueAt &&
       task.dueAt >= now &&
       task.dueAt <= soon
@@ -577,7 +581,7 @@ export const getTaskBoard = async ({
 
   const overdue = activeTasks.filter(
     (task) =>
-      task.status === "pending" &&
+      (task.status === "ready" || task.status === "pending" || task.status === "scheduled") &&
       task.dueAt &&
       task.dueAt < now
   );

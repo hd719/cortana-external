@@ -8,7 +8,15 @@ import { StatusBadge } from "@/components/status-badge";
 import { TaskBoardTask } from "@/lib/data";
 import { cn } from "@/lib/utils";
 
-type StatusFilter = "all" | "pending" | "in_progress" | "auto_ready" | "done";
+type StatusFilter =
+  | "all"
+  | "backlog"
+  | "scheduled"
+  | "ready"
+  | "pending"
+  | "in_progress"
+  | "auto_ready"
+  | "done";
 
 type CompletedPagination = {
   total: number;
@@ -20,14 +28,20 @@ type CompletedPagination = {
 
 const FILTER_LABELS: Record<StatusFilter, string> = {
   all: "All",
-  pending: "Pending",
+  backlog: "Backlog",
+  scheduled: "Scheduled",
+  ready: "Ready",
+  pending: "Pending (legacy)",
   in_progress: "In progress",
   auto_ready: "Auto-ready",
   done: "Done",
 };
 
 const FILTER_EMPTY: Record<Exclude<StatusFilter, "all">, string> = {
-  pending: "No pending tasks right now.",
+  backlog: "No backlog tasks right now.",
+  scheduled: "No scheduled tasks right now.",
+  ready: "No ready tasks right now.",
+  pending: "No pending legacy tasks right now.",
   in_progress: "No tasks currently in progress.",
   auto_ready: "No auto-ready tasks available right now.",
   done: "No completed tasks yet.",
@@ -101,14 +115,23 @@ export function TaskStatusFilters({
   const allTasks = useMemo(() => [...activeTasks, ...completedTasks], [activeTasks, completedTasks]);
 
   const counts = useMemo(() => {
+    const backlog = activeTasks.filter((task) => task.status === "backlog").length;
+    const scheduled = activeTasks.filter((task) => task.status === "scheduled").length;
+    const ready = activeTasks.filter((task) => task.status === "ready").length;
     const pending = activeTasks.filter((task) => task.status === "pending").length;
     const inProgress = activeTasks.filter((task) => task.status === "in_progress").length;
     const autoReady = activeTasks.filter(
-      (task) => task.status === "pending" && task.autoExecutable && task.dependencyReady
+      (task) =>
+        (task.status === "ready" || task.status === "pending") &&
+        task.autoExecutable &&
+        task.dependencyReady
     ).length;
 
     return {
       all: activeTasks.length + pagination.total,
+      backlog,
+      scheduled,
+      ready,
       pending,
       in_progress: inProgress,
       auto_ready: autoReady,
@@ -117,13 +140,19 @@ export function TaskStatusFilters({
   }, [activeTasks, pagination.total]);
 
   const filteredTasks = useMemo(() => {
+    if (activeFilter === "backlog") return activeTasks.filter((task) => task.status === "backlog");
+    if (activeFilter === "scheduled") return activeTasks.filter((task) => task.status === "scheduled");
+    if (activeFilter === "ready") return activeTasks.filter((task) => task.status === "ready");
     if (activeFilter === "pending") return activeTasks.filter((task) => task.status === "pending");
     if (activeFilter === "in_progress") {
       return activeTasks.filter((task) => task.status === "in_progress");
     }
     if (activeFilter === "auto_ready") {
       return activeTasks.filter(
-        (task) => task.status === "pending" && task.autoExecutable && task.dependencyReady
+        (task) =>
+          (task.status === "ready" || task.status === "pending") &&
+          task.autoExecutable &&
+          task.dependencyReady
       );
     }
     if (activeFilter === "done") {
@@ -173,7 +202,7 @@ export function TaskStatusFilters({
       <CardHeader className="space-y-3">
         <CardTitle className="text-base">Status filters</CardTitle>
         <div className="flex flex-wrap gap-2">
-          {(["pending", "in_progress", "auto_ready", "done"] as const).map((filter) => (
+          {(["backlog", "scheduled", "ready", "pending", "in_progress", "auto_ready", "done"] as const).map((filter) => (
             <Button
               key={filter}
               type="button"
