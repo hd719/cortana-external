@@ -213,7 +213,7 @@ export function CronHealthCard() {
                       <p className="truncate font-medium text-foreground">{cron.name}</p>
                       <p className="font-mono text-muted-foreground">
                         {firedToday(cron.last_fire_time)
-                          ? <><span className="text-muted-foreground/60">fired </span>{toRelativeTime(cron.last_fire_time)}</>
+                          ? <><span className="text-muted-foreground/60">fired </span>{toShortTime(cron.last_fire_time)} <span className="text-muted-foreground/60">({toRelativeTime(cron.last_fire_time)})</span></>
                           : <><span className="text-muted-foreground/60">next </span>{toShortTime(cron.next_fire_time)}</>
                         }
                       </p>
