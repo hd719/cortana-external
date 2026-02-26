@@ -115,22 +115,22 @@ export function ActivityFeed() {
             {orderedEvents.map((event) => (
               <div
                 key={event.id}
-                className="flex items-start gap-2 rounded border border-white/5 bg-black/20 px-2 py-1.5"
+                className="rounded border border-white/5 bg-black/20 px-2 py-1.5"
               >
-                <span className="min-w-28 text-[10px] text-zinc-400">
-                  {formatTimestamp(event.timestamp)}
-                </span>
-                <span
-                  className={`inline-flex min-w-20 items-center justify-center rounded border px-1.5 py-0.5 text-[10px] uppercase ${severityClass[event.severity]}`}
-                >
-                  {severityIcon[event.severity]} {event.severity}
-                </span>
-                <div className="min-w-0 space-y-0.5">
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                  <span className="shrink-0 text-[10px] text-zinc-400">
+                    {formatTimestamp(event.timestamp)}
+                  </span>
+                  <span
+                    className={`inline-flex shrink-0 items-center justify-center rounded border px-1.5 py-0.5 text-[10px] uppercase ${severityClass[event.severity]}`}
+                  >
+                    {severityIcon[event.severity]} {event.severity}
+                  </span>
                   <p className="truncate text-[10px] uppercase tracking-wide text-zinc-400">
                     {event.eventType.replaceAll("_", " ")}
                   </p>
-                  <p className="text-zinc-100/90">{event.message || event.eventType}</p>
                 </div>
+                <p className="mt-0.5 break-words text-zinc-100/90">{event.message || event.eventType}</p>
               </div>
             ))}
           </div>
