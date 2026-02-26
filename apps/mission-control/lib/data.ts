@@ -422,7 +422,29 @@ const readTaskBoardTasks = async (
   });
 };
 
-export const getTaskBoard = async () => {
+type GetTaskBoardInput = {
+  completedLimit?: number;
+  completedOffset?: number;
+};
+
+const COMPLETED_STATUSES = new Set(["done", "completed"]);
+const DEFAULT_COMPLETED_PAGE_SIZE = 20;
+const MAX_COMPLETED_PAGE_SIZE = 100;
+
+const completionTime = (task: TaskBoardTask) => task.completedAt?.getTime() ?? task.updatedAt.getTime();
+
+const activeTaskSortRank = (task: TaskBoardTask) => {
+  if (task.status === "in_progress") return 0;
+  if (task.status === "blocked") return 1;
+  if (task.status === "pending" && !task.dependencyReady) return 1;
+  if (task.status === "pending") return 2;
+  return 3;
+};
+
+export const getTaskBoard = async ({
+  completedLimit = DEFAULT_COMPLETED_PAGE_SIZE,
+  completedOffset = 0,
+}: GetTaskBoardInput = {}) => {
   noStore();
 
   const preferredTaskPrisma = getTaskPrisma();
@@ -486,7 +508,7 @@ export const getTaskBoard = async () => {
       .filter(({ task }) => {
         if (!task) return true;
         const normalized = task.status.toLowerCase();
-        return !["done", "completed"].includes(normalized);
+        return !COMPLETED_STATUSES.has(normalized);
       });
 
     const blockedBy = blockers.map(({ id, task }) =>
@@ -502,24 +524,50 @@ export const getTaskBoard = async () => {
     };
   });
 
+  const safeCompletedLimit = Math.max(1, Math.min(completedLimit, MAX_COMPLETED_PAGE_SIZE));
+  const safeCompletedOffset = Math.max(0, completedOffset);
+
+  const completedTasks = annotated
+    .filter((task) => COMPLETED_STATUSES.has(task.status.toLowerCase()))
+    .sort((a, b) => completionTime(b) - completionTime(a));
+
+  const activeTasks = annotated
+    .filter((task) => !COMPLETED_STATUSES.has(task.status.toLowerCase()))
+    .sort((a, b) => {
+      const rankDiff = activeTaskSortRank(a) - activeTaskSortRank(b);
+      if (rankDiff !== 0) return rankDiff;
+
+      const aDue = a.dueAt?.getTime() ?? Number.MAX_SAFE_INTEGER;
+      const bDue = b.dueAt?.getTime() ?? Number.MAX_SAFE_INTEGER;
+      if (aDue !== bDue) return aDue - bDue;
+
+      if (a.priority !== b.priority) return a.priority - b.priority;
+      return b.createdAt.getTime() - a.createdAt.getTime();
+    });
+
+  const pagedCompletedTasks = completedTasks.slice(
+    safeCompletedOffset,
+    safeCompletedOffset + safeCompletedLimit
+  );
+
   const now = new Date();
   const soon = new Date(now.getTime() + 1000 * 60 * 60 * 48);
 
-  const readyNow = annotated.filter(
+  const readyNow = activeTasks.filter(
     (task) =>
       task.status === "pending" &&
       task.autoExecutable &&
       task.dependencyReady
   );
 
-  const blocked = annotated.filter(
+  const blocked = activeTasks.filter(
     (task) =>
       task.status === "pending" &&
       (task.dependsOn?.length || 0) > 0 &&
       !task.dependencyReady
   );
 
-  const dueSoon = annotated.filter(
+  const dueSoon = activeTasks.filter(
     (task) =>
       task.status === "pending" &&
       task.dueAt &&
@@ -527,14 +575,14 @@ export const getTaskBoard = async () => {
       task.dueAt <= soon
   );
 
-  const overdue = annotated.filter(
+  const overdue = activeTasks.filter(
     (task) =>
       task.status === "pending" &&
       task.dueAt &&
       task.dueAt < now
   );
 
-  const byPillar = annotated.reduce<Record<string, TaskBoardTask[]>>(
+  const byPillar = activeTasks.reduce<Record<string, TaskBoardTask[]>>(
     (acc, task) => {
       const pillar = pillarFromMetadata(task.metadata ?? null);
       if (!acc[pillar]) acc[pillar] = [];
@@ -544,17 +592,19 @@ export const getTaskBoard = async () => {
     {}
   );
 
-  const recentOutcomes = annotated
-    .filter((task) => task.outcome || task.completedAt)
-    .sort((a, b) => {
-      const aTime = a.completedAt?.getTime() || a.updatedAt.getTime();
-      const bTime = b.completedAt?.getTime() || b.updatedAt.getTime();
-      return bTime - aTime;
-    })
-    .slice(0, 10);
+  const recentOutcomes = completedTasks.slice(0, 10);
 
   return {
-    tasks: annotated,
+    tasks: [...activeTasks, ...pagedCompletedTasks],
+    activeTasks,
+    completedTasks: pagedCompletedTasks,
+    completedPagination: {
+      total: completedTasks.length,
+      offset: safeCompletedOffset,
+      limit: safeCompletedLimit,
+      hasMore: safeCompletedOffset + pagedCompletedTasks.length < completedTasks.length,
+      nextOffset: safeCompletedOffset + pagedCompletedTasks.length,
+    },
     readyNow,
     blocked,
     dueSoon,

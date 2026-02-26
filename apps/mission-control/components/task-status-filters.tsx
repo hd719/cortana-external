@@ -10,6 +10,14 @@ import { cn } from "@/lib/utils";
 
 type StatusFilter = "all" | "pending" | "in_progress" | "auto_ready" | "done";
 
+type CompletedPagination = {
+  total: number;
+  offset: number;
+  limit: number;
+  hasMore: boolean;
+  nextOffset: number;
+};
+
 const FILTER_LABELS: Record<StatusFilter, string> = {
   all: "All",
   pending: "Pending",
@@ -75,39 +83,90 @@ function TaskItem({ task }: { task: TaskBoardTask }) {
   );
 }
 
-export function TaskStatusFilters({ tasks }: { tasks: TaskBoardTask[] }) {
+export function TaskStatusFilters({
+  activeTasks,
+  initialCompletedTasks,
+  initialCompletedPagination,
+}: {
+  activeTasks: TaskBoardTask[];
+  initialCompletedTasks: TaskBoardTask[];
+  initialCompletedPagination: CompletedPagination;
+}) {
   const [activeFilter, setActiveFilter] = useState<StatusFilter>("all");
+  const [completedTasks, setCompletedTasks] = useState<TaskBoardTask[]>(initialCompletedTasks);
+  const [pagination, setPagination] = useState<CompletedPagination>(initialCompletedPagination);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  const allTasks = useMemo(() => [...activeTasks, ...completedTasks], [activeTasks, completedTasks]);
 
   const counts = useMemo(() => {
-    const pending = tasks.filter((task) => task.status === "pending").length;
-    const inProgress = tasks.filter((task) => task.status === "in_progress").length;
-    const autoReady = tasks.filter(
+    const pending = activeTasks.filter((task) => task.status === "pending").length;
+    const inProgress = activeTasks.filter((task) => task.status === "in_progress").length;
+    const autoReady = activeTasks.filter(
       (task) => task.status === "pending" && task.autoExecutable && task.dependencyReady
     ).length;
-    const done = tasks.filter((task) => ["done", "completed"].includes(task.status)).length;
 
     return {
-      all: tasks.length,
+      all: activeTasks.length + pagination.total,
       pending,
       in_progress: inProgress,
       auto_ready: autoReady,
-      done,
+      done: pagination.total,
     } satisfies Record<StatusFilter, number>;
-  }, [tasks]);
+  }, [activeTasks, pagination.total]);
 
   const filteredTasks = useMemo(() => {
-    if (activeFilter === "pending") return tasks.filter((task) => task.status === "pending");
-    if (activeFilter === "in_progress") return tasks.filter((task) => task.status === "in_progress");
+    if (activeFilter === "pending") return activeTasks.filter((task) => task.status === "pending");
+    if (activeFilter === "in_progress") {
+      return activeTasks.filter((task) => task.status === "in_progress");
+    }
     if (activeFilter === "auto_ready") {
-      return tasks.filter(
+      return activeTasks.filter(
         (task) => task.status === "pending" && task.autoExecutable && task.dependencyReady
       );
     }
     if (activeFilter === "done") {
-      return tasks.filter((task) => ["done", "completed"].includes(task.status));
+      return completedTasks;
     }
-    return tasks;
-  }, [activeFilter, tasks]);
+    return allTasks;
+  }, [activeFilter, activeTasks, allTasks, completedTasks]);
+
+  const canLoadMoreCompleted = pagination.hasMore && !loadingMore;
+
+  const loadMoreCompleted = async () => {
+    if (!canLoadMoreCompleted) return;
+    setLoadingMore(true);
+    setLoadError(null);
+
+    try {
+      const response = await fetch(
+        `/api/task-board?completedLimit=${pagination.limit}&completedOffset=${pagination.nextOffset}`,
+        { cache: "no-store" }
+      );
+
+      if (!response.ok) {
+        throw new Error(`Request failed with ${response.status}`);
+      }
+
+      const data = await response.json();
+      const incoming: TaskBoardTask[] = data.completedTasks ?? [];
+
+      setCompletedTasks((current) => {
+        const seen = new Set(current.map((task) => task.id));
+        const deduped = incoming.filter((task) => !seen.has(task.id));
+        return [...current, ...deduped];
+      });
+
+      if (data.completedPagination) {
+        setPagination(data.completedPagination);
+      }
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : "Failed to load older completed tasks.");
+    } finally {
+      setLoadingMore(false);
+    }
+  };
 
   return (
     <Card>
@@ -121,10 +180,7 @@ export function TaskStatusFilters({ tasks }: { tasks: TaskBoardTask[] }) {
               size="sm"
               variant={activeFilter === filter ? "secondary" : "outline"}
               onClick={() => setActiveFilter(filter)}
-              className={cn(
-                "h-8",
-                activeFilter === filter && "ring-1 ring-border"
-              )}
+              className={cn("h-8", activeFilter === filter && "ring-1 ring-border")}
               aria-pressed={activeFilter === filter}
             >
               {FILTER_LABELS[filter]}: {counts[filter]}
@@ -151,6 +207,18 @@ export function TaskStatusFilters({ tasks }: { tasks: TaskBoardTask[] }) {
           </p>
         ) : (
           filteredTasks.map((task) => <TaskItem key={task.id} task={task} />)
+        )}
+
+        {(activeFilter === "done" || activeFilter === "all") && pagination.total > completedTasks.length && (
+          <div className="space-y-2 pt-2">
+            <Button type="button" size="sm" variant="outline" onClick={loadMoreCompleted} disabled={!canLoadMoreCompleted}>
+              {loadingMore ? "Loading…" : "Show older completed"}
+            </Button>
+            <p className="text-xs text-muted-foreground">
+              Showing {completedTasks.length} of {pagination.total} completed tasks.
+            </p>
+            {loadError && <p className="text-xs text-destructive">{loadError}</p>}
+          </div>
         )}
       </CardContent>
     </Card>

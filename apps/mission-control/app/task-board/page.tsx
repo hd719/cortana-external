@@ -117,7 +117,18 @@ export default async function TaskBoardPage() {
     );
   }
 
-  const { readyNow, blocked, dueSoon, overdue, byPillar, recentOutcomes, tasks, metadata } = data;
+  const {
+    readyNow,
+    blocked,
+    dueSoon,
+    overdue,
+    byPillar,
+    recentOutcomes,
+    activeTasks,
+    completedTasks,
+    completedPagination,
+    metadata,
+  } = data;
   const liveSyncActive = metadata.listener?.connected;
 
   const pillarEntries = Object.entries(byPillar).sort((a, b) => a[0].localeCompare(b[0]));
@@ -172,7 +183,11 @@ export default async function TaskBoardPage() {
         </Card>
       ) : null}
 
-      <TaskStatusFilters tasks={tasks} />
+      <TaskStatusFilters
+        activeTasks={activeTasks}
+        initialCompletedTasks={completedTasks}
+        initialCompletedPagination={completedPagination}
+      />
 
       <div className="grid gap-4 md:grid-cols-2">
         <TaskList
