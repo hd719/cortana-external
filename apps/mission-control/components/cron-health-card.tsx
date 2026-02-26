@@ -197,7 +197,9 @@ export function CronHealthCard() {
                     >
                       <p className="truncate font-medium text-foreground">{cron.name}</p>
                       <p className="font-mono text-muted-foreground">{toRelativeTime(cron.last_fire_time)}</p>
-                      <p className="font-mono text-muted-foreground">{formatDuration(cron.last_duration_sec)}</p>
+                      {cron.last_duration_sec != null && (
+                        <p className="font-mono text-muted-foreground">{formatDuration(cron.last_duration_sec)}</p>
+                      )}
                     </div>
                   ))}
                 </div>
