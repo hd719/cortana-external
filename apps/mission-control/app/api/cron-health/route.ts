@@ -8,7 +8,7 @@ import { getTaskPrisma } from "@/lib/task-prisma";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-type JobSchedule =
+export type JobSchedule =
   | { kind: "cron"; expr: string; tz?: string }
   | { kind: "every"; everyMs: number }
   | { kind: "at"; at: string }
@@ -41,13 +41,13 @@ type HealthRow = {
   last_error: string | null;
 };
 
-type CronHealthStatus = "healthy" | "late" | "failed";
+export type CronHealthStatus = "healthy" | "late" | "failed";
 
 const JOBS_PATH = path.join(os.homedir(), ".openclaw", "cron", "jobs.json");
 
 const CRON_LATE_MULTIPLIER = 2;
 
-const parseCronIntervalMs = (expr?: string | null) => {
+export const parseCronIntervalMs = (expr?: string | null) => {
   if (!expr) return null;
 
   const [minute = "*", hour = "*", dayOfMonth = "*", _month = "*", dayOfWeek = "*"] =
@@ -86,7 +86,7 @@ const parseCronIntervalMs = (expr?: string | null) => {
   return 86_400_000;
 };
 
-const getExpectedIntervalMs = (schedule?: JobSchedule) => {
+export const getExpectedIntervalMs = (schedule?: JobSchedule) => {
   if (!schedule) return null;
   if (schedule.kind === "every" && typeof (schedule as { everyMs?: unknown }).everyMs === "number") {
     return (schedule as { everyMs: number }).everyMs;
@@ -97,7 +97,7 @@ const getExpectedIntervalMs = (schedule?: JobSchedule) => {
   return null;
 };
 
-const normalizeStatus = (
+export const normalizeStatus = (
   status: string | null | undefined,
   consecutiveFailures: number,
   isLate: boolean
@@ -117,7 +117,7 @@ const normalizeStatus = (
   return "healthy";
 };
 
-const toScheduleText = (schedule?: JobSchedule) => {
+export const toScheduleText = (schedule?: JobSchedule) => {
   if (!schedule) return "—";
   if (schedule.kind === "cron") return (schedule as { expr?: string }).expr || "—";
   if (schedule.kind === "every") {

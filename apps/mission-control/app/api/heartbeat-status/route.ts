@@ -1,16 +1,16 @@
 import { readFile } from "node:fs/promises";
 import { NextResponse } from "next/server";
 
-type HeartbeatStatus = "healthy" | "stale" | "missed" | "unknown";
+export type HeartbeatStatus = "healthy" | "stale" | "missed" | "unknown";
 
 const HEARTBEAT_FILE = "/Users/hd/clawd/memory/heartbeat-state.json";
 
-function normalizeTimestamp(raw: unknown): number | null {
+export function normalizeTimestamp(raw: unknown): number | null {
   if (typeof raw !== "number" || !Number.isFinite(raw)) return null;
   return raw < 1_000_000_000_000 ? raw * 1000 : raw;
 }
 
-function getStatus(ageMs: number | null): HeartbeatStatus {
+export function getStatus(ageMs: number | null): HeartbeatStatus {
   if (ageMs == null) return "unknown";
   if (ageMs < 90 * 60 * 1000) return "healthy";
   if (ageMs <= 3 * 60 * 60 * 1000) return "stale";

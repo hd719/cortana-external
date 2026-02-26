@@ -13,7 +13,9 @@
     "db:seed": "tsx prisma/seed.ts",
     "verify:score-progress": "tsx scripts/verify-score-progress.ts",
     "task-autoclose:post-merge": "tsx scripts/post-merge-task-autoclose.ts",
-    "test:task-autoclose": "tsx scripts/post-merge-task-autoclose.test.ts"
+    "test:task-autoclose": "tsx scripts/post-merge-task-autoclose.test.ts",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
@@ -33,18 +35,23 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
     "@types/node": "^20",
     "@types/pg": "^8.16.0",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@vitejs/plugin-react": "^5.1.4",
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
+    "jsdom": "^28.1.0",
     "prisma": "^5.22.0",
     "shadcn": "^3.8.5",
     "tailwindcss": "^4",
     "tsx": "^4.21.0",
     "tw-animate-css": "^1.4.0",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^4.0.18"
   },
   "packageManager": "pnpm@10.30.2",
   "pnpm": {
