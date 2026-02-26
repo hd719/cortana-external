@@ -12,6 +12,7 @@ const links = [
   { href: "/decisions", label: "Decision Traces" },
   { href: "/approvals", label: "Approvals" },
   { href: "/feedback", label: "Feedback" },
+  { href: "/council", label: "Council" },
 ];
 
 export function MainNav() {
