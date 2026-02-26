@@ -9,6 +9,7 @@ import { ThinkingIndicator } from "@/components/thinking-indicator";
 import { ActivityFeed } from "@/components/activity-feed";
 import { TodayStatsCard } from "@/components/today-stats-card";
 import { AutonomyGauge } from "@/components/autonomy-gauge";
+import { DbStatus } from "@/components/db-status";
 // Agent status moved to /agents roster page
 // import { AgentStatusCard } from "@/components/agent-status-card";
 import { QuickActionsCard } from "@/components/quick-actions-card";
@@ -138,9 +139,7 @@ export default async function Home() {
         <div className="grid w-full grid-cols-2 gap-3 sm:w-auto sm:grid-cols-4">
           <HeartbeatPulse />
           <ThinkingIndicator />
-          <div className="flex h-full flex-col justify-center rounded-lg border bg-card/60 px-3 py-2 shadow-sm">
-            <Badge variant="secondary">Connected to Postgres</Badge>
-          </div>
+          <DbStatus />
           <AutonomyGauge />
         </div>
       </div>
