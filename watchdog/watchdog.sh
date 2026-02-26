@@ -365,6 +365,17 @@ check_tools() {
     recovery_alert "$pg_check_name" "PostgreSQL recovered and is running"
     log "info" "PostgreSQL: OK"
   fi
+
+  # LanceDB / Memory Extension
+  local lancedb_check_name="memory_extension"
+  if ! node --prefix /opt/homebrew/lib/node_modules/openclaw -e "require('@lancedb/lancedb')" &>/dev/null; then
+    # Log a dedicated memory_extension_down event in addition to the generic watchdog log
+    psql cortana -c "INSERT INTO cortana_events (event_type, source, severity, message) VALUES ('memory_extension_down', 'watchdog', 'high', 'LanceDB memory extension failed healthcheck');" &>/dev/null || true
+    alert "LanceDB memory extension healthcheck FAILED" "$lancedb_check_name" "critical"
+  else
+    recovery_alert "$lancedb_check_name" "LanceDB memory extension healthcheck passed"
+    log "info" "LanceDB memory extension: OK"
+  fi
 }
 
 check_degraded_agents() {
