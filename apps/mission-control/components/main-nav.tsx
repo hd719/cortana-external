@@ -10,6 +10,8 @@ const links = [
   { href: "/agents", label: "Agents" },
   { href: "/jobs", label: "Jobs & Runs" },
   { href: "/decisions", label: "Decision Traces" },
+  { href: "/approvals", label: "Approvals" },
+  { href: "/feedback", label: "Feedback" },
 ];
 
 export function MainNav() {
