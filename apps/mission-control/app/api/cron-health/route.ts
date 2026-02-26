@@ -167,22 +167,36 @@ export async function GET() {
     const row = byName.get(job.name);
     const dbLastFire = row?.timestamp ? new Date(row.timestamp).getTime() : null;
     const stateLastFire = job.state?.lastRunAtMs ?? null;
-    const lastFireMs = dbLastFire ?? stateLastFire;
+
+    // Prefer whichever source is MORE RECENT (real-time state vs DB snapshot)
+    const useStateOverDb = stateLastFire && (!dbLastFire || stateLastFire > dbLastFire);
+    const lastFireMs = useStateOverDb ? stateLastFire : (dbLastFire ?? stateLastFire);
 
     const expectedIntervalMs = getExpectedIntervalMs(job.schedule);
     const isLate =
       Boolean(lastFireMs && expectedIntervalMs) &&
       now - Number(lastFireMs) > Number(expectedIntervalMs) * CRON_LATE_MULTIPLIER;
 
-    const consecutiveFailures = Number(
-      row?.consecutive_failures ?? job.state?.consecutiveErrors ?? 0
-    );
+    // Use the most recent source for status too
+    const stateStatus = job.state?.lastStatus ?? null;
+    const dbStatus = row?.status ?? null;
+    const effectiveStatus = useStateOverDb ? (stateStatus ?? dbStatus) : (dbStatus ?? stateStatus);
 
-    const status = normalizeStatus(row?.status ?? job.state?.lastStatus, consecutiveFailures, isLate);
+    const stateFailures = job.state?.consecutiveErrors ?? 0;
+    const dbFailures = row?.consecutive_failures ?? 0;
+    const consecutiveFailures = Number(useStateOverDb ? stateFailures : (dbFailures || stateFailures));
 
-    const lastDurationSec =
-      row?.run_duration_sec ??
-      (typeof job.state?.lastDurationMs === "number" ? Number(job.state.lastDurationMs) / 1000 : null);
+    const status = normalizeStatus(effectiveStatus, consecutiveFailures, isLate);
+
+    const stateDurationSec = typeof job.state?.lastDurationMs === "number"
+      ? Number(job.state.lastDurationMs) / 1000
+      : null;
+    const dbDurationSec = row?.run_duration_sec ?? null;
+    const lastDurationSec = useStateOverDb ? (stateDurationSec ?? dbDurationSec) : (dbDurationSec ?? stateDurationSec);
+
+    const stateError = job.state?.lastError ?? null;
+    const dbError = row?.last_error ?? null;
+    const lastError = useStateOverDb ? (stateError ?? dbError) : (dbError ?? stateError);
 
     return {
       name: job.name,
@@ -191,7 +205,7 @@ export async function GET() {
       status,
       consecutive_failures: consecutiveFailures,
       last_duration_sec: typeof lastDurationSec === "number" ? Number(lastDurationSec) : null,
-      last_error: row?.last_error ?? job.state?.lastError ?? null,
+      last_error: status === "healthy" ? null : lastError,
     };
   });
 
