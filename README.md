@@ -65,7 +65,12 @@ Single HTTP service for:
 ### API surface (from `main.go`)
 - Whoop: `/auth/url`, `/auth/callback`, `/whoop/data`
 - Tonal: `/tonal/health`, `/tonal/data`
-- Alpaca: `/alpaca/health`, `/alpaca/account`, `/alpaca/positions`, `/alpaca/portfolio`, `/alpaca/trades` (GET/POST/PUT), `/alpaca/stats`, `/alpaca/performance`
+- Alpaca: `/alpaca/health`, `/alpaca/account`, `/alpaca/positions`, `/alpaca/portfolio`, `/alpaca/trades` (GET/POST/PUT), `/alpaca/stats`, `/alpaca/performance`, `/alpaca/earnings`
+
+### Earnings endpoint (new)
+- `GET /alpaca/earnings?symbol=NVDA` returns upcoming/recent earnings context.
+- Primary source: Alpaca news/events integration.
+- Fallback source: Yahoo Finance earnings data when Alpaca coverage is missing.
 
 ### Alpaca trade execution + analytics (new)
 - `POST /alpaca/trades` now **places a real Alpaca order** (`/v2/orders`) and then logs the trade thesis + metadata to Postgres (`cortana_trades`).
@@ -85,6 +90,10 @@ bash run.sh
 - Go toolchain
 - `.env` values (Whoop/Tonal creds)
 - Local token/key files (`whoop_tokens.json`, `tonal_tokens.json`, `alpaca_keys.json`)
+
+### Tonal auth self-heal (new)
+- Tonal auth now auto-recovers from `401/403` by resetting stale tokens and re-authing.
+- No manual token surgery needed during routine expiry/failure cycles.
 
 ---
 
@@ -120,9 +129,17 @@ tailscale ip -4
 - Dashboard (`/`): system metrics + recent activity
 - Agents (`/agents`)
 - Jobs/runs (`/jobs`)
-- Task board (`/task-board`)
+- Task board (`/task-board`) with paginated completed-task view
+- Cron Health dashboard via `/api/cron-health` (live OpenClaw-first state, smart fire status, sorted by last fire time)
+- Live infra status badges (Postgres + Vector DB) on dashboard cards
 - Live updates via SSE (`/api/live`)
 - OpenClaw subagent lifecycle ingestion (`/api/openclaw/subagent-events`)
+
+### Cron Health dashboard behavior (new)
+- Prefers real-time OpenClaw state over stale DB snapshots.
+- Collapsible sections default to: failed expanded, healthy collapsed.
+- Fire status is humanized (`fired 5m ago` vs `next 8:03 AM`).
+- Rows are sorted by latest fire time for fastest triage.
 
 ---
 
@@ -281,7 +298,15 @@ launchctl list | grep -E "cortana.watchdog|cortana.fitness-service"
 
 ## 8) Recent additions (high impact)
 
-- Mission Control reliability upgrades (SSE live updates, lifecycle ingestion, reconciliation paths)
+- **Cron Health Dashboard** in Mission Control (`/api/cron-health`) with real-time OpenClaw-first state, smart fire timestamps, and triage-friendly collapse defaults
+- **Vitest unit tests** for Mission Control lib functions and API helpers
+- **Go unit tests** for Alpaca service logic/endpoints
+- **Earnings endpoint**: `GET /alpaca/earnings` with Alpaca-first + Yahoo fallback data path
+- **Tonal self-heal**: auth token auto-reset/re-auth on `401/403`
+- **Task board pagination** for completed tasks
+- **Live status badges** for Postgres + Vector DB on dashboard
+- **Run reconciliation** upgrades: normalized lifecycle statuses and stale-run auto-close
+- **UI polish**: mobile agents table fixes, decision timeline overflow fix, cleaner agent directory cards, theme-aware cron health styling
 - Post-merge task auto-close workflow (`.github/workflows/post-merge-task-autoclose.yml`)
 - Watchdog heartbeat classifier improvements and richer health checks
 - Continued CANSLIM alerting integration with scheduled OpenClaw jobs
@@ -299,4 +324,4 @@ Update whenever any of these change:
 - Backtester entrypoints/dependencies
 - New top-level services/apps/tools
 
-Last refreshed: **2026-02-25** (filesystem + launchd + code cross-check)
+Last refreshed: **2026-02-26** (README + test/status cross-check)
