@@ -11,9 +11,30 @@ export type OpenClawLifecycleStatus =
   | "timeout"
   | "killed";
 
+export const normalizeLifecycleStatus = (status: string): OpenClawLifecycleStatus | null => {
+  const normalized = status.trim().toLowerCase();
+  if (["queued", "running", "done", "failed", "timeout", "killed"].includes(normalized)) {
+    return normalized as OpenClawLifecycleStatus;
+  }
+
+  if (["completed", "complete", "success", "succeeded", "ok"].includes(normalized)) {
+    return "done";
+  }
+
+  if (["cancelled", "canceled", "aborted", "abort"].includes(normalized)) {
+    return "killed";
+  }
+
+  if (["error", "errored"].includes(normalized)) {
+    return "failed";
+  }
+
+  return null;
+};
+
 export type OpenClawLifecycleEvent = {
   runId: string;
-  status: OpenClawLifecycleStatus;
+  status: string;
   agentId?: string;
   agentName?: string;
   role?: string;
@@ -40,7 +61,11 @@ const severityFromLifecycle = (status: OpenClawLifecycleStatus): Severity => {
 };
 
 export async function ingestOpenClawLifecycleEvent(event: OpenClawLifecycleEvent) {
-  const normalizedStatus = event.status.toLowerCase() as OpenClawLifecycleStatus;
+  const normalizedStatus = normalizeLifecycleStatus(event.status);
+  if (!normalizedStatus) {
+    throw new Error(`Unsupported OpenClaw lifecycle status: ${event.status}`);
+  }
+
   const startedAt = event.timestamp ? new Date(event.timestamp) : new Date();
 
   const agents = await prisma.agent.findMany({

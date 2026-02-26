@@ -61,7 +61,7 @@ const reconcileStaleRunningRuns = async (activeRunIds: Set<string>) => {
     where: {
       openclawRunId: { not: null },
       completedAt: null,
-      externalStatus: "running",
+      externalStatus: { in: ["queued", "running"] },
       startedAt: { lte: staleBefore },
     },
     select: {
@@ -85,13 +85,18 @@ const reconcileStaleRunningRuns = async (activeRunIds: Set<string>) => {
       prisma.run.update({
         where: { id: run.id },
         data: {
-          externalStatus: "stale",
-          summary: run.summary ?? "Sub-agent run marked stale after reconciliation TTL",
+          status: "completed",
+          completedAt: new Date(),
+          externalStatus: "done",
+          summary:
+            run.summary ??
+            "Sub-agent run auto-completed after reconciliation TTL (run no longer active)",
           payload: {
             source: "openclaw-reconcile",
             reconciledAt: new Date().toISOString(),
             staleTtlMs: STALE_RUNNING_TTL_MS,
             uiStateGuard: true,
+            reconciledTerminalState: "completed",
           },
         },
       })

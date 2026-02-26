@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import {
   ingestOpenClawLifecycleEvent,
+  normalizeLifecycleStatus,
   OpenClawLifecycleEvent,
 } from "@/lib/openclaw-bridge";
 
@@ -28,6 +29,16 @@ export async function POST(request: Request) {
     if (!event.runId || !event.status) {
       return NextResponse.json(
         { error: "Each event requires runId and status" },
+        { status: 400 }
+      );
+    }
+
+    if (!normalizeLifecycleStatus(event.status)) {
+      return NextResponse.json(
+        {
+          error:
+            "Invalid status. Expected queued, running, done, failed, timeout, killed (aliases accepted: completed/cancelled/error).",
+        },
         { status: 400 }
       );
     }
