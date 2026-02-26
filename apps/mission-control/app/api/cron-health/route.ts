@@ -20,6 +20,7 @@ type JobDefinition = {
   schedule?: JobSchedule;
   state?: {
     lastRunAtMs?: number;
+    nextRunAtMs?: number;
     lastStatus?: string;
     lastError?: string;
     consecutiveErrors?: number;
@@ -198,10 +199,13 @@ export async function GET() {
     const dbError = row?.last_error ?? null;
     const lastError = useStateOverDb ? (stateError ?? dbError) : (dbError ?? stateError);
 
+    const nextFireMs = job.state?.nextRunAtMs ?? null;
+
     return {
       name: job.name,
       schedule: toScheduleText(job.schedule),
       last_fire_time: lastFireMs ? new Date(lastFireMs).toISOString() : null,
+      next_fire_time: nextFireMs ? new Date(nextFireMs).toISOString() : null,
       status,
       consecutive_failures: consecutiveFailures,
       last_duration_sec: typeof lastDurationSec === "number" ? Number(lastDurationSec) : null,

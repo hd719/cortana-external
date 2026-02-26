@@ -10,6 +10,7 @@ type CronHealthItem = {
   name: string;
   schedule: string;
   last_fire_time: string | null;
+  next_fire_time: string | null;
   status: CronHealthStatus;
   consecutive_failures: number;
   last_duration_sec: number | null;
@@ -55,6 +56,20 @@ const toRelativeTime = (iso: string | null) => {
 
   const days = Math.floor(hours / 24);
   return `${days}d ago`;
+};
+
+const toShortTime = (iso: string | null) => {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+};
+
+const firedToday = (iso: string | null) => {
+  if (!iso) return false;
+  const d = new Date(iso);
+  const now = new Date();
+  return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
 };
 
 const formatDuration = (seconds: number | null) => {
@@ -196,7 +211,12 @@ export function CronHealthCard() {
                       className="grid grid-cols-1 gap-1 px-3 py-2 text-xs sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:items-center sm:gap-3"
                     >
                       <p className="truncate font-medium text-foreground">{cron.name}</p>
-                      <p className="font-mono text-muted-foreground"><span className="text-muted-foreground/60">fired </span>{toRelativeTime(cron.last_fire_time)}</p>
+                      <p className="font-mono text-muted-foreground">
+                        {firedToday(cron.last_fire_time)
+                          ? <><span className="text-muted-foreground/60">fired </span>{toRelativeTime(cron.last_fire_time)}</>
+                          : <><span className="text-muted-foreground/60">next </span>{toShortTime(cron.next_fire_time)}</>
+                        }
+                      </p>
                       {cron.last_duration_sec != null && (
                         <p className="font-mono text-muted-foreground"><span className="text-muted-foreground/60">took </span>{formatDuration(cron.last_duration_sec)}</p>
                       )}
