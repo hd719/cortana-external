@@ -39,16 +39,15 @@ export function DecisionTimeline({ traces }: { traces: DecisionTrace[] }) {
   return (
     <div className="space-y-4">
       {traces.map((trace) => (
-        <Card key={trace.id}>
+        <Card key={trace.id} className="overflow-hidden">
           <CardHeader className="pb-2">
             <CardTitle className="flex flex-wrap items-center gap-2 text-base">
-              <span>{trace.actionName}</span>
               <Badge variant="outline">{trace.actionType}</Badge>
               <Badge variant="secondary">trigger: {trace.triggerType}</Badge>
               <Badge variant="outline">confidence: {confidenceLabel(trace.confidence)}</Badge>
               <Badge variant={outcomeVariant(trace.outcome)}>{trace.outcome}</Badge>
             </CardTitle>
-            <p className="text-xs text-muted-foreground">
+            <p className="break-all text-xs text-muted-foreground">
               {fmt(trace.createdAt)} · trace {trace.traceId}
               {trace.taskId ? ` · task #${trace.taskId}` : ""}
               {trace.runId ? ` · run ${trace.runId}` : ""}
@@ -67,7 +66,7 @@ export function DecisionTimeline({ traces }: { traces: DecisionTrace[] }) {
               {Object.keys(trace.dataInputs).length === 0 ? (
                 <p className="text-sm text-muted-foreground">No input payload captured.</p>
               ) : (
-                <pre className="mt-1 overflow-x-auto rounded bg-muted p-2 text-xs">
+                <pre className="mt-1 max-w-full overflow-x-auto whitespace-pre-wrap break-all rounded bg-muted p-2 text-xs">
                   {JSON.stringify(trace.dataInputs, null, 2)}
                 </pre>
               )}
@@ -91,7 +90,7 @@ export function DecisionTimeline({ traces }: { traces: DecisionTrace[] }) {
                 {Object.keys(trace.metadata).length === 0 ? (
                   <p className="text-sm text-muted-foreground">No metadata.</p>
                 ) : (
-                  <pre className="mt-1 overflow-x-auto rounded bg-muted p-2 text-xs">
+                  <pre className="mt-1 max-w-full overflow-x-auto whitespace-pre-wrap break-all rounded bg-muted p-2 text-xs">
                     {JSON.stringify(trace.metadata, null, 2)}
                   </pre>
                 )}
