@@ -178,18 +178,18 @@ export function CronHealthCard() {
           })}
 
           {healthyCrons.length > 0 && (
-            <div className="rounded-lg border border-zinc-800 bg-zinc-950/30">
+            <div className="rounded-lg border bg-muted/40">
               <button
                 type="button"
                 onClick={() => setShowHealthy((prev) => !prev)}
-                className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm text-muted-foreground transition hover:bg-zinc-900/50"
+                className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm text-muted-foreground transition hover:bg-muted/70"
               >
                 <span>{showHealthy ? `Hide ${healthyCrons.length} healthy crons` : `✅ ${healthyCrons.length} healthy — show`}</span>
                 <span aria-hidden="true">{showHealthy ? "▲" : "▼"}</span>
               </button>
 
               {showHealthy && (
-                <div className="border-t border-zinc-800">
+                <div className="border-t">
                   {healthyCrons.map((cron) => (
                     <div
                       key={cron.name}
