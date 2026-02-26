@@ -169,9 +169,11 @@ export async function GET() {
     const dbLastFire = row?.timestamp ? new Date(row.timestamp).getTime() : null;
     const stateLastFire = job.state?.lastRunAtMs ?? null;
 
-    // Prefer whichever source is MORE RECENT (real-time state vs DB snapshot)
-    const useStateOverDb = stateLastFire && (!dbLastFire || stateLastFire > dbLastFire);
-    const lastFireMs = useStateOverDb ? stateLastFire : (dbLastFire ?? stateLastFire);
+    // ALWAYS prefer jobs.json state for fire times — DB snapshots are bulk-written
+    // with identical timestamps and don't reflect actual per-cron fire times.
+    // Only fall back to DB if state has no data at all.
+    const lastFireMs = stateLastFire ?? dbLastFire;
+    const useStateOverDb = stateLastFire != null;
 
     const expectedIntervalMs = getExpectedIntervalMs(job.schedule);
     const isLate =
