@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 )
@@ -244,65 +245,52 @@ func (s *Service) fetchTonal(ctx context.Context, token, method, path string, he
 	return io.ReadAll(resp.Body)
 }
 
-// apiCallWithSelfHeal wraps API operations with automatic token refresh/retry logic.
+// apiCallWithSelfHeal wraps API operations with automatic auth recovery logic.
 // When an auth failure (401/403) is detected, it:
-// 1. Attempts refresh-token auth first (no token file deletion)
-// 2. Falls back to full password auth only if refresh fails
-// 3. Retries the API call once with the new token
-// 4. Logs the self-heal action for visibility
+// 1. Deletes tonal_tokens.json to force re-authentication on next token load
+// 2. Retries the API call exactly once
+// 3. If retry still fails with 401/403, logs to stderr and exits non-zero
 func (s *Service) apiCallWithSelfHeal(ctx context.Context, operation func(ctx context.Context, token string) error) error {
-	// Get initial token
+	// First attempt with current/loaded token.
 	token, err := s.getValidToken(ctx)
 	if err != nil {
 		return err
 	}
 
-	// Try the operation with current token
 	err = operation(ctx, token)
 	if !errors.Is(err, errTonalUnauthorized) {
-		return err // Success or non-auth error
+		return err
 	}
 
-	// Auth failure detected - perform self-healing
-	s.Logger.Printf("🔧 TONAL SELF-HEAL: Authentication failure detected, attempting automatic recovery...")
-
-	var freshTokens *TokenData
-
-	// First try refresh token flow (preferred)
-	if existing, loadErr := LoadTokens(s.TokenPath); loadErr == nil && existing.RefreshToken != "" {
-		s.Logger.Printf("🔄 TONAL SELF-HEAL: Trying refresh-token recovery...")
-		if refreshed, refreshErr := s.refreshAuthentication(ctx, existing.RefreshToken); refreshErr == nil {
-			freshTokens = refreshed
-			if saveErr := SaveTokens(s.TokenPath, refreshed); saveErr != nil {
-				s.Logger.Printf("⚠️  TONAL SELF-HEAL: Warning - failed to save refreshed tokens: %v", saveErr)
-			}
+	// Auth failure detected; force a clean re-auth by deleting token file.
+	fmt.Printf("TONAL SELF-HEAL: received 401/403, deleting token file at %s to force re-authentication\n", s.TokenPath)
+	if removeErr := os.Remove(s.TokenPath); removeErr != nil {
+		if errors.Is(removeErr, os.ErrNotExist) {
+			fmt.Printf("TONAL SELF-HEAL: token file already missing, continuing with forced re-auth\n")
 		} else {
-			s.Logger.Printf("⚠️  TONAL SELF-HEAL: Refresh-token recovery failed, falling back to password auth: %v", refreshErr)
+			fmt.Printf("TONAL SELF-HEAL: warning - failed to delete token file: %v\n", removeErr)
 		}
+	} else {
+		fmt.Printf("TONAL SELF-HEAL: deleted token file successfully\n")
 	}
 
-	// If refresh route failed/unavailable, use full authentication
-	if freshTokens == nil {
-		s.Logger.Printf("🔐 TONAL SELF-HEAL: Running full authentication fallback...")
-		freshTokens, err = s.authenticate(ctx)
-		if err != nil {
-			s.Logger.Printf("❌ TONAL SELF-HEAL: Failed to re-authenticate: %v", err)
-			return fmt.Errorf("self-heal failed - re-authentication error: %w", err)
-		}
-		if saveErr := SaveTokens(s.TokenPath, freshTokens); saveErr != nil {
-			s.Logger.Printf("⚠️  TONAL SELF-HEAL: Warning - failed to save fresh tokens: %v", saveErr)
-		}
+	fmt.Printf("TONAL SELF-HEAL: retrying API call once after forced re-authentication\n")
+	retryToken, tokenErr := s.getValidToken(ctx)
+	if tokenErr != nil {
+		fmt.Fprintf(os.Stderr, "TONAL SELF-HEAL: re-authentication failed after token deletion: %v\n", tokenErr)
+		os.Exit(1)
 	}
 
-	// Retry operation with fresh token
-	s.Logger.Printf("🔄 TONAL SELF-HEAL: Retrying API call with refreshed authentication...")
-	err = operation(ctx, freshTokens.IDToken)
+	err = operation(ctx, retryToken)
+	if errors.Is(err, errTonalUnauthorized) {
+		fmt.Fprintf(os.Stderr, "TONAL SELF-HEAL: retry also returned 401/403; exiting with error\n")
+		os.Exit(1)
+	}
 	if err != nil {
-		s.Logger.Printf("❌ TONAL SELF-HEAL: Retry failed: %v", err)
-		return fmt.Errorf("self-heal failed - retry error: %w", err)
+		return err
 	}
 
-	s.Logger.Printf("✅ TONAL SELF-HEAL: Recovery successful - API call completed with refreshed authentication")
+	fmt.Printf("TONAL SELF-HEAL: recovery succeeded after token reset\n")
 	return nil
 }
 

@@ -151,17 +151,20 @@ The Tonal service uses **smart incremental caching**:
 
 **Workouts are keyed by ID** - no duplicates will occur even if you call the endpoint multiple times.
 
-## Token Refresh
+## Token Refresh + Self-Healing
 
-**You do not need to handle token refresh.** The `/tonal/data` endpoint automatically:
+**You do not need to handle token refresh manually.** The `/tonal/data` endpoint automatically:
 
 1. Checks if the ID token is expired (or expires within 1 minute)
-2. Tries refresh-token auth first (no manual token file deletion needed)
-3. Falls back to password auth only if refresh fails
-4. Saves the updated token set to `tonal_tokens.json`
-5. Returns the data
+2. Refreshes or re-authenticates as needed
+3. If a Tonal API call still returns `401/403`, it triggers self-healing:
+   - Deletes `tonal_tokens.json`
+   - Forces a clean re-auth on next request attempt
+   - Retries the failed API call exactly once
+4. Logs self-heal actions to stdout
+5. If retry also returns `401/403`, logs to stderr and exits non-zero (no infinite retry loop)
 
-Tokens are short-lived (~24 hours), and the service handles refresh automatically from stored credentials/refresh token.
+Tokens are short-lived (~24 hours), and the service handles this automatically.
 
 ## Error Responses
 
