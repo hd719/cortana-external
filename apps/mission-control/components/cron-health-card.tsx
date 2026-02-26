@@ -103,12 +103,12 @@ export function CronHealthCard() {
   }, [crons]);
 
   const failedOrLateCrons = useMemo(
-    () => crons.filter((cron) => cron.status !== "healthy").sort((a, b) => a.name.localeCompare(b.name)),
+    () => crons.filter((cron) => cron.status !== "healthy").sort((a, b) => new Date(b.last_fire_time ?? 0).getTime() - new Date(a.last_fire_time ?? 0).getTime()),
     [crons],
   );
 
   const healthyCrons = useMemo(
-    () => crons.filter((cron) => cron.status === "healthy").sort((a, b) => a.name.localeCompare(b.name)),
+    () => crons.filter((cron) => cron.status === "healthy").sort((a, b) => new Date(b.last_fire_time ?? 0).getTime() - new Date(a.last_fire_time ?? 0).getTime()),
     [crons],
   );
 
