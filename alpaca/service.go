@@ -281,6 +281,111 @@ func parseNullableFloat(str string) *float64 {
 
 func float64Ptr(v float64) *float64 { return &v }
 
+type EarningsResult struct {
+	Symbol       string `json:"symbol"`
+	EarningsDate string `json:"earnings_date,omitempty"`
+	Confirmed    bool   `json:"confirmed"`
+	Source       string `json:"source"`
+	DaysUntil    *int   `json:"days_until,omitempty"`
+	Note         string `json:"note,omitempty"`
+}
+
+func normalizeEarningsSymbol(symbol string) string {
+	s := strings.ToUpper(strings.TrimSpace(symbol))
+	s = strings.ReplaceAll(s, "-", ".")
+	return s
+}
+
+func daysUntil(dateStr string) *int {
+	if strings.TrimSpace(dateStr) == "" {
+		return nil
+	}
+	t, err := time.Parse("2006-01-02", dateStr)
+	if err != nil {
+		return nil
+	}
+	today := time.Now().In(time.Local)
+	t0 := time.Date(today.Year(), today.Month(), today.Day(), 0, 0, 0, 0, time.Local)
+	delta := int(t.Sub(t0).Hours() / 24)
+	return &delta
+}
+
+func (s *Service) fetchYahooEarnings(symbol string) (string, bool, error) {
+	ySym := normalizeEarningsSymbol(symbol)
+	url := fmt.Sprintf("https://query1.finance.yahoo.com/v10/finance/quoteSummary/%s?modules=calendarEvents", ySym)
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return "", false, err
+	}
+	req.Header.Set("User-Agent", "Mozilla/5.0")
+
+	resp, err := s.HTTPClient.Do(req)
+	if err != nil {
+		return "", false, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		b, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		return "", false, fmt.Errorf("yahoo %d: %s", resp.StatusCode, string(b))
+	}
+
+	var payload struct {
+		QuoteSummary struct {
+			Result []struct {
+				CalendarEvents struct {
+					Earnings struct {
+						EarningsDate []struct {
+							Fmt string `json:"fmt"`
+						} `json:"earningsDate"`
+					} `json:"earnings"`
+				} `json:"calendarEvents"`
+			} `json:"result"`
+		} `json:"quoteSummary"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		return "", false, err
+	}
+	if len(payload.QuoteSummary.Result) == 0 {
+		return "", false, nil
+	}
+	dates := payload.QuoteSummary.Result[0].CalendarEvents.Earnings.EarningsDate
+	if len(dates) == 0 || strings.TrimSpace(dates[0].Fmt) == "" {
+		return "", false, nil
+	}
+	return dates[0].Fmt, false, nil
+}
+
+func (s *Service) fetchAlpacaEarningsNewsSignal(symbol string) (bool, error) {
+	if err := s.ensureKeysLoaded(); err != nil {
+		return false, err
+	}
+
+	from := time.Now().AddDate(0, 0, -30).UTC().Format("2006-01-02")
+	to := time.Now().UTC().Format("2006-01-02")
+	url := fmt.Sprintf("%s/v1beta1/news?symbols=%s&start=%s&end=%s&limit=50", s.keys.DataURL, strings.ToUpper(symbol), from, to)
+	data, err := s.makeJSONRequest("GET", url, nil, http.StatusOK)
+	if err != nil {
+		return false, err
+	}
+	var payload struct {
+		News []struct {
+			Headline string `json:"headline"`
+			Summary  string `json:"summary"`
+		} `json:"news"`
+	}
+	if err := json.Unmarshal(data, &payload); err != nil {
+		return false, err
+	}
+	for _, n := range payload.News {
+		text := strings.ToLower(n.Headline + " " + n.Summary)
+		if strings.Contains(text, "earnings") || strings.Contains(text, "quarterly results") {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 func (s *Service) fetchLatestTradePrice(symbol string) *float64 {
 	url := fmt.Sprintf("%s/v2/stocks/%s/trades/latest", s.keys.DataURL, symbol)
 	data, err := s.makeJSONRequest("GET", url, nil, http.StatusOK)
@@ -437,6 +542,86 @@ func (s *Service) PortfolioHandler(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"account": account, "positions": positions, "timestamp": time.Now().Format(time.RFC3339)})
+}
+
+// EarningsHandler returns upcoming earnings dates for provided symbols.
+// Priority: Alpaca data/news context + Yahoo calendar fallback for date.
+func (s *Service) EarningsHandler(c *gin.Context) {
+	if err := s.ensureKeysLoaded(); err != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
+		return
+	}
+
+	rawSymbols := strings.TrimSpace(c.Query("symbols"))
+	symbols := make([]string, 0)
+	if rawSymbols != "" {
+		for _, s := range strings.Split(rawSymbols, ",") {
+			s = strings.ToUpper(strings.TrimSpace(s))
+			if s != "" {
+				symbols = append(symbols, s)
+			}
+		}
+	}
+
+	if len(symbols) == 0 {
+		positionsData, err := s.makeJSONRequest("GET", s.keys.BaseURL+"/positions", nil, http.StatusOK)
+		if err != nil {
+			c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
+			return
+		}
+		var positions []Position
+		if err := json.Unmarshal(positionsData, &positions); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		for _, p := range positions {
+			s := strings.ToUpper(strings.TrimSpace(p.Symbol))
+			if s != "" {
+				symbols = append(symbols, s)
+			}
+		}
+	}
+
+	seen := map[string]bool{}
+	results := make([]EarningsResult, 0, len(symbols))
+	for _, symbol := range symbols {
+		symbol = strings.ToUpper(strings.TrimSpace(symbol))
+		if symbol == "" || seen[symbol] {
+			continue
+		}
+		seen[symbol] = true
+
+		date, confirmed, yErr := s.fetchYahooEarnings(symbol)
+		hasNewsSignal, nErr := s.fetchAlpacaEarningsNewsSignal(symbol)
+
+		res := EarningsResult{
+			Symbol:       symbol,
+			EarningsDate: date,
+			Confirmed:    confirmed,
+			Source:       "yahoo",
+			DaysUntil:    daysUntil(date),
+		}
+
+		if hasNewsSignal {
+			res.Note = "alpaca_news_contains_earnings"
+		}
+		if yErr != nil {
+			res.Source = "alpaca_news_only"
+			res.EarningsDate = ""
+			res.DaysUntil = nil
+			if nErr != nil {
+				res.Note = "yahoo_and_alpaca_news_unavailable"
+			}
+		}
+
+		results = append(results, res)
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"results":   results,
+		"timestamp": time.Now().Format(time.RFC3339),
+		"strategy":  "alpaca-news + yahoo-calendar-fallback",
+	})
 }
 
 // QuoteHandler returns latest quote + latest trade for symbol.

@@ -62,6 +62,7 @@ func main() {
 	router.GET("/alpaca/account", alpacaSvc.AccountHandler)
 	router.GET("/alpaca/positions", alpacaSvc.PositionsHandler)
 	router.GET("/alpaca/portfolio", alpacaSvc.PortfolioHandler)
+	router.GET("/alpaca/earnings", alpacaSvc.EarningsHandler)
 	router.GET("/alpaca/quote/:symbol", alpacaSvc.QuoteHandler)
 	router.GET("/alpaca/snapshot/:symbol", alpacaSvc.SnapshotHandler)
 	router.GET("/alpaca/bars/:symbol", alpacaSvc.BarsHandler)
