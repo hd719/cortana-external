@@ -21,12 +21,6 @@ type CronHealthResponse = {
   crons: CronHealthItem[];
 };
 
-const STATUS_ORDER: Record<CronHealthStatus, number> = {
-  failed: 0,
-  late: 1,
-  healthy: 2,
-};
-
 const statusUi: Record<CronHealthStatus, { icon: string; label: string; className: string }> = {
   failed: {
     icon: "❌",
@@ -72,6 +66,7 @@ const formatDuration = (seconds: number | null) => {
 export function CronHealthCard() {
   const [data, setData] = useState<CronHealthResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [showHealthy, setShowHealthy] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -99,20 +94,23 @@ export function CronHealthCard() {
     };
   }, []);
 
-  const crons = useMemo(() => {
-    const items = data?.crons || [];
-    return [...items].sort((a, b) => {
-      const statusDelta = STATUS_ORDER[a.status] - STATUS_ORDER[b.status];
-      if (statusDelta !== 0) return statusDelta;
-      return a.name.localeCompare(b.name);
-    });
-  }, [data]);
+  const crons = useMemo(() => [...(data?.crons || [])], [data]);
 
   const counts = useMemo(() => {
     const summary = { healthy: 0, late: 0, failed: 0 };
     for (const cron of crons) summary[cron.status] += 1;
     return summary;
   }, [crons]);
+
+  const failedOrLateCrons = useMemo(
+    () => crons.filter((cron) => cron.status !== "healthy").sort((a, b) => a.name.localeCompare(b.name)),
+    [crons],
+  );
+
+  const healthyCrons = useMemo(
+    () => crons.filter((cron) => cron.status === "healthy").sort((a, b) => a.name.localeCompare(b.name)),
+    [crons],
+  );
 
   return (
     <Card>
@@ -133,7 +131,7 @@ export function CronHealthCard() {
         {error && <p className="mb-3 text-xs text-destructive">{error}</p>}
 
         <div className="space-y-3">
-          {crons.map((cron) => {
+          {failedOrLateCrons.map((cron) => {
             const status = statusUi[cron.status];
 
             return (
@@ -178,6 +176,34 @@ export function CronHealthCard() {
               </div>
             );
           })}
+
+          {healthyCrons.length > 0 && (
+            <div className="rounded-lg border border-zinc-800 bg-zinc-950/30">
+              <button
+                type="button"
+                onClick={() => setShowHealthy((prev) => !prev)}
+                className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm text-muted-foreground transition hover:bg-zinc-900/50"
+              >
+                <span>{showHealthy ? `Hide ${healthyCrons.length} healthy crons` : `✅ ${healthyCrons.length} healthy — show`}</span>
+                <span aria-hidden="true">{showHealthy ? "▲" : "▼"}</span>
+              </button>
+
+              {showHealthy && (
+                <div className="border-t border-zinc-800">
+                  {healthyCrons.map((cron) => (
+                    <div
+                      key={cron.name}
+                      className="grid grid-cols-1 gap-1 px-3 py-2 text-xs sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:items-center sm:gap-3"
+                    >
+                      <p className="truncate font-medium text-foreground">{cron.name}</p>
+                      <p className="font-mono text-muted-foreground">{toRelativeTime(cron.last_fire_time)}</p>
+                      <p className="font-mono text-muted-foreground">{formatDuration(cron.last_duration_sec)}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
           {crons.length === 0 && (
             <div className="rounded-md border px-3 py-8 text-center text-sm text-muted-foreground">
