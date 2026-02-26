@@ -60,9 +60,19 @@ const reconcileStaleRunningRuns = async (activeRunIds: Set<string>) => {
   const staleCandidates = await prisma.run.findMany({
     where: {
       openclawRunId: { not: null },
-      completedAt: null,
-      externalStatus: { in: ["queued", "running"] },
-      startedAt: { lte: staleBefore },
+      OR: [
+        // Case 1: Never completed and still showing active
+        {
+          completedAt: null,
+          externalStatus: { in: ["queued", "running"] },
+          startedAt: { lte: staleBefore },
+        },
+        // Case 2: completedAt was set (e.g. manual fix) but external_status is still stale
+        {
+          completedAt: { not: null },
+          externalStatus: { in: ["queued", "running"] },
+        },
+      ],
     },
     select: {
       id: true,
