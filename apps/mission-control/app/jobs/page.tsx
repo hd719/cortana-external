@@ -6,6 +6,7 @@ export const dynamic = "force-dynamic";
 import { Badge } from "@/components/ui/badge";
 import { AutoRefresh } from "@/components/auto-refresh";
 import { JobsRunsTable } from "./jobs-runs-table";
+import { CronHealthCard } from "@/components/cron-health-card";
 
 export default async function JobsPage({
   searchParams,
@@ -55,6 +56,8 @@ export default async function JobsPage({
             : "No runs"}
         </Badge>
       </div>
+
+      <CronHealthCard />
 
       <Card>
         <CardHeader className="gap-3">
