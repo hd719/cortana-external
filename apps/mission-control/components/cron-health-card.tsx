@@ -196,9 +196,9 @@ export function CronHealthCard() {
                       className="grid grid-cols-1 gap-1 px-3 py-2 text-xs sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:items-center sm:gap-3"
                     >
                       <p className="truncate font-medium text-foreground">{cron.name}</p>
-                      <p className="font-mono text-muted-foreground">{toRelativeTime(cron.last_fire_time)}</p>
+                      <p className="font-mono text-muted-foreground"><span className="text-muted-foreground/60">fired </span>{toRelativeTime(cron.last_fire_time)}</p>
                       {cron.last_duration_sec != null && (
-                        <p className="font-mono text-muted-foreground">{formatDuration(cron.last_duration_sec)}</p>
+                        <p className="font-mono text-muted-foreground"><span className="text-muted-foreground/60">took </span>{formatDuration(cron.last_duration_sec)}</p>
                       )}
                     </div>
                   ))}
