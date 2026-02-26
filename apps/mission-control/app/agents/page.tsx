@@ -30,14 +30,14 @@ export default async function AgentsPage() {
         <CardHeader>
           <CardTitle className="text-base">Agent directory</CardTitle>
         </CardHeader>
-        <CardContent className="overflow-hidden rounded-md border">
+        <CardContent className="overflow-x-auto rounded-md border">
           <table className="w-full text-left text-sm">
             <thead className="bg-muted/70 text-xs uppercase tracking-wide text-muted-foreground">
               <tr>
                 <th className="px-3 py-2">Agent</th>
                 <th className="px-3 py-2">Role</th>
-                <th className="px-3 py-2">Capabilities</th>
-                <th className="px-3 py-2">Health</th>
+                <th className="hidden px-3 py-2 sm:table-cell">Capabilities</th>
+                <th className="px-3 py-2 text-right">Health</th>
                 <th className="px-3 py-2">Status</th>
               </tr>
             </thead>
@@ -55,10 +55,10 @@ export default async function AgentsPage() {
                     </Link>
                   </td>
                   <td className="px-3 py-3 text-muted-foreground">{agent.role}</td>
-                  <td className="px-3 py-3 text-sm text-muted-foreground">
+                  <td className="hidden px-3 py-3 text-sm text-muted-foreground sm:table-cell">
                     {agent.capabilities}
                   </td>
-                  <td className="px-3 py-3 text-muted-foreground">
+                  <td className="px-3 py-3 text-right text-muted-foreground">
                     {typeof agent.healthScore === "number" ? agent.healthScore.toFixed(1) : "—"}
                   </td>
                   <td className="px-3 py-3">
