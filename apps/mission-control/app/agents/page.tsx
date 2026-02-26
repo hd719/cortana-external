@@ -30,7 +30,7 @@ export default async function AgentsPage() {
         <CardHeader>
           <CardTitle className="text-base">Agent directory</CardTitle>
         </CardHeader>
-        <CardContent className="overflow-x-auto rounded-md border">
+        <CardContent className="overflow-x-auto">
           <table className="w-full text-left text-sm">
             <thead className="bg-muted/70 text-xs uppercase tracking-wide text-muted-foreground">
               <tr>
