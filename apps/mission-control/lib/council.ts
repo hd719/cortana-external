@@ -14,6 +14,7 @@ export type CouncilSession = {
   finalDecision: Record<string, unknown> | null;
   confidence: number | null;
   rationale: string | null;
+  modelPolicy: Record<string, unknown> | null;
   members?: CouncilMember[];
   messages?: CouncilMessage[];
 };
@@ -62,6 +63,7 @@ type CouncilSessionRow = {
   final_decision: unknown;
   confidence: number | null;
   rationale: string | null;
+  model_policy: unknown;
 };
 
 type CouncilMemberRow = {
@@ -110,6 +112,7 @@ const mapSession = (row: CouncilSessionRow): CouncilSession => ({
   finalDecision: asRecordOrNull(row.final_decision),
   confidence: row.confidence,
   rationale: row.rationale,
+  modelPolicy: asRecordOrNull(row.model_policy),
 });
 
 const mapMember = (row: CouncilMemberRow): CouncilMember => ({
@@ -170,7 +173,8 @@ export async function getCouncilSessions(filters: CouncilFilters = {}): Promise<
       decided_at,
       final_decision,
       confidence,
-      rationale
+      rationale,
+      model_policy
     FROM mc_council_sessions
     ${whereClause}
     ORDER BY created_at DESC
@@ -209,6 +213,7 @@ export async function getCouncilSessionById(id: string): Promise<CouncilSession 
       s.final_decision,
       s.confidence,
       s.rationale,
+      s.model_policy,
       m.id AS member_id,
       m.session_id,
       m.agent_id,
@@ -336,7 +341,8 @@ export async function createCouncilSession(data: {
       decided_at,
       final_decision,
       confidence,
-      rationale
+      rationale,
+      model_policy
   `;
 
   const taskPrisma = getTaskPrisma();
