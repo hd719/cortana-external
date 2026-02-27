@@ -51,6 +51,7 @@ export function CouncilSessionCard({ session }: { session: CouncilSession }) {
   useEffect(() => {
     if (!expanded) return;
     let alive = true;
+    let source: EventSource | null = null;
 
     const load = async () => {
       const response = await fetch(`/api/council/${session.id}`, { cache: "no-store" });
@@ -60,9 +61,29 @@ export function CouncilSessionCard({ session }: { session: CouncilSession }) {
       setDetail(payload);
     };
 
+    const connect = () => {
+      source = new EventSource(`/api/council/stream?sessionId=${session.id}`);
+      source.addEventListener("update", (event) => {
+        if (!alive) return;
+        try {
+          const parsed = JSON.parse((event as MessageEvent).data) as { data?: CouncilSession | null };
+          if (parsed.data) setDetail(parsed.data);
+        } catch {
+          // no-op
+        }
+      });
+      source.onerror = () => {
+        source?.close();
+        source = null;
+      };
+    };
+
     load();
+    connect();
+
     return () => {
       alive = false;
+      source?.close();
     };
   }, [expanded, session.id]);
 
@@ -104,7 +125,7 @@ export function CouncilSessionCard({ session }: { session: CouncilSession }) {
           <div>
             <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Members</p>
             {(detail.members?.length ?? 0) > 0 ? (
-              <div className="mt-2 space-y-2">
+              <div className="mt-2 grid gap-2 md:grid-cols-2">
                 {(detail.members ?? []).map((member) => (
                   <div key={member.id} className="rounded border bg-card/60 p-2 text-xs">
                     <p className="font-medium">
@@ -124,7 +145,7 @@ export function CouncilSessionCard({ session }: { session: CouncilSession }) {
           </div>
 
           <div>
-            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Transcript</p>
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Vote timeline</p>
             {(detail.messages?.length ?? 0) > 0 ? (
               <div className="mt-2 space-y-2">
                 {(detail.messages ?? []).map((message) => (

@@ -14,6 +14,7 @@ export type CouncilSession = {
   finalDecision: Record<string, unknown> | null;
   confidence: number | null;
   rationale: string | null;
+  modelPolicy: Record<string, unknown> | null;
   members?: CouncilMember[];
   messages?: CouncilMessage[];
 };
@@ -62,6 +63,7 @@ type CouncilSessionRow = {
   final_decision: unknown;
   confidence: number | null;
   rationale: string | null;
+  model_policy: unknown;
 };
 
 type CouncilMemberRow = {
@@ -110,6 +112,7 @@ const mapSession = (row: CouncilSessionRow): CouncilSession => ({
   finalDecision: asRecordOrNull(row.final_decision),
   confidence: row.confidence,
   rationale: row.rationale,
+  modelPolicy: asRecordOrNull(row.model_policy),
 });
 
 const mapMember = (row: CouncilMemberRow): CouncilMember => ({
@@ -170,7 +173,8 @@ export async function getCouncilSessions(filters: CouncilFilters = {}): Promise<
       decided_at,
       final_decision,
       confidence,
-      rationale
+      rationale,
+      model_policy
     FROM mc_council_sessions
     ${whereClause}
     ORDER BY created_at DESC
@@ -209,6 +213,7 @@ export async function getCouncilSessionById(id: string): Promise<CouncilSession 
       s.final_decision,
       s.confidence,
       s.rationale,
+      s.model_policy,
       m.id AS member_id,
       m.session_id,
       m.agent_id,
@@ -336,7 +341,8 @@ export async function createCouncilSession(data: {
       decided_at,
       final_decision,
       confidence,
-      rationale
+      rationale,
+      model_policy
   `;
 
   const taskPrisma = getTaskPrisma();
@@ -411,6 +417,80 @@ export async function finalizeDecision(
       status = 'decided',
       decided_at = NOW()
     WHERE id = '${safeSessionId}'
+  `;
+
+  const taskPrisma = getTaskPrisma();
+  const preferred = taskPrisma ?? prisma;
+
+  const run = async (client: typeof prisma) => {
+    await client.$executeRawUnsafe(sql);
+  };
+
+  try {
+    await run(preferred);
+  } catch (error) {
+    if (!taskPrisma) throw error;
+    await run(prisma);
+  }
+}
+
+
+export async function addCouncilMembers(
+  sessionId: string,
+  members: Array<{ agentId: string; role?: string | null; weight?: number; stance?: string | null }>,
+): Promise<void> {
+  if (members.length === 0) return;
+
+  const safeSessionId = escapeLiteral(sessionId);
+  const values = members
+    .map((member) => {
+      const agentId = `'${escapeLiteral(member.agentId)}'`;
+      const role = member.role ? `'${escapeLiteral(member.role)}'` : "NULL";
+      const weight = typeof member.weight === "number" ? member.weight : 1;
+      const stance = member.stance ? `'${escapeLiteral(member.stance)}'` : "NULL";
+      return `('${safeSessionId}', ${agentId}, ${role}, ${weight}, ${stance})`;
+    })
+    .join(",\n");
+
+  const sql = `
+    INSERT INTO mc_council_members (session_id, agent_id, role, weight, stance)
+    VALUES ${values}
+  `;
+
+  const taskPrisma = getTaskPrisma();
+  const preferred = taskPrisma ?? prisma;
+
+  const run = async (client: typeof prisma) => {
+    await client.$executeRawUnsafe(sql);
+  };
+
+  try {
+    await run(preferred);
+  } catch (error) {
+    if (!taskPrisma) throw error;
+    await run(prisma);
+  }
+}
+
+export async function appendCouncilMessage(data: {
+  sessionId: string;
+  turnNo: number;
+  speakerId: string;
+  messageType: string;
+  content: string;
+  metadata?: Record<string, unknown> | null;
+}): Promise<void> {
+  const safeSessionId = escapeLiteral(data.sessionId);
+  const safeSpeaker = escapeLiteral(data.speakerId);
+  const safeType = escapeLiteral(data.messageType);
+  const safeContent = escapeLiteral(data.content);
+  const metadata = data.metadata
+    ? `'${JSON.stringify(data.metadata).replaceAll("'", "''")}'::jsonb`
+    : "NULL";
+
+  const sql = `
+    INSERT INTO mc_council_messages (session_id, turn_no, speaker_id, message_type, content, metadata)
+    VALUES ('${safeSessionId}', ${data.turnNo}, '${safeSpeaker}', '${safeType}', '${safeContent}', ${metadata})
   `;
 
   const taskPrisma = getTaskPrisma();
