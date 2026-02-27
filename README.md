@@ -127,6 +127,30 @@ tailscale ip -4
 
 ### What it shows
 - Dashboard (`/`): system metrics + recent activity
+
+### Council deliberation system (new)
+- Mission Control includes a multi-member Council workflow for important decisions.
+- Entry point: `apps/mission-control/lib/council-jobs.ts` (`runCouncilDeliberationFanout`).
+- Deliberation now uses **real `gpt-4o` reasoning calls** per pending member (parallel fanout), not synthetic votes.
+
+Council members and weights:
+- **Oracle** (strategist) — `1.5`
+- **Researcher** (analyst) — `1.2`
+- **Huragok** (engineer) — `1.0`
+- **Monitor** (operations) — `0.8`
+
+Deliberation flow:
+1. For each pending member, Mission Control dispatches a role-specific `gpt-4o` prompt with topic + objective.
+2. Each member returns structured output: analysis, vote (`approve|reject|abstain|amend`), confidence (`0.0-1.0`), and detailed reasoning.
+3. Votes are persisted via `submitVote()` and written to the council timeline via `appendCouncilMessage()`.
+4. After all votes are in, a synthesizer `gpt-4o` call weighs member positions by role weight and generates final rationale.
+5. Session is finalized via `finalizeDecision()` with weighted tallies, confidence, and synthesis rationale.
+
+Resilience behavior:
+- Fanout runs concurrently with `Promise.all` for speed.
+- If one member call fails, that failure is logged to the message trail and other members continue.
+- Final synthesis runs only once all members have recorded a vote.
+
 - Agents (`/agents`)
 - Jobs/runs (`/jobs`)
 - Task board (`/task-board`) with paginated completed-task view
