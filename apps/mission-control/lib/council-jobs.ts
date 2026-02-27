@@ -1,6 +1,3 @@
-import { readFile } from "node:fs/promises";
-import { homedir } from "node:os";
-import { join } from "node:path";
 import { appendCouncilMessage, finalizeDecision, getCouncilSessionById, submitVote } from "@/lib/council";
 
 export type CouncilDeliberationJobResult = {
@@ -11,23 +8,135 @@ export type CouncilDeliberationJobResult = {
 };
 
 type CouncilVote = "approve" | "reject" | "abstain" | "amend";
+type RoleKey = "huragok" | "oracle" | "researcher" | "librarian" | "generic";
 
 type SynthesizerResponse = {
   outcome: "approve" | "reject" | "amend";
 };
 
-const OPENAI_CHAT_COMPLETIONS_URL = "https://api.openai.com/v1/chat/completions";
-const COUNCIL_MODEL = "gpt-4o";
+type OpenAIChatCompletionResponse = {
+  choices?: Array<{
+    message?: {
+      content?: string | null;
+    };
+  }>;
+};
 
-const ROLE_INSTRUCTIONS: Record<string, string> = {
-  oracle: "You are Oracle, the strategist (weight 1.5). Focus on long-term strategic implications, asymmetric risk/reward, and alignment with mission pillars: Time, Health, Wealth, and Career.",
-  strategist: "You are Oracle, the strategist (weight 1.5). Focus on long-term strategic implications, asymmetric risk/reward, and alignment with mission pillars: Time, Health, Wealth, and Career.",
-  researcher: "You are Researcher, the analyst (weight 1.2). Focus on evidence quality, assumptions, feasibility, prior art, and failure modes.",
-  analyst: "You are Researcher, the analyst (weight 1.2). Focus on evidence quality, assumptions, feasibility, prior art, and failure modes.",
-  huragok: "You are Huragok, the engineer (weight 1.0). Focus on technical feasibility, implementation complexity, architecture impact, reliability tradeoffs, and maintenance burden.",
-  engineer: "You are Huragok, the engineer (weight 1.0). Focus on technical feasibility, implementation complexity, architecture impact, reliability tradeoffs, and maintenance burden.",
-  monitor: "You are Monitor, operations (weight 0.8). Focus on operational impact, observability, reliability, run-cost, incident risk, and on-call burden.",
-  operations: "You are Monitor, operations (weight 0.8). Focus on operational impact, observability, reliability, run-cost, incident risk, and on-call burden.",
+type RoleValidationResult = {
+  role: RoleKey;
+  missingFields: string[];
+};
+
+const COUNCIL_MODEL = "gpt-4o";
+const REQUIRED_PROVIDER = "openai";
+
+const CONTRARIAN_INSTRUCTION = "Your job is to find the weakest point and argue against the proposal. Identify what breaks, what's missing, what everyone else is overlooking.";
+
+const ROLE_PROMPTS: Record<RoleKey, string> = {
+  huragok: [
+    "You are Huragok, the systems engineer.",
+    "MANDATORY CHECKLIST:",
+    "- Name specific technical risks (no generic language).",
+    "- Name explicit latency and scale concerns.",
+    "- Name concrete dependency conflicts and integration friction points.",
+    "- Give one concrete build recommendation in a 'build it like X' style.",
+    "- Do NOT use adjectives like 'robust', 'seamless', or 'comprehensive' unless you immediately define concrete measurable details.",
+  ].join("\n"),
+  oracle: [
+    "You are Oracle, the strategist.",
+    "MANDATORY CHECKLIST:",
+    "- List exactly 3 specific risks.",
+    "- List at least 2 second-order effects and explicitly name the mechanism causing each effect.",
+    "- Name 1 catastrophic failure scenario.",
+    "- Do NOT use the word 'asymmetric' unless you explicitly name what is asymmetric and why.",
+  ].join("\n"),
+  researcher: [
+    "You are Researcher, the analyst.",
+    "MANDATORY CHECKLIST:",
+    "- Name specific benchmarks.",
+    "- Cite sources or precedents explicitly.",
+    "- Enumerate failure modes and include probabilities or likelihood ratings for each.",
+  ].join("\n"),
+  librarian: [
+    "You are Librarian, the institutional knowledge steward.",
+    "MANDATORY CHECKLIST:",
+    "- Cite specific prior decisions.",
+    "- Cite specific documentation and historical patterns.",
+    "- Reference concrete examples, not abstractions.",
+  ].join("\n"),
+  generic: "You are a council member. Provide domain-specific analysis and cast one vote: approve, reject, abstain, or amend.",
+};
+
+const ROLE_FIELD_REQUIREMENTS: Record<RoleKey, string[]> = {
+  huragok: ["role_output.tech_risks", "role_output.latency_scale_concerns", "role_output.dependency_conflicts", "role_output.build_recommendation"],
+  oracle: ["role_output.specific_risks", "role_output.second_order_effects", "role_output.catastrophic_failure_scenario"],
+  researcher: ["role_output.benchmarks", "role_output.sources", "role_output.failure_modes"],
+  librarian: ["role_output.prior_decisions", "role_output.documentation_refs", "role_output.historical_patterns", "role_output.concrete_examples"],
+  generic: [],
+};
+
+const ROLE_OUTPUT_SCHEMAS: Record<RoleKey, Record<string, unknown>> = {
+  huragok: {
+    type: "object",
+    required: ["tech_risks", "latency_scale_concerns", "dependency_conflicts", "build_recommendation"],
+    properties: {
+      tech_risks: { type: "array", minItems: 1, items: { type: "string" } },
+      latency_scale_concerns: { type: "array", minItems: 1, items: { type: "string" } },
+      dependency_conflicts: { type: "array", minItems: 1, items: { type: "string" } },
+      build_recommendation: { type: "string", minLength: 1 },
+    },
+  },
+  oracle: {
+    type: "object",
+    required: ["specific_risks", "second_order_effects", "catastrophic_failure_scenario"],
+    properties: {
+      specific_risks: { type: "array", minItems: 3, maxItems: 3, items: { type: "string" } },
+      second_order_effects: {
+        type: "array",
+        minItems: 2,
+        items: {
+          type: "object",
+          required: ["effect", "mechanism"],
+          properties: {
+            effect: { type: "string" },
+            mechanism: { type: "string" },
+          },
+        },
+      },
+      catastrophic_failure_scenario: { type: "string", minLength: 1 },
+    },
+  },
+  researcher: {
+    type: "object",
+    required: ["benchmarks", "sources", "failure_modes"],
+    properties: {
+      benchmarks: { type: "array", minItems: 1, items: { type: "string" } },
+      sources: { type: "array", minItems: 1, items: { type: "string" } },
+      failure_modes: {
+        type: "array",
+        minItems: 1,
+        items: {
+          type: "object",
+          required: ["mode", "likelihood"],
+          properties: {
+            mode: { type: "string" },
+            likelihood: { type: "string" },
+          },
+        },
+      },
+    },
+  },
+  librarian: {
+    type: "object",
+    required: ["prior_decisions", "documentation_refs", "historical_patterns", "concrete_examples"],
+    properties: {
+      prior_decisions: { type: "array", minItems: 1, items: { type: "string" } },
+      documentation_refs: { type: "array", minItems: 1, items: { type: "string" } },
+      historical_patterns: { type: "array", minItems: 1, items: { type: "string" } },
+      concrete_examples: { type: "array", minItems: 1, items: { type: "string" } },
+    },
+  },
+  generic: { type: "object", additionalProperties: true },
 };
 
 const normalizeVote = (vote: string): CouncilVote => {
@@ -41,6 +150,22 @@ const normalizeVote = (vote: string): CouncilVote => {
 const clampConfidence = (value: unknown, fallback = 0.5): number => {
   if (typeof value !== "number" || Number.isNaN(value)) return fallback;
   return Math.min(1, Math.max(0, Number(value.toFixed(2))));
+};
+
+const normalizeRoleKey = (agentId: string, role: string | null): RoleKey => {
+  const agentKey = agentId.trim().toLowerCase();
+  if (agentKey.includes("huragok")) return "huragok";
+  if (agentKey.includes("oracle") || agentKey.includes("strategist")) return "oracle";
+  if (agentKey.includes("researcher") || agentKey.includes("analyst")) return "researcher";
+  if (agentKey.includes("librarian")) return "librarian";
+
+  const roleKey = (role || "").trim().toLowerCase();
+  if (roleKey.includes("huragok") || roleKey.includes("engineer")) return "huragok";
+  if (roleKey.includes("oracle") || roleKey.includes("strateg")) return "oracle";
+  if (roleKey.includes("research") || roleKey.includes("analyst")) return "researcher";
+  if (roleKey.includes("librarian") || roleKey.includes("knowledge")) return "librarian";
+
+  return "generic";
 };
 
 const extractJsonObject = (text: string): Record<string, unknown> | null => {
@@ -81,68 +206,230 @@ const extractJsonObject = (text: string): Record<string, unknown> | null => {
   return null;
 };
 
-const getRoleInstruction = (agentId: string, role: string | null): string => {
-  const agentKey = agentId.trim().toLowerCase();
-  if (ROLE_INSTRUCTIONS[agentKey]) return ROLE_INSTRUCTIONS[agentKey];
+const hasStringArray = (value: unknown, minItems: number): boolean => Array.isArray(value)
+  && value.length >= minItems
+  && value.every((item) => typeof item === "string" && item.trim().length > 0);
 
-  const roleKey = (role || "").trim().toLowerCase();
-  if (ROLE_INSTRUCTIONS[roleKey]) return ROLE_INSTRUCTIONS[roleKey];
+const validateRoleOutput = (role: RoleKey, payload: Record<string, unknown>): RoleValidationResult => {
+  const missingFields: string[] = [];
+  const roleOutput = payload.role_output;
 
-  return "You are a council member. Provide domain-specific analysis and cast one vote: approve, reject, abstain, or amend.";
-};
-
-const getOpenAIApiKey = async (): Promise<string> => {
-  const envKey = process.env.OPENAI_API_KEY
-    || process.env.OPENAI_APIKEY
-    || process.env.OPENAI_KEY;
-
-  if (envKey && envKey.trim().length > 0) {
-    return envKey.trim();
+  if (role === "generic") {
+    return { role, missingFields };
   }
 
-  const modelsPath = join(homedir(), ".openclaw", "agents", "main", "agent", "models.json");
-  const raw = await readFile(modelsPath, "utf8");
-  const parsed = JSON.parse(raw) as {
-    providers?: { openai?: { apiKey?: string } };
-  };
-
-  const fileKey = parsed.providers?.openai?.apiKey;
-  if (!fileKey || fileKey.trim().length === 0) {
-    throw new Error("OpenAI API key not configured in env or ~/.openclaw/agents/main/agent/models.json");
+  if (!roleOutput || typeof roleOutput !== "object" || Array.isArray(roleOutput)) {
+    return { role, missingFields: ROLE_FIELD_REQUIREMENTS[role] };
   }
 
-  return fileKey.trim();
+  const data = roleOutput as Record<string, unknown>;
+
+  if (role === "huragok") {
+    if (!hasStringArray(data.tech_risks, 1)) missingFields.push("role_output.tech_risks");
+    if (!hasStringArray(data.latency_scale_concerns, 1)) missingFields.push("role_output.latency_scale_concerns");
+    if (!hasStringArray(data.dependency_conflicts, 1)) missingFields.push("role_output.dependency_conflicts");
+    if (typeof data.build_recommendation !== "string" || data.build_recommendation.trim().length === 0) {
+      missingFields.push("role_output.build_recommendation");
+    }
+  }
+
+  if (role === "oracle") {
+    if (!hasStringArray(data.specific_risks, 3) || (Array.isArray(data.specific_risks) && data.specific_risks.length !== 3)) {
+      missingFields.push("role_output.specific_risks");
+    }
+    const secondOrder = data.second_order_effects;
+    const validSecondOrder = Array.isArray(secondOrder)
+      && secondOrder.length >= 2
+      && secondOrder.every((item) => item && typeof item === "object"
+        && typeof (item as Record<string, unknown>).effect === "string"
+        && typeof (item as Record<string, unknown>).mechanism === "string");
+    if (!validSecondOrder) missingFields.push("role_output.second_order_effects");
+    if (typeof data.catastrophic_failure_scenario !== "string" || data.catastrophic_failure_scenario.trim().length === 0) {
+      missingFields.push("role_output.catastrophic_failure_scenario");
+    }
+  }
+
+  if (role === "researcher") {
+    if (!hasStringArray(data.benchmarks, 1)) missingFields.push("role_output.benchmarks");
+    if (!hasStringArray(data.sources, 1)) missingFields.push("role_output.sources");
+    const failureModes = data.failure_modes;
+    const validFailureModes = Array.isArray(failureModes)
+      && failureModes.length > 0
+      && failureModes.every((item) => item && typeof item === "object"
+        && typeof (item as Record<string, unknown>).mode === "string"
+        && typeof (item as Record<string, unknown>).likelihood === "string");
+    if (!validFailureModes) missingFields.push("role_output.failure_modes");
+  }
+
+  if (role === "librarian") {
+    if (!hasStringArray(data.prior_decisions, 1)) missingFields.push("role_output.prior_decisions");
+    if (!hasStringArray(data.documentation_refs, 1)) missingFields.push("role_output.documentation_refs");
+    if (!hasStringArray(data.historical_patterns, 1)) missingFields.push("role_output.historical_patterns");
+    if (!hasStringArray(data.concrete_examples, 1)) missingFields.push("role_output.concrete_examples");
+  }
+
+  return { role, missingFields };
 };
 
-const callOpenAI = async (apiKey: string, messages: Array<{ role: "system" | "user"; content: string }>) => {
-  const response = await fetch(OPENAI_CHAT_COMPLETIONS_URL, {
+const ensureConfidenceJustification = (payload: Record<string, unknown>, confidence: number) => {
+  const justification = typeof payload.justification === "string" ? payload.justification.trim() : "";
+  if (!justification) {
+    throw new Error("Missing required justification field");
+  }
+
+  const evidence = Array.isArray(payload.evidence)
+    ? payload.evidence.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+    : [];
+
+  if (confidence >= 0.8 && evidence.length < 2) {
+    throw new Error("Confidence >= 0.8 requires at least 2 specific evidence points");
+  }
+
+  if (confidence >= 0.9) {
+    if (evidence.length < 3) {
+      throw new Error("Confidence >= 0.9 requires at least 3 specific evidence points");
+    }
+
+    const counterargument = typeof payload.counterargument_rejected === "string"
+      ? payload.counterargument_rejected.trim()
+      : "";
+
+    if (!counterargument) {
+      throw new Error("Confidence >= 0.9 requires a rejected counterargument");
+    }
+  }
+};
+
+const buildMemberPrompt = (args: {
+  topic: string;
+  objective: string | null;
+  memberAgentId: string;
+  role: string | null;
+  weight: number;
+  roleKey: RoleKey;
+  contrarian: boolean;
+}) => {
+  const { topic, objective, memberAgentId, role, weight, roleKey, contrarian } = args;
+
+  return [
+    `Council topic: ${topic}`,
+    `Council objective: ${objective ?? "No explicit objective provided."}`,
+    `Council member: ${memberAgentId}`,
+    `Council role: ${role ?? "unspecified"}`,
+    `Council vote weight: ${weight}`,
+    "",
+    ROLE_PROMPTS[roleKey],
+    "",
+    contrarian ? CONTRARIAN_INSTRUCTION : "",
+    "",
+    "Return ONLY JSON using this structure:",
+    "{",
+    '  "vote": "approve|reject|abstain|amend",',
+    '  "confidence": 0.0,',
+    '  "analysis": "short paragraph",',
+    '  "reasoning": "deeper rationale",',
+    '  "justification": "why this confidence is warranted",',
+    '  "evidence": ["specific evidence 1", "specific evidence 2"],',
+    '  "counterargument_rejected": "required when confidence >= 0.9",',
+    '  "role_output": { ... }',
+    "}",
+    "",
+    "Role output JSON schema (follow strictly):",
+    JSON.stringify(ROLE_OUTPUT_SCHEMAS[roleKey]),
+    "",
+    "Validation rules:",
+    "- justification is always required.",
+    "- confidence >= 0.8 requires at least 2 evidence items.",
+    "- confidence >= 0.9 requires at least 3 evidence items plus counterargument_rejected.",
+  ].filter(Boolean).join("\n");
+};
+
+const buildSynthesisPrompt = (args: {
+  topic: string;
+  objective: string | null;
+  votes: Array<{
+    agentId: string;
+    role: string | null;
+    weight: number;
+    vote: string | null;
+    confidence: number | null;
+    reasoning: string | null;
+    roleValidation: RoleValidationResult;
+  }>;
+  consensusSuspicious: boolean;
+}) => {
+  const { topic, objective, votes, consensusSuspicious } = args;
+  return [
+    "You are the council synthesizer.",
+    "Compute a weighted synthesis from the member votes and reasoning.",
+    "Validate each vote's completeness against the roleValidation payload. Explicitly list missing required fields.",
+    consensusSuspicious
+      ? "All agents voted the same way. This is suspicious. You MUST include a consensus_warning in your summary output."
+      : "",
+    "Return ONLY JSON with keys:",
+    "- outcome: approve | reject | amend",
+    "- confidence: number from 0.0 to 1.0",
+    "- summary: short summary",
+    "- rationale: final justification",
+    "- schema_gaps: array of objects with { agentId, role, missingFields }",
+    "- consensus_warning: required when all votes are identical",
+    "",
+    JSON.stringify({ topic, objective, votes, consensusSuspicious }),
+  ].filter(Boolean).join("\n");
+};
+
+const callGatewayAgent = async (params: {
+  sessionKey: string;
+  idempotencyKey: string;
+  message: string;
+}) => {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    throw new Error("OPENAI_API_KEY is not set");
+  }
+
+  const response = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${apiKey}`,
+      "Idempotency-Key": params.idempotencyKey,
+      "X-Council-Session-Key": params.sessionKey,
     },
     body: JSON.stringify({
       model: COUNCIL_MODEL,
-      temperature: 0.3,
-      messages,
+      messages: [
+        {
+          role: "user",
+          content: params.message,
+        },
+      ],
+      response_format: { type: "json_object" },
     }),
   });
 
   if (!response.ok) {
-    const body = await response.text();
-    throw new Error(`OpenAI API error (${response.status}): ${body}`);
+    const errorText = await response.text();
+    throw new Error(`OpenAI chat completion failed (${response.status}): ${errorText}`);
   }
 
-  const payload = await response.json() as {
-    choices?: Array<{ message?: { content?: string } }>;
-  };
+  const parsed = (await response.json()) as OpenAIChatCompletionResponse;
+  const text = parsed.choices?.[0]?.message?.content?.trim();
 
-  const content = payload.choices?.[0]?.message?.content;
-  if (!content) {
-    throw new Error("OpenAI API returned empty completion content");
+  if (!text) {
+    throw new Error("OpenAI chat completion returned empty text payload");
   }
 
-  return content;
+  return { text, provider: REQUIRED_PROVIDER, model: COUNCIL_MODEL };
+};
+
+const hashString = (value: string): number => {
+  let hash = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    hash = ((hash << 5) - hash) + value.charCodeAt(index);
+    hash |= 0;
+  }
+  return Math.abs(hash);
 };
 
 export async function runCouncilDeliberationFanout(sessionId: string): Promise<CouncilDeliberationJobResult> {
@@ -155,60 +442,83 @@ export async function runCouncilDeliberationFanout(sessionId: string): Promise<C
     return { sessionId, dispatched: 0, skipped: true, reason: "no_pending_members" };
   }
 
-  const apiKey = await getOpenAIApiKey();
+  const allMembers = [...(session.members ?? [])].sort((a, b) => a.id - b.id);
+  const fanoutCount = (session.messages ?? []).filter((message) => message.messageType === "fanout_dispatch").length;
+  const deliberationIndex = Math.floor(fanoutCount / Math.max(allMembers.length, 1));
+  const contrarianIndex = allMembers.length > 0
+    ? (hashString(sessionId) + deliberationIndex) % allMembers.length
+    : 0;
+  const contrarianMemberId = allMembers[contrarianIndex]?.id;
+
   const nextTurn = Math.max(0, ...(session.messages ?? []).map((m) => m.turnNo)) + 1;
 
   await Promise.all(
     pending.map(async (member, index) => {
       const turnBase = nextTurn + (index * 3);
-      const roleInstruction = getRoleInstruction(member.agentId, member.role);
+      const roleKey = normalizeRoleKey(member.agentId, member.role);
+      const isContrarian = member.id === contrarianMemberId;
+      const memberSessionKey = `agent:main:subagent:council:${sessionId}:${member.agentId.toLowerCase()}`;
+      const idempotencyKey = `council-vote:${sessionId}:${member.id}`;
 
       await appendCouncilMessage({
         sessionId,
         turnNo: turnBase,
         speakerId: member.agentId,
         messageType: "fanout_dispatch",
-        content: `Dispatched deliberation request to ${member.agentId} (${member.role ?? "general"}) via ${COUNCIL_MODEL}`,
+        content: `Dispatched deliberation request to ${member.agentId} (${member.role ?? "general"}) via OpenClaw sub-agent`,
         metadata: {
           role: member.role,
+          roleKey,
+          roleSchema: ROLE_OUTPUT_SCHEMAS[roleKey],
+          requiredFields: ROLE_FIELD_REQUIREMENTS[roleKey],
+          contrarian: isContrarian,
           weight: member.weight,
           voterModel: COUNCIL_MODEL,
+          voterProvider: REQUIRED_PROVIDER,
+          sessionKey: memberSessionKey,
         },
       });
 
       try {
-        const voterContent = await callOpenAI(apiKey, [
-          {
-            role: "system",
-            content: `${roleInstruction}\n\nReturn ONLY JSON with keys: analysis (string), vote (approve|reject|abstain|amend), confidence (0.0-1.0), reasoning (2-4 paragraphs).`,
-          },
-          {
-            role: "user",
-            content: [
-              `Council topic: ${session.topic}`,
-              `Council objective: ${session.objective ?? "No explicit objective provided."}`,
-              `Member: ${member.agentId}`,
-              `Role: ${member.role ?? "unspecified"}`,
-              `Weight: ${member.weight}`,
-              "Provide your domain analysis and vote.",
-            ].join("\n"),
-          },
-        ]);
+        const voterResponse = await callGatewayAgent({
+          sessionKey: memberSessionKey,
+          idempotencyKey,
+          message: buildMemberPrompt({
+            topic: session.topic,
+            objective: session.objective,
+            memberAgentId: member.agentId,
+            role: member.role,
+            weight: member.weight,
+            roleKey,
+            contrarian: isContrarian,
+          }),
+        });
 
-        const parsed = extractJsonObject(voterContent);
+        const parsed = extractJsonObject(voterResponse.text);
         if (!parsed) {
           throw new Error("Could not parse voter JSON response");
         }
 
         const vote = normalizeVote(String(parsed.vote ?? "abstain"));
         const confidence = clampConfidence(parsed.confidence, 0.5);
-        const analysis = typeof parsed.analysis === "string" ? parsed.analysis.trim() : "";
-        const reasoningBody = typeof parsed.reasoning === "string" && parsed.reasoning.trim().length > 0
-          ? parsed.reasoning.trim()
-          : voterContent;
-        const reasoning = analysis ? `${analysis}\n\n${reasoningBody}` : reasoningBody;
+        ensureConfidenceJustification(parsed, confidence);
 
-        await submitVote(sessionId, member.id, vote, reasoning, confidence);
+        const roleValidation = validateRoleOutput(roleKey, parsed);
+
+        const canonicalVotePayload = {
+          vote,
+          confidence,
+          analysis: typeof parsed.analysis === "string" ? parsed.analysis.trim() : "",
+          reasoning: typeof parsed.reasoning === "string" ? parsed.reasoning.trim() : voterResponse.text,
+          justification: typeof parsed.justification === "string" ? parsed.justification.trim() : "",
+          evidence: Array.isArray(parsed.evidence) ? parsed.evidence : [],
+          counterargument_rejected: typeof parsed.counterargument_rejected === "string" ? parsed.counterargument_rejected.trim() : null,
+          role_output: parsed.role_output,
+          role_validation: roleValidation,
+          contrarian: isContrarian,
+        };
+
+        await submitVote(sessionId, member.id, vote, JSON.stringify(canonicalVotePayload), confidence);
 
         await appendCouncilMessage({
           sessionId,
@@ -218,10 +528,14 @@ export async function runCouncilDeliberationFanout(sessionId: string): Promise<C
           content: `${member.agentId} voted ${vote} (confidence ${confidence}).`,
           metadata: {
             role: member.role,
+            roleKey,
+            roleValidation,
+            contrarian: isContrarian,
             weight: member.weight,
             vote,
             confidence,
-            model: COUNCIL_MODEL,
+            model: voterResponse.model,
+            provider: voterResponse.provider,
           },
         });
       } catch (error) {
@@ -235,8 +549,11 @@ export async function runCouncilDeliberationFanout(sessionId: string): Promise<C
           content: `Failed to collect vote from ${member.agentId}: ${message}`,
           metadata: {
             role: member.role,
+            roleKey,
+            contrarian: isContrarian,
             weight: member.weight,
             model: COUNCIL_MODEL,
+            provider: REQUIRED_PROVIDER,
           },
         });
       }
@@ -250,43 +567,62 @@ export async function runCouncilDeliberationFanout(sessionId: string): Promise<C
   if (refreshed && totalMembers > 0 && votes.length === totalMembers) {
     const synthTurn = Math.max(0, ...((refreshed.messages ?? []).map((m) => m.turnNo))) + 1;
 
+    const normalizedVotes = votes.map((member) => normalizeVote(member.vote ?? "abstain"));
+    const uniqueVotes = new Set(normalizedVotes);
+    const consensusSuspicious = uniqueVotes.size === 1;
+
     await appendCouncilMessage({
       sessionId,
       turnNo: synthTurn,
       speakerId: "synthesizer",
       messageType: "synthesis_dispatch",
-      content: `Dispatching final synthesis via ${COUNCIL_MODEL}`,
+      content: `Dispatching final synthesis via OpenClaw sub-agent (${REQUIRED_PROVIDER}/${COUNCIL_MODEL})`,
       metadata: {
         synthesizerModel: COUNCIL_MODEL,
+        synthesizerProvider: REQUIRED_PROVIDER,
+        consensusSuspicious,
       },
     });
 
     try {
-      const voteSummary = votes.map((member) => ({
-        agentId: member.agentId,
-        role: member.role,
-        weight: member.weight,
-        vote: member.vote,
-        confidence: member.voteScore,
-        reasoning: member.reasoning,
-      }));
+      const voteSummary = votes.map((member) => {
+        const parsedReasoning = member.reasoning ? extractJsonObject(member.reasoning) : null;
+        const roleKey = normalizeRoleKey(member.agentId, member.role);
+        const roleValidation = parsedReasoning
+          ? validateRoleOutput(roleKey, parsedReasoning)
+          : { role: roleKey, missingFields: ROLE_FIELD_REQUIREMENTS[roleKey] };
 
-      const synthesisContent = await callOpenAI(apiKey, [
-        {
-          role: "system",
-          content: "You are the council synthesizer. Weigh each member vote by provided weight, summarize key agreements/disagreements, and output ONLY JSON with keys: outcome (approve|reject|amend), confidence (0.0-1.0), summary (string), rationale (string).",
-        },
-        {
-          role: "user",
-          content: JSON.stringify({
-            topic: refreshed.topic,
-            objective: refreshed.objective,
-            votes: voteSummary,
-          }),
-        },
-      ]);
+        return {
+          agentId: member.agentId,
+          role: member.role,
+          weight: member.weight,
+          vote: member.vote,
+          confidence: member.voteScore,
+          reasoning: member.reasoning,
+          roleValidation,
+        };
+      });
 
-      const parsed = extractJsonObject(synthesisContent);
+      const schemaGaps = voteSummary
+        .filter((vote) => vote.roleValidation.missingFields.length > 0)
+        .map((vote) => ({
+          agentId: vote.agentId,
+          role: vote.role,
+          missingFields: vote.roleValidation.missingFields,
+        }));
+
+      const synthesisResponse = await callGatewayAgent({
+        sessionKey: `agent:main:subagent:council:${sessionId}:synthesizer`,
+        idempotencyKey: `council-synthesis:${sessionId}`,
+        message: buildSynthesisPrompt({
+          topic: refreshed.topic,
+          objective: refreshed.objective,
+          votes: voteSummary,
+          consensusSuspicious,
+        }),
+      });
+
+      const parsed = extractJsonObject(synthesisResponse.text);
       if (!parsed) {
         throw new Error("Could not parse synthesizer JSON response");
       }
@@ -298,7 +634,13 @@ export async function runCouncilDeliberationFanout(sessionId: string): Promise<C
       const summary = typeof parsed.summary === "string" ? parsed.summary : "";
       const rationale = typeof parsed.rationale === "string" && parsed.rationale.trim().length > 0
         ? parsed.rationale.trim()
-        : synthesisContent;
+        : synthesisResponse.text;
+
+      const consensusWarning = consensusSuspicious
+        ? (typeof parsed.consensus_warning === "string" && parsed.consensus_warning.trim().length > 0
+          ? parsed.consensus_warning.trim()
+          : "All council members cast the same vote. Treat this consensus as suspicious and re-check blind spots.")
+        : null;
 
       const weightedTally = votes.reduce(
         (acc, member) => {
@@ -314,9 +656,12 @@ export async function runCouncilDeliberationFanout(sessionId: string): Promise<C
         {
           outcome,
           summary,
+          consensusWarning,
           weightedTally,
+          schemaGaps,
           votes: voteSummary,
-          synthesizerModel: COUNCIL_MODEL,
+          synthesizerModel: synthesisResponse.model,
+          synthesizerProvider: synthesisResponse.provider,
         },
         confidence,
         rationale,
@@ -330,8 +675,11 @@ export async function runCouncilDeliberationFanout(sessionId: string): Promise<C
         content: `Final decision: ${outcome} (confidence ${confidence})`,
         metadata: {
           summary,
+          consensusWarning,
           weightedTally,
-          synthesizerModel: COUNCIL_MODEL,
+          schemaGaps,
+          synthesizerModel: synthesisResponse.model,
+          synthesizerProvider: synthesisResponse.provider,
         },
       });
     } catch (error) {
@@ -345,6 +693,7 @@ export async function runCouncilDeliberationFanout(sessionId: string): Promise<C
         content: `Final synthesis failed: ${message}`,
         metadata: {
           synthesizerModel: COUNCIL_MODEL,
+          synthesizerProvider: REQUIRED_PROVIDER,
         },
       });
     }
