@@ -12,6 +12,7 @@ If `~/clawd` is strategy/memory/policy, **cortana-external is execution runtime*
 - Mission Control dashboard app (`apps/mission-control`, Next.js)
 - CANSLIM backtester/advisor (`backtester/`)
 - Watchdog reliability service (`watchdog/`, launchd)
+- `packages/` – typed client libraries (`fitness-client`, `fitness-types`)
 - Supporting docs and stock-discovery scripts
 
 ---
@@ -34,6 +35,9 @@ If `~/clawd` is strategy/memory/policy, **cortana-external is execution runtime*
 ├── watchdog/                    # launchd reliability monitor
 ├── apps/
 │   └── mission-control/         # Next.js ops dashboard
+├── packages/
+│   ├── fitness-client/           # Typed TS client for Go fitness service
+│   └── fitness-types/            # Shared TypeScript types for fitness data
 ├── tools/
 │   └── stock-discovery/         # stock discovery helper scripts
 └── docs/                        # runbooks + architecture notes
@@ -130,6 +134,7 @@ tailscale ip -4
 - Council (`/council`): deliberation sessions, weighted votes, and decision rationale timeline
 - Approvals (`/approvals`): risk-tiered approval inbox with inline Telegram actions + resume flow
 - Feedback (`/feedback`): correction/remediation dashboard with action tracking and recurrence visibility
+- Fitness (`/fitness`): recovery dashboard with Whoop recovery/sleep/strain, workout cards, 14-day trend bars, threshold alerts + alert history
 
 ### Council deliberation system (new)
 - Mission Control includes a multi-member Council workflow for important decisions.
@@ -335,6 +340,9 @@ launchctl list | grep -E "cortana.watchdog|cortana.fitness-service"
 
 ## 8) Recent additions (high impact)
 
+- **Fitness dashboard** in Mission Control (`/fitness`) — full recovery/sleep/strain/workout dashboard with threshold alerting
+- **Typed fitness packages** (`packages/fitness-client`, `packages/fitness-types`) for type-safe fitness service consumption
+- **Whoop OAuth fix** — redirect_uri consistency (http vs https) resolved for token exchange + refresh
 - **Cron Health Dashboard** in Mission Control (`/api/cron-health`) with real-time OpenClaw-first state, smart fire timestamps, and triage-friendly collapse defaults
 - **Vitest unit tests** for Mission Control lib functions and API helpers
 - **Go unit tests** for Alpaca service logic/endpoints
@@ -361,4 +369,4 @@ Update whenever any of these change:
 - Backtester entrypoints/dependencies
 - New top-level services/apps/tools
 
-Last refreshed: **2026-02-26** (README + test/status cross-check)
+Last refreshed: **2026-02-27** (README + test/status cross-check)
