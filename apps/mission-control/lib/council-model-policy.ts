@@ -4,8 +4,8 @@ export type CouncilModelPolicy = {
 };
 
 const DEFAULT_POLICY: CouncilModelPolicy = {
-  voter: "gpt-4o-mini",
-  synthesizer: "claude-3-5-sonnet",
+  voter: "gpt-4o",
+  synthesizer: "gpt-4o",
 };
 
 export function resolveCouncilModelPolicy(raw: unknown): CouncilModelPolicy {

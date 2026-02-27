@@ -67,7 +67,7 @@ type CouncilSessionRow = {
 };
 
 type CouncilMemberRow = {
-  id: number;
+  id: number | bigint;
   session_id: string;
   agent_id: string;
   role: string | null;
@@ -80,9 +80,9 @@ type CouncilMemberRow = {
 };
 
 type CouncilMessageRow = {
-  id: number;
+  id: number | bigint;
   session_id: string;
-  turn_no: number;
+  turn_no: number | bigint;
   speaker_id: string;
   message_type: string;
   content: string;
@@ -116,7 +116,7 @@ const mapSession = (row: CouncilSessionRow): CouncilSession => ({
 });
 
 const mapMember = (row: CouncilMemberRow): CouncilMember => ({
-  id: row.id,
+  id: Number(row.id),
   sessionId: row.session_id,
   agentId: row.agent_id,
   role: row.role,
@@ -129,9 +129,9 @@ const mapMember = (row: CouncilMemberRow): CouncilMember => ({
 });
 
 const mapMessage = (row: CouncilMessageRow): CouncilMessage => ({
-  id: row.id,
+  id: Number(row.id),
   sessionId: row.session_id,
-  turnNo: row.turn_no,
+  turnNo: Number(row.turn_no),
   speakerId: row.speaker_id,
   messageType: row.message_type,
   content: row.content,
@@ -238,7 +238,7 @@ export async function getCouncilSessionById(id: string): Promise<CouncilSession 
   `;
 
   type SessionWithMemberRow = CouncilSessionRow & {
-    member_id: number | null;
+    member_id: number | bigint | null;
     session_id: string | null;
     agent_id: string | null;
     role: string | null;
@@ -266,7 +266,7 @@ export async function getCouncilSessionById(id: string): Promise<CouncilSession 
     const members = sessionRows
       .filter((row) => row.member_id !== null)
       .map((row) => mapMember({
-        id: row.member_id as number,
+        id: Number(row.member_id),
         session_id: row.session_id as string,
         agent_id: row.agent_id as string,
         role: row.role,
@@ -293,7 +293,7 @@ export async function getCouncilSessionById(id: string): Promise<CouncilSession 
     const members = sessionRows
       .filter((row) => row.member_id !== null)
       .map((row) => mapMember({
-        id: row.member_id as number,
+        id: Number(row.member_id),
         session_id: row.session_id as string,
         agent_id: row.agent_id as string,
         role: row.role,
