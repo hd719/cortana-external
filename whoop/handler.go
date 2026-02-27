@@ -3,7 +3,8 @@ package whoop
 import (
 	"context"
 	"encoding/json"
-	"errors"
+	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"net/url"
@@ -18,7 +19,10 @@ const whoopAuthURL = "https://api.prod.whoop.com/oauth/oauth2/auth"
 const whoopTokenURL = "https://api.prod.whoop.com/oauth/oauth2/token"
 
 // Cache configuration
-const defaultCacheTTL = 5 * time.Minute
+const (
+	defaultCacheTTL  = 5 * time.Minute
+	tokenRefreshSkew = 10 * time.Minute
+)
 
 type TokenResponse struct {
 	AccessToken  string `json:"access_token"`
@@ -82,10 +86,12 @@ func (s *Service) CallbackHandler(c *gin.Context) {
 		return
 	}
 
+	now := time.Now()
 	tokens := &TokenData{
-		AccessToken:  token.AccessToken,
-		RefreshToken: token.RefreshToken,
-		ExpiresAt:    time.Now().Add(time.Duration(token.ExpiresIn) * time.Second),
+		AccessToken:   token.AccessToken,
+		RefreshToken:  token.RefreshToken,
+		ExpiresAt:     now.Add(time.Duration(token.ExpiresIn) * time.Second),
+		LastRefreshAt: now,
 	}
 
 	if err := SaveTokens(s.TokenPath, tokens); err != nil {
@@ -97,6 +103,36 @@ func (s *Service) CallbackHandler(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"status": "ok", "message": "tokens saved successfully"})
+}
+
+func (s *Service) AuthStatusHandler(c *gin.Context) {
+	tokens, err := LoadTokens(s.TokenPath)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{
+			"has_token":             false,
+			"token_path":            s.TokenPath,
+			"error":                 err.Error(),
+			"refresh_token_present": false,
+		})
+		return
+	}
+
+	now := time.Now()
+	expiresIn := int64(tokens.ExpiresAt.Sub(now).Seconds())
+	if tokens.ExpiresAt.IsZero() {
+		expiresIn = 0
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"has_token":             true,
+		"token_path":            s.TokenPath,
+		"expires_at":            tokens.ExpiresAt,
+		"expires_in_seconds":    expiresIn,
+		"is_expired":            !tokens.ExpiresAt.IsZero() && now.After(tokens.ExpiresAt),
+		"needs_refresh":         s.tokenNeedsRefresh(tokens),
+		"last_refresh_at":       tokens.LastRefreshAt,
+		"refresh_token_present": tokens.RefreshToken != "",
+	})
 }
 
 func (s *Service) DataHandler(c *gin.Context) {
@@ -120,33 +156,12 @@ func (s *Service) DataHandler(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-
-	if time.Now().After(tokens.ExpiresAt.Add(-1 * time.Minute)) {
-		if tokens.RefreshToken == "" {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "token expired and no refresh token"})
-			return
+	if err := s.ensureValidToken(ctx, tokens); err != nil {
+		if s.Logger != nil {
+			s.Logger.Printf("token validation/refresh failed: %v", err)
 		}
-
-		refreshed, err := s.refreshToken(ctx, tokens.RefreshToken)
-		if err != nil {
-			if s.Logger != nil {
-				s.Logger.Printf("token refresh failed: %v", err)
-			}
-			c.JSON(http.StatusBadGateway, gin.H{"error": "token refresh failed"})
-			return
-		}
-
-		tokens.AccessToken = refreshed.AccessToken
-		if refreshed.RefreshToken != "" {
-			tokens.RefreshToken = refreshed.RefreshToken
-		}
-		tokens.ExpiresAt = time.Now().Add(time.Duration(refreshed.ExpiresIn) * time.Second)
-
-		if err := SaveTokens(s.TokenPath, tokens); err != nil {
-			if s.Logger != nil {
-				s.Logger.Printf("failed to save refreshed tokens: %v", err)
-			}
-		}
+		c.JSON(http.StatusBadGateway, gin.H{"error": "token refresh failed"})
+		return
 	}
 
 	data, err := s.fetchAllWhoopData(ctx, tokens.AccessToken)
@@ -162,6 +177,58 @@ func (s *Service) DataHandler(c *gin.Context) {
 	s.cache.set(data)
 
 	c.JSON(http.StatusOK, data)
+}
+
+func (s *Service) tokenNeedsRefresh(tokens *TokenData) bool {
+	if tokens == nil {
+		return true
+	}
+	if tokens.ExpiresAt.IsZero() {
+		return true
+	}
+	return time.Now().After(tokens.ExpiresAt.Add(-1 * tokenRefreshSkew))
+}
+
+func (s *Service) ensureValidToken(ctx context.Context, tokens *TokenData) error {
+	if !s.tokenNeedsRefresh(tokens) {
+		return nil
+	}
+
+	if tokens.RefreshToken == "" {
+		return fmt.Errorf("token expired and no refresh token available")
+	}
+
+	if s.Logger != nil {
+		s.Logger.Printf("attempting token refresh (expires_at=%s)", tokens.ExpiresAt.Format(time.RFC3339))
+	}
+
+	refreshed, err := s.refreshToken(ctx, tokens.RefreshToken)
+	if err != nil {
+		return fmt.Errorf("refresh request failed: %w", err)
+	}
+
+	now := time.Now()
+	tokens.AccessToken = refreshed.AccessToken
+	if refreshed.RefreshToken != "" {
+		tokens.RefreshToken = refreshed.RefreshToken
+	}
+	if refreshed.ExpiresIn > 0 {
+		tokens.ExpiresAt = now.Add(time.Duration(refreshed.ExpiresIn) * time.Second)
+	}
+	tokens.LastRefreshAt = now
+
+	if err := SaveTokens(s.TokenPath, tokens); err != nil {
+		if s.Logger != nil {
+			s.Logger.Printf("warning: refreshed token obtained but failed to persist to disk: %v", err)
+		}
+		return nil
+	}
+
+	if s.Logger != nil {
+		s.Logger.Printf("token refresh succeeded (new_expiry=%s, refresh_token_rotated=%t)", tokens.ExpiresAt.Format(time.RFC3339), refreshed.RefreshToken != "")
+	}
+
+	return nil
 }
 
 func (s *Service) exchangeToken(ctx context.Context, code string) (*TokenResponse, error) {
@@ -185,7 +252,8 @@ func (s *Service) exchangeToken(ctx context.Context, code string) (*TokenRespons
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
-		return nil, errors.New("token endpoint returned error")
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))
+		return nil, fmt.Errorf("token endpoint returned status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
 	}
 
 	var token TokenResponse
@@ -255,7 +323,8 @@ func (s *Service) refreshToken(ctx context.Context, refreshToken string) (*Token
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
-		return nil, errors.New("refresh token endpoint returned error")
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))
+		return nil, fmt.Errorf("refresh token endpoint returned status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
 	}
 
 	var token TokenResponse
