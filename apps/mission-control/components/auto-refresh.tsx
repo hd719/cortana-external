@@ -5,9 +5,10 @@ import { useRouter } from "next/navigation";
 
 type AutoRefreshProps = {
   intervalMs?: number;
+  sourceUrl?: string;
 };
 
-export function AutoRefresh({ intervalMs = 2500 }: AutoRefreshProps) {
+export function AutoRefresh({ intervalMs = 2500, sourceUrl = "/api/live" }: AutoRefreshProps) {
   const router = useRouter();
 
   useEffect(() => {
@@ -36,7 +37,7 @@ export function AutoRefresh({ intervalMs = 2500 }: AutoRefreshProps) {
     const connect = () => {
       if (stopped) return;
       try {
-        source = new EventSource("/api/live");
+        source = new EventSource(sourceUrl);
         source.addEventListener("ready", refresh);
         source.addEventListener("tick", refresh);
         source.onerror = () => {
@@ -65,7 +66,7 @@ export function AutoRefresh({ intervalMs = 2500 }: AutoRefreshProps) {
       window.removeEventListener("focus", onFocus);
       document.removeEventListener("visibilitychange", onVisible);
     };
-  }, [intervalMs, router]);
+  }, [intervalMs, router, sourceUrl]);
 
   return null;
 }
