@@ -7,6 +7,7 @@ import {
   getCouncilSessionById,
   getCouncilSessions,
   submitVote,
+  addCouncilMembers,
 } from "@/lib/council";
 
 vi.mock("@/lib/task-prisma", () => ({
@@ -148,6 +149,19 @@ describe("lib/council", () => {
     expect(query).toContain("UPDATE mc_council_members");
     expect(query).toContain("vote = 'approve'");
     expect(query).toContain("id = 4");
+  });
+
+
+  it("addCouncilMembers inserts records", async () => {
+    await addCouncilMembers("c-55", [
+      { agentId: "arbiter", role: "judge", weight: 2 },
+      { agentId: "voter-a" },
+    ]);
+
+    expect(prisma.$executeRawUnsafe).toHaveBeenCalledTimes(1);
+    const query = vi.mocked(prisma.$executeRawUnsafe).mock.calls[0][0] as string;
+    expect(query).toContain("INSERT INTO mc_council_members");
+    expect(query).toContain("'arbiter'");
   });
 
   it("finalizeDecision updates session", async () => {
