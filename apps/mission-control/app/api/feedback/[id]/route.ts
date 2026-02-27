@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getFeedbackById, updateFeedbackStatus } from "@/lib/feedback";
+import { getFeedbackById, REMEDIATION_STATUSES, updateFeedbackRemediation, type RemediationStatus } from "@/lib/feedback";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -28,15 +28,30 @@ export async function PATCH(
 ) {
   const { id } = await context.params;
   const body = (await request.json()) as {
-    status?: "new" | "triaged" | "in_progress" | "verified" | "wont_fix";
-    owner?: string;
+    remediationStatus?: string;
+    remediationNotes?: string | null;
+    resolvedBy?: string | null;
   };
 
-  if (!body.status) {
-    return NextResponse.json({ error: "status is required" }, { status: 400 });
+  if (!body.remediationStatus) {
+    return NextResponse.json({ error: "remediationStatus is required" }, { status: 400 });
   }
 
-  await updateFeedbackStatus(id, body.status, body.owner);
+  if (!REMEDIATION_STATUSES.includes(body.remediationStatus as RemediationStatus)) {
+    return NextResponse.json({ error: "Invalid remediationStatus" }, { status: 400 });
+  }
+
+  const updated = await updateFeedbackRemediation(
+    id,
+    body.remediationStatus as RemediationStatus,
+    body.remediationNotes,
+    body.resolvedBy,
+  );
+
+  if (!updated) {
+    return NextResponse.json({ error: "Feedback item not found" }, { status: 404 });
+  }
+
   const item = await getFeedbackById(id);
 
   return NextResponse.json({ ok: true, item }, {

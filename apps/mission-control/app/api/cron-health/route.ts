@@ -15,6 +15,7 @@ export type JobSchedule =
   | { kind: string; [key: string]: unknown };
 
 type JobDefinition = {
+  delivery?: { mode?: string; channel?: string; to?: string };
   name: string;
   enabled?: boolean;
   schedule?: JobSchedule;
@@ -212,6 +213,7 @@ export async function GET() {
       consecutive_failures: consecutiveFailures,
       last_duration_sec: typeof lastDurationSec === "number" ? Number(lastDurationSec) : null,
       last_error: status === "healthy" ? null : lastError,
+      delivery_mode: job.delivery?.mode || "none",
     };
   });
 

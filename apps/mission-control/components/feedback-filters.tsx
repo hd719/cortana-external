@@ -4,6 +4,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 
 const statuses = ["all", "new", "triaged", "in_progress", "verified", "wont_fix"] as const;
+const remediationStatuses = ["all", "open", "in_progress", "resolved", "wont_fix"] as const;
 const severities = ["all", "critical", "high", "medium", "low"] as const;
 
 const humanize = (value: string) => value.replaceAll("_", " ").replace(/\b\w/g, (m) => m.toUpperCase());
@@ -11,12 +12,14 @@ const humanize = (value: string) => value.replaceAll("_", " ").replace(/\b\w/g, 
 export function FeedbackFilters({
   params,
   selectedStatus,
+  selectedRemediationStatus,
   selectedSeverity,
   selectedCategory,
   categories,
 }: {
   params: URLSearchParams;
   selectedStatus: string;
+  selectedRemediationStatus: string;
   selectedSeverity: string;
   selectedCategory: string;
   categories: string[];
@@ -34,6 +37,15 @@ export function FeedbackFilters({
 
   return (
     <div className="space-y-3 rounded-md border bg-card/60 p-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Remediation</span>
+        {remediationStatuses.map((status) => (
+          <button key={status} type="button" onClick={() => setFilter("remediationStatus", status)}>
+            <Badge variant={selectedRemediationStatus === status ? "secondary" : "outline"}>{humanize(status)}</Badge>
+          </button>
+        ))}
+      </div>
+
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Status</span>
         {statuses.map((status) => (

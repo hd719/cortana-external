@@ -15,6 +15,7 @@ type CronHealthItem = {
   consecutive_failures: number;
   last_duration_sec: number | null;
   last_error: string | null;
+  delivery_mode: string;
 };
 
 type CronHealthResponse = {
@@ -156,7 +157,7 @@ export function CronHealthCard() {
               >
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold text-foreground">{cron.name}</p>
+                    <p className="truncate text-sm font-semibold text-foreground">{cron.name} {cron.delivery_mode === "announce" ? <span className="ml-1 text-xs" title="Delivers to Telegram">📢</span> : <span className="ml-1 text-xs" title="Background only">🔇</span>}</p>
                     <p className="font-mono text-[11px] text-zinc-400">{cron.schedule}</p>
                   </div>
                   <Badge className={status.className}>
@@ -164,10 +165,14 @@ export function CronHealthCard() {
                   </Badge>
                 </div>
 
-                <div className="mt-3 grid grid-cols-2 gap-3 text-xs text-muted-foreground sm:grid-cols-4">
+                <div className="mt-3 grid grid-cols-2 gap-3 text-xs text-muted-foreground sm:grid-cols-5">
                   <div>
                     <p className="text-[10px] uppercase tracking-wide">Last fired</p>
                     <p className="font-mono text-foreground">{toRelativeTime(cron.last_fire_time)}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wide">Next fire</p>
+                    <p className="font-mono text-foreground">{cron.next_fire_time ? toShortTime(cron.next_fire_time) : "—"}</p>
                   </div>
                   <div>
                     <p className="text-[10px] uppercase tracking-wide">Consecutive fails</p>
@@ -208,14 +213,17 @@ export function CronHealthCard() {
                   {healthyCrons.map((cron) => (
                     <div
                       key={cron.name}
-                      className="grid grid-cols-1 gap-1 px-3 py-2 text-xs sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:items-center sm:gap-3"
+                      className="grid grid-cols-1 gap-1 px-3 py-2 text-xs sm:grid-cols-[minmax(0,1fr)_auto_auto_auto] sm:items-center sm:gap-3"
                     >
-                      <p className="truncate font-medium text-foreground">{cron.name}</p>
+                      <p className="truncate font-medium text-foreground">{cron.delivery_mode === "announce" ? "📢" : "🔇"} {cron.name}</p>
                       <p className="font-mono text-muted-foreground">
                         {firedToday(cron.last_fire_time)
                           ? <><span className="text-muted-foreground/60">fired </span>{toShortTime(cron.last_fire_time)} <span className="text-muted-foreground/60">({toRelativeTime(cron.last_fire_time)})</span></>
-                          : <><span className="text-muted-foreground/60">next </span>{toShortTime(cron.next_fire_time)}</>
+                          : <><span className="text-muted-foreground/60">last </span>{toRelativeTime(cron.last_fire_time)}</>
                         }
+                      </p>
+                      <p className="font-mono text-muted-foreground">
+                        <span className="text-muted-foreground/60">next </span>{cron.next_fire_time ? toShortTime(cron.next_fire_time) : "—"}
                       </p>
                       {cron.last_duration_sec != null && (
                         <p className="font-mono text-muted-foreground"><span className="text-muted-foreground/60">took </span>{formatDuration(cron.last_duration_sec)}</p>

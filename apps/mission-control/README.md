@@ -18,6 +18,8 @@ pnpm install
 cp .env.example .env.local
 # Update DATABASE_URL for your Postgres instance
 # e.g., createdb mission_control
+# Required for governance/task reads: CORTANA_DATABASE_URL
+# Required for approval notifications: TELEGRAM_BOT_TOKEN
 ```
 3) Apply schema + seed data (creates agents Huragok, Oracle, Researcher, Librarian, Monitor)
 ```bash
@@ -51,6 +53,14 @@ pnpm dev
 - `GET /api/agents` — agent roster
 - `GET /api/runs` — recent runs/jobs
 - `GET /api/events` — latest alerts/events
+- `GET /api/approvals` / `POST /api/approvals` — list and create approval requests
+- `PATCH /api/approvals/:id` — approve/reject/update approval state
+- `POST /api/approvals/:id/resume` — resume a paused/approved flow
+- `GET /api/council` / `POST /api/council` — list and create council sessions
+- `POST /api/council/jobs/deliberate` — council deliberation fanout job
+- `GET /api/feedback` / `POST /api/feedback` — feedback item list/create
+- `GET /api/feedback/:id` — fetch single feedback item and action history
+- `PATCH /api/feedback/:id` — update remediation fields (`remediationStatus`, `remediationNotes`, `resolvedBy`)
 - `GET /api/task-board` — task board slices (ready, blocked, due, pillar rollups, recent outcomes)
 - `GET /api/live` — SSE stream for near-live UI refresh ticks
 - `POST /api/openclaw/subagent-events` — OpenClaw sub-agent lifecycle ingestion (queued/running/done/failed/timeout/killed)
@@ -60,6 +70,9 @@ pnpm dev
 - `/` — Dashboard with stats, agent health widgets, runs table, and alerts feed
 - `/task-board` — Task board cards (Ready now, Blocked, Due soon/Overdue, By pillar, and Recent execution log)
 - `/agents` — Agent overview
+- `/approvals` — Approvals inbox with inline Telegram-driven action flow and resume controls
+- `/council` — Council deliberation sessions, member votes, and synthesis rationale
+- `/feedback` — Feedback inbox with remediation status, notes/actions, and resolution metrics
 - `/jobs` — Runs/jobs list
 
 ## Task board data model
@@ -103,6 +116,31 @@ curl -X POST http://localhost:3000/api/openclaw/subagent-events \
   -d '{"runId":"sub-123","status":"queued","agentName":"Huragok","jobType":"mission-control-sync"}'
 ```
 
+
+## Governance integration notes
+- Approval notifications use the Telegram Bot API (`TELEGRAM_BOT_TOKEN`) for inline approve/reject UX.
+- Council deliberation policy is enforced as **OpenAI `gpt-4o` only** for both member voting and synthesis.
+- Council voting calls are made directly from Mission Control to OpenAI (not routed through the OpenClaw gateway).
+
 ## Notes
 - Migrations are stored in `prisma/migrations`. Update schema in `prisma/schema.prisma`, then run `pnpm db:migrate`.
 - Seed data lives in `prisma/seed.ts`; safe to re-run.
+
+
+### Feedback remediation PATCH API
+
+`PATCH /api/feedback/:id` body:
+
+```json
+{
+  "remediationStatus": "in_progress",
+  "remediationNotes": "Investigating root cause in parser pipeline",
+  "resolvedBy": "hamel"
+}
+```
+
+Rules:
+- `remediationStatus` is required and must be one of: `open`, `in_progress`, `resolved`, `wont_fix`
+- Returns `404` when the feedback item id does not exist
+- When set to `resolved`, `resolved_at` is stamped automatically
+

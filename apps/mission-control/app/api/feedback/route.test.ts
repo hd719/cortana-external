@@ -23,6 +23,7 @@ describe("/api/feedback", () => {
     expect(body).toEqual({ items: [{ id: "fb-1", summary: "a" }] });
     expect(getFeedbackItems).toHaveBeenCalledWith({
       status: "new",
+      remediationStatus: "all",
       severity: "high",
       category: undefined,
       source: "user",

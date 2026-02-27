@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -64,6 +65,24 @@ export function ApprovalCard({ approval }: { approval: ApprovalRequest }) {
     return `${approval.rationale.slice(0, 220)}…`;
   }, [approval.rationale]);
 
+  const feedbackId = useMemo(() => {
+    if (approval.feedbackId && approval.feedbackId.trim()) return approval.feedbackId.trim();
+    if (approval.proposal && typeof approval.proposal === "object" && !Array.isArray(approval.proposal)) {
+      const proposal = approval.proposal as Record<string, unknown>;
+      const candidate = proposal.feedback_id ?? proposal.feedbackId;
+      if (typeof candidate === "string" && candidate.trim()) return candidate.trim();
+    }
+    return null;
+  }, [approval.feedbackId, approval.proposal]);
+
+  const feedbackSummary = approval.feedbackSummary?.trim();
+  const truncatedFeedbackSummary = feedbackSummary && feedbackSummary.length > 140
+    ? `${feedbackSummary.slice(0, 140)}…`
+    : feedbackSummary;
+  const feedbackLabel = feedbackId
+    ? truncatedFeedbackSummary || `feedback ${feedbackId.slice(0, 8)}`
+    : null;
+
   const takeAction = async (action: "approve" | "reject" | "approve_edited") => {
     try {
       setLoadingAction(action);
@@ -93,6 +112,15 @@ export function ApprovalCard({ approval }: { approval: ApprovalRequest }) {
           <Badge variant="outline">{approval.status}</Badge>
         </CardTitle>
         <p className="text-sm text-muted-foreground">{truncatedRationale}</p>
+        {feedbackId && feedbackLabel && (
+          <Link
+            href={`/feedback?id=${encodeURIComponent(feedbackId)}`}
+            onClick={(event) => event.stopPropagation()}
+            className="text-xs text-muted-foreground hover:text-foreground hover:underline"
+          >
+            From feedback: {feedbackLabel}
+          </Link>
+        )}
         <p className="text-xs text-muted-foreground">{toRelativeTime(approval.createdAt)}</p>
       </CardHeader>
 
@@ -114,22 +142,30 @@ export function ApprovalCard({ approval }: { approval: ApprovalRequest }) {
             </div>
           )}
 
-          <div className="space-y-2">
-            <Textarea
-              value={reason}
-              onChange={(event) => setReason(event.target.value)}
-              placeholder="Optional reason for audit trail"
-            />
-            <div className="flex flex-wrap gap-2">
-              <Button disabled={!!loadingAction} onClick={() => takeAction("approve")}>Approve</Button>
-              <Button disabled={!!loadingAction} variant="destructive" onClick={() => takeAction("reject")}>
-                Reject
-              </Button>
-              <Button disabled={!!loadingAction} variant="outline" onClick={() => takeAction("approve_edited")}>
-                Approve Edited
-              </Button>
+          {approval.status === "pending" ? (
+            <div className="space-y-2">
+              <Textarea
+                value={reason}
+                onChange={(event) => setReason(event.target.value)}
+                placeholder="Optional reason for audit trail"
+              />
+              <div className="flex flex-wrap gap-2">
+                <Button disabled={!!loadingAction} onClick={() => takeAction("approve")}>Approve</Button>
+                <Button disabled={!!loadingAction} variant="destructive" onClick={() => takeAction("reject")}>
+                  Reject
+                </Button>
+                <Button disabled={!!loadingAction} variant="outline" onClick={() => takeAction("approve_edited")}>
+                  Approve Edited
+                </Button>
+              </div>
             </div>
-          </div>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              {approval.status === "rejected"
+                ? `Rejected by ${approval.rejectedBy || "unknown"} · ${toRelativeTime(approval.rejectedAt)}`
+                : `Approved by ${approval.approvedBy || "unknown"} · ${toRelativeTime(approval.approvedAt)}`}
+            </p>
+          )}
 
           <div>
             <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Audit events</p>

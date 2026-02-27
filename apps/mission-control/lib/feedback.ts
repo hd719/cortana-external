@@ -1,8 +1,13 @@
 import prisma from "@/lib/prisma";
 import { getTaskPrisma } from "@/lib/task-prisma";
 
+export type RemediationStatus = "open" | "in_progress" | "resolved" | "wont_fix";
+
+export const REMEDIATION_STATUSES: RemediationStatus[] = ["open", "in_progress", "resolved", "wont_fix"];
+
 export type FeedbackFilters = {
   status?: "new" | "triaged" | "in_progress" | "verified" | "wont_fix" | "all";
+  remediationStatus?: RemediationStatus | "all";
   severity?: "low" | "medium" | "high" | "critical" | "all";
   category?: string;
   source?: "user" | "system" | "evaluator" | "all";
@@ -25,6 +30,8 @@ export type FeedbackItem = {
   id: string;
   runId: string | null;
   taskId: string | null;
+  linkedTaskId: number | null;
+  linkedTaskStatus: string | null;
   agentId: string | null;
   source: "user" | "system" | "evaluator";
   category: string;
@@ -37,12 +44,17 @@ export type FeedbackItem = {
   createdAt: string;
   updatedAt: string;
   actionCount: number;
+  remediationStatus: RemediationStatus;
+  remediationNotes: string | null;
+  resolvedAt: string | null;
+  resolvedBy: string | null;
   actions?: FeedbackAction[];
 };
 
 export type FeedbackMetrics = {
   bySeverity: Record<string, number>;
   byStatus: Record<string, number>;
+  byRemediationStatus: Record<string, number>;
   byCategory: Record<string, number>;
   dailyCorrections: Array<{ day: string; count: number }>;
 };
@@ -51,6 +63,8 @@ type FeedbackRow = {
   id: string;
   run_id: string | null;
   task_id: string | null;
+  linked_task_id: number | null;
+  linked_task_status: string | null;
   agent_id: string | null;
   source: "user" | "system" | "evaluator";
   category: string;
@@ -63,6 +77,10 @@ type FeedbackRow = {
   created_at: Date;
   updated_at: Date;
   action_count: number;
+  remediation_status: RemediationStatus;
+  remediation_notes: string | null;
+  resolved_at: Date | null;
+  resolved_by: string | null;
 };
 
 type FeedbackActionRow = {
@@ -89,6 +107,8 @@ const mapItem = (row: FeedbackRow): FeedbackItem => ({
   id: row.id,
   runId: row.run_id,
   taskId: row.task_id,
+  linkedTaskId: row.linked_task_id != null ? Number(row.linked_task_id) : null,
+  linkedTaskStatus: row.linked_task_status ?? null,
   agentId: row.agent_id,
   source: row.source,
   category: row.category,
@@ -101,6 +121,10 @@ const mapItem = (row: FeedbackRow): FeedbackItem => ({
   createdAt: row.created_at.toISOString(),
   updatedAt: row.updated_at.toISOString(),
   actionCount: Number(row.action_count || 0),
+  remediationStatus: row.remediation_status,
+  remediationNotes: row.remediation_notes,
+  resolvedAt: row.resolved_at ? row.resolved_at.toISOString() : null,
+  resolvedBy: row.resolved_by,
 });
 
 const mapAction = (row: FeedbackActionRow): FeedbackAction => ({
@@ -131,6 +155,9 @@ export async function getFeedbackItems(filters: FeedbackFilters = {}): Promise<F
   if (filters.severity && filters.severity !== "all") {
     conditions.push(`f.severity = '${escapeLiteral(filters.severity)}'`);
   }
+  if (filters.remediationStatus && filters.remediationStatus !== "all") {
+    conditions.push(`f.remediation_status = '${escapeLiteral(filters.remediationStatus)}'`);
+  }
   if (filters.category && filters.category !== "all") {
     conditions.push(`f.category = '${escapeLiteral(filters.category)}'`);
   }
@@ -145,6 +172,8 @@ export async function getFeedbackItems(filters: FeedbackFilters = {}): Promise<F
       f.id,
       f.run_id,
       f.task_id,
+      MAX(COALESCE(task_meta.id, task_fallback.id))::int AS linked_task_id,
+      MAX(COALESCE(task_meta.status, task_fallback.status))::text AS linked_task_status,
       f.agent_id,
       f.source,
       f.category,
@@ -156,9 +185,27 @@ export async function getFeedbackItems(filters: FeedbackFilters = {}): Promise<F
       f.owner,
       f.created_at,
       f.updated_at,
+      f.remediation_status,
+      f.remediation_notes,
+      f.resolved_at,
+      f.resolved_by,
       COUNT(a.id)::int AS action_count
     FROM mc_feedback_items f
     LEFT JOIN mc_feedback_actions a ON a.feedback_id = f.id
+    LEFT JOIN LATERAL (
+      SELECT id, status
+      FROM cortana_tasks t
+      WHERE t.metadata->>'feedback_id' = f.id::text
+      ORDER BY t.updated_at DESC
+      LIMIT 1
+    ) task_meta ON true
+    LEFT JOIN LATERAL (
+      SELECT id, status
+      FROM cortana_tasks t
+      WHERE t.id::text = f.task_id::text
+      ORDER BY t.updated_at DESC
+      LIMIT 1
+    ) task_fallback ON task_meta.id IS NULL
     ${whereClause}
     GROUP BY f.id
     ORDER BY f.created_at DESC
@@ -187,6 +234,8 @@ export async function getFeedbackById(id: string): Promise<FeedbackItem | null> 
       f.id,
       f.run_id,
       f.task_id,
+      MAX(COALESCE(task_meta.id, task_fallback.id))::int AS linked_task_id,
+      MAX(COALESCE(task_meta.status, task_fallback.status))::text AS linked_task_status,
       f.agent_id,
       f.source,
       f.category,
@@ -198,9 +247,27 @@ export async function getFeedbackById(id: string): Promise<FeedbackItem | null> 
       f.owner,
       f.created_at,
       f.updated_at,
+      f.remediation_status,
+      f.remediation_notes,
+      f.resolved_at,
+      f.resolved_by,
       COUNT(a.id)::int AS action_count
     FROM mc_feedback_items f
     LEFT JOIN mc_feedback_actions a ON a.feedback_id = f.id
+    LEFT JOIN LATERAL (
+      SELECT id, status
+      FROM cortana_tasks t
+      WHERE t.metadata->>'feedback_id' = f.id::text
+      ORDER BY t.updated_at DESC
+      LIMIT 1
+    ) task_meta ON true
+    LEFT JOIN LATERAL (
+      SELECT id, status
+      FROM cortana_tasks t
+      WHERE t.id::text = f.task_id::text
+      ORDER BY t.updated_at DESC
+      LIMIT 1
+    ) task_fallback ON task_meta.id IS NULL
     WHERE f.id = '${safeId}'
     GROUP BY f.id
     LIMIT 1
@@ -329,6 +396,45 @@ export async function updateFeedbackStatus(
   }
 }
 
+
+export async function updateFeedbackRemediation(
+  id: string,
+  remediationStatus: RemediationStatus,
+  remediationNotes?: string | null,
+  resolvedBy?: string | null,
+): Promise<boolean> {
+  const safeId = escapeLiteral(id);
+  const safeNotes = remediationNotes ? `'${escapeLiteral(remediationNotes)}'` : "NULL";
+  const safeResolvedBy = resolvedBy ? `'${escapeLiteral(resolvedBy)}'` : "NULL";
+  const shouldResolve = remediationStatus === "resolved";
+  const resolvedAtSql = shouldResolve ? "NOW()" : "NULL";
+
+  const sql = `
+    UPDATE mc_feedback_items
+    SET
+      remediation_status = '${escapeLiteral(remediationStatus)}',
+      remediation_notes = ${safeNotes},
+      resolved_at = ${resolvedAtSql},
+      resolved_by = ${safeResolvedBy},
+      updated_at = NOW()
+    WHERE id = '${safeId}'
+  `;
+
+  const taskPrisma = getTaskPrisma();
+  const preferred = taskPrisma ?? prisma;
+
+  const run = async (client: typeof prisma) => client.$executeRawUnsafe(sql);
+
+  try {
+    const result = await run(preferred);
+    return result > 0;
+  } catch (error) {
+    if (!taskPrisma) throw error;
+    const result = await run(prisma);
+    return result > 0;
+  }
+}
+
 export async function addFeedbackAction(
   feedbackId: string,
   data: {
@@ -393,6 +499,12 @@ export async function getFeedbackMetrics(): Promise<FeedbackMetrics> {
     GROUP BY status
   `;
 
+  const byRemediationStatusSql = `
+    SELECT remediation_status AS status, COUNT(*)::int AS count
+    FROM mc_feedback_items
+    GROUP BY remediation_status
+  `;
+
   const byCategorySql = `
     SELECT category, COUNT(*)::int AS count
     FROM mc_feedback_items
@@ -414,14 +526,15 @@ export async function getFeedbackMetrics(): Promise<FeedbackMetrics> {
   `;
 
   const run = async (client: typeof prisma) => {
-    const [severityRows, statusRows, categoryRows, dailyRows] = await Promise.all([
+    const [severityRows, statusRows, remediationRows, categoryRows, dailyRows] = await Promise.all([
       client.$queryRawUnsafe<Array<{ severity: string; count: number }>>(bySeveritySql),
       client.$queryRawUnsafe<Array<{ status: string; count: number }>>(byStatusSql),
+      client.$queryRawUnsafe<Array<{ status: string; count: number }>>(byRemediationStatusSql),
       client.$queryRawUnsafe<Array<{ category: string; count: number }>>(byCategorySql),
       client.$queryRawUnsafe<Array<{ day: string; count: number }>>(dailySql),
     ]);
 
-    return { severityRows, statusRows, categoryRows, dailyRows };
+    return { severityRows, statusRows, remediationRows, categoryRows, dailyRows };
   };
 
   const toRecord = (rows: Array<{ [key: string]: string | number }>, keyName: string) => {
@@ -435,21 +548,27 @@ export async function getFeedbackMetrics(): Promise<FeedbackMetrics> {
   };
 
   try {
-    const { severityRows, statusRows, categoryRows, dailyRows } = await run(preferred);
+    const { severityRows, statusRows, remediationRows, categoryRows, dailyRows } = await run(preferred);
     return {
       bySeverity: toRecord(severityRows as Array<{ [key: string]: string | number }>, "severity"),
       byStatus: toRecord(statusRows as Array<{ [key: string]: string | number }>, "status"),
+      byRemediationStatus: toRecord(remediationRows as Array<{ [key: string]: string | number }>, "status"),
       byCategory: toRecord(categoryRows as Array<{ [key: string]: string | number }>, "category"),
       dailyCorrections: dailyRows.map((row) => ({ day: row.day, count: Number(row.count || 0) })),
     };
   } catch (error) {
     if (!taskPrisma) throw error;
-    const { severityRows, statusRows, categoryRows, dailyRows } = await run(prisma);
+    const { severityRows, statusRows, remediationRows, categoryRows, dailyRows } = await run(prisma);
     return {
       bySeverity: toRecord(severityRows as Array<{ [key: string]: string | number }>, "severity"),
       byStatus: toRecord(statusRows as Array<{ [key: string]: string | number }>, "status"),
+      byRemediationStatus: toRecord(remediationRows as Array<{ [key: string]: string | number }>, "status"),
       byCategory: toRecord(categoryRows as Array<{ [key: string]: string | number }>, "category"),
       dailyCorrections: dailyRows.map((row) => ({ day: row.day, count: Number(row.count || 0) })),
     };
   }
 }
+
+// Safety: Prisma raw queries sometimes return BigInt for aggregates
+// @ts-expect-error BigInt serialization
+BigInt.prototype.toJSON = function () { return Number(this); };

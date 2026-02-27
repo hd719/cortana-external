@@ -127,11 +127,14 @@ tailscale ip -4
 
 ### What it shows
 - Dashboard (`/`): system metrics + recent activity
+- Council (`/council`): deliberation sessions, weighted votes, and decision rationale timeline
+- Approvals (`/approvals`): risk-tiered approval inbox with inline Telegram actions + resume flow
+- Feedback (`/feedback`): correction/remediation dashboard with action tracking and recurrence visibility
 
 ### Council deliberation system (new)
 - Mission Control includes a multi-member Council workflow for important decisions.
 - Entry point: `apps/mission-control/lib/council-jobs.ts` (`runCouncilDeliberationFanout`).
-- Deliberation now uses **real `gpt-4o` reasoning calls** per pending member (parallel fanout), not synthetic votes.
+- Deliberation now uses **direct OpenAI API `gpt-4o` reasoning calls** per pending member (parallel fanout), not synthetic votes or gateway-routed voting.
 
 Council members and weights:
 - **Oracle** (strategist) — `1.5`
@@ -150,6 +153,15 @@ Resilience behavior:
 - Fanout runs concurrently with `Promise.all` for speed.
 - If one member call fails, that failure is logged to the message trail and other members continue.
 - Final synthesis runs only once all members have recorded a vote.
+
+### Approval + feedback governance tables
+Mission Control governance state is persisted in dedicated tables:
+
+- Council: `mc_council_sessions`, `mc_council_members`, `mc_council_messages`
+- Approvals: `mc_approval_requests`, `mc_approval_events`
+- Feedback: `mc_feedback_items`, `mc_feedback_actions`
+
+These tables back `/council`, `/approvals`, and `/feedback` and support remediation history plus audit trails.
 
 - Agents (`/agents`)
 - Jobs/runs (`/jobs`)
@@ -211,6 +223,7 @@ Local reliability monitor (every 15 min) for service/cron/agent health.
 - Cron consecutive failures
 - Heartbeat process health/drift/restarts
 - Degraded Mission Control agents
+- **Sub-agent watchdog events** from `~/clawd/tools/subagent-watchdog/` (failed/aborted/timed-out sub-agent runs persisted to `cortana_events`)
 - gog/Gmail availability
 - Tonal/Whoop health
 - PostgreSQL health

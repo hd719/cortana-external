@@ -21,6 +21,7 @@ export default async function FeedbackPage({
   const params = (await searchParams) ?? {};
   const filters: Filters = {
     status: (params.status as Filters["status"]) ?? "all",
+    remediationStatus: (params.remediationStatus as Filters["remediationStatus"]) ?? "all",
     severity: (params.severity as Filters["severity"]) ?? "all",
     category: params.category ?? undefined,
     source: (params.source as Filters["source"]) ?? "all",
@@ -41,6 +42,11 @@ export default async function FeedbackPage({
   const categories = Array.from(new Set(items.map((item) => item.category))).sort();
   const maxDaily = Math.max(1, ...metrics.dailyCorrections.map((point) => point.count));
 
+  const openCount = metrics.byRemediationStatus.open ?? 0;
+  const resolvedCount = metrics.byRemediationStatus.resolved ?? 0;
+  const totalRemediationCount = Object.values(metrics.byRemediationStatus).reduce((sum, value) => sum + value, 0);
+  const resolutionRate = totalRemediationCount > 0 ? Math.round((resolvedCount / totalRemediationCount) * 100) : 0;
+
   return (
     <div className="space-y-6">
       <AutoRefresh />
@@ -58,10 +64,32 @@ export default async function FeedbackPage({
       <FeedbackFilters
         params={search}
         selectedStatus={filters.status ?? "all"}
+        selectedRemediationStatus={filters.remediationStatus ?? "all"}
         selectedSeverity={filters.severity ?? "all"}
         selectedCategory={filters.category ?? "all"}
         categories={categories}
       />
+
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Remediation summary</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-3 md:grid-cols-3">
+          <div className="rounded border bg-card/60 p-3">
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">Open</p>
+            <p className="text-2xl font-semibold">{openCount}</p>
+          </div>
+          <div className="rounded border bg-card/60 p-3">
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">Resolved</p>
+            <p className="text-2xl font-semibold">{resolvedCount}</p>
+          </div>
+          <div className="rounded border bg-card/60 p-3">
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">Resolution rate</p>
+            <p className="text-2xl font-semibold">{resolutionRate}%</p>
+          </div>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>

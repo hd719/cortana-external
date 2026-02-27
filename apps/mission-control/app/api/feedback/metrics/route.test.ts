@@ -15,6 +15,7 @@ describe("GET /api/feedback/metrics", () => {
     vi.mocked(getFeedbackMetrics).mockResolvedValueOnce({
       bySeverity: { low: 1, high: 2 },
       byStatus: { new: 2, verified: 1 },
+      byRemediationStatus: { open: 2, resolved: 1 },
       byCategory: { ux: 2, reliability: 1 },
       dailyCorrections: [{ day: "2026-02-26", count: 3 }],
     });
@@ -26,6 +27,7 @@ describe("GET /api/feedback/metrics", () => {
     expect(body).toEqual({
       bySeverity: { low: 1, high: 2 },
       byStatus: { new: 2, verified: 1 },
+      byRemediationStatus: { open: 2, resolved: 1 },
       byCategory: { ux: 2, reliability: 1 },
       dailyCorrections: [{ day: "2026-02-26", count: 3 }],
     });

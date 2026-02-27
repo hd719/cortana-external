@@ -15,6 +15,7 @@ export async function GET(request: Request) {
 
   const filters: FeedbackFilters = {
     status: (searchParams.get("status") as FeedbackFilters["status"]) ?? "all",
+    remediationStatus: (searchParams.get("remediationStatus") as FeedbackFilters["remediationStatus"]) ?? "all",
     severity: (searchParams.get("severity") as FeedbackFilters["severity"]) ?? "all",
     category: searchParams.get("category") || undefined,
     source: (searchParams.get("source") as FeedbackFilters["source"]) ?? "all",

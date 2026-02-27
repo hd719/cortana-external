@@ -386,6 +386,11 @@ const pillarFromMetadata = (metadata: Prisma.JsonValue | null): string => {
   return typeof pillar === "string" && pillar.length > 0 ? pillar : "Unspecified";
 };
 
+const feedbackIdFromMetadata = (metadata: Prisma.JsonValue | null): string | null => {
+  const payload = asObject(metadata);
+  return stringValue(payload?.feedback_id ?? payload?.feedbackId);
+};
+
 const LEGACY_GHOST_TASK_TITLE = "Enable auto-remediation for heartbeat misses";
 let ghostTaskPruned = false;
 
@@ -496,6 +501,61 @@ export const getTaskBoard = async ({
         "Live task sync listener is disconnected. Falling back to periodic reconciliation until connection recovers.",
       cause: listener.lastError ?? undefined,
     });
+  }
+
+  const tasksMissingFeedback = tasks
+    .filter((task) => !feedbackIdFromMetadata(task.metadata ?? null))
+    .map((task) => task.id);
+
+  if (tasksMissingFeedback.length > 0) {
+    const idsLiteral = tasksMissingFeedback.map((id) => `'${id}'`).join(",");
+    const sql = `
+      SELECT id, task_id
+      FROM mc_feedback_items
+      WHERE task_id::text IN (${idsLiteral})
+    `;
+
+    const runQuery = async (client: typeof prisma) =>
+      client.$queryRawUnsafe<Array<{ id: string; task_id: string | number | null }>>(sql);
+
+    let rows: Array<{ id: string; task_id: string | number | null }> = [];
+    try {
+      rows = await runQuery(preferredTaskPrisma ?? prisma);
+    } catch (error) {
+      if (!preferredTaskPrisma) {
+        console.warn("Failed to hydrate feedback metadata for task board", error);
+      } else {
+        try {
+          rows = await runQuery(prisma);
+        } catch (fallbackError) {
+          console.warn("Failed to hydrate feedback metadata for task board", fallbackError);
+        }
+      }
+    }
+
+    if (rows.length > 0) {
+      const feedbackByTaskId = new Map<number, string>();
+      rows.forEach((row) => {
+        if (!row.task_id) return;
+        const taskId = Number(row.task_id);
+        if (Number.isFinite(taskId)) {
+          feedbackByTaskId.set(taskId, row.id);
+        }
+      });
+
+      if (feedbackByTaskId.size > 0) {
+        tasks.forEach((task) => {
+          if (feedbackIdFromMetadata(task.metadata ?? null)) return;
+          const feedbackId = feedbackByTaskId.get(task.id);
+          if (!feedbackId) return;
+          const metadata = asObject(task.metadata) ?? {};
+          task.metadata = {
+            ...metadata,
+            feedback_id: feedbackId,
+          } satisfies Prisma.JsonValue;
+        });
+      }
+    }
   }
 
   const tasksById = tasks.reduce<

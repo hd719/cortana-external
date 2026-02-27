@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { getTaskBoard, TaskBoardTask } from "@/lib/data";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -47,10 +48,16 @@ function TaskItem({ task }: { task: TaskBoardTask }) {
 
   const dependencyCount = task.dependsOn?.length ?? 0;
   let pillar: string | null = null;
+  let feedbackId: string | null = null;
   if (task.metadata && typeof task.metadata === "object" && !Array.isArray(task.metadata)) {
     const maybePillar = (task.metadata as Record<string, unknown>).pillar;
     if (typeof maybePillar === "string") pillar = maybePillar;
+    const maybeFeedbackId = (task.metadata as Record<string, unknown>).feedback_id;
+    if (typeof maybeFeedbackId === "string" && maybeFeedbackId.trim()) {
+      feedbackId = maybeFeedbackId.trim();
+    }
   }
+  const feedbackLabel = feedbackId ? `feedback ${feedbackId.slice(0, 8)}` : null;
 
   return (
     <div className="rounded-md border bg-card/60 p-3 shadow-sm">
@@ -82,6 +89,14 @@ function TaskItem({ task }: { task: TaskBoardTask }) {
           </span>
         )}
         {dependencyCount > 0 && <span>{dependencyCount} dependency</span>}
+        {feedbackId && feedbackLabel && (
+          <Link
+            href={`/feedback?id=${encodeURIComponent(feedbackId)}`}
+            className="hover:text-foreground hover:underline"
+          >
+            Source: {feedbackLabel}
+          </Link>
+        )}
       </div>
     </div>
   );

@@ -174,6 +174,10 @@ describe("lib/feedback", () => {
         { status: "verified", count: 2 },
       ])
       .mockResolvedValueOnce([
+        { status: "open", count: 2 },
+        { status: "resolved", count: 1 },
+      ])
+      .mockResolvedValueOnce([
         { category: "ux", count: 2 },
         { category: "reliability", count: 1 },
       ])
@@ -187,6 +191,7 @@ describe("lib/feedback", () => {
     expect(metrics).toEqual({
       bySeverity: { low: 2, high: 1 },
       byStatus: { new: 1, verified: 2 },
+      byRemediationStatus: { open: 2, resolved: 1 },
       byCategory: { ux: 2, reliability: 1 },
       dailyCorrections: [
         { day: "2026-02-25", count: 1 },

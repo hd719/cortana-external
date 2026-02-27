@@ -37,6 +37,19 @@ export async function PATCH(
     return NextResponse.json({ error: "Invalid action" }, { status: 400 });
   }
 
+  const existingApproval = await getApprovalById(id);
+
+  if (!existingApproval) {
+    return NextResponse.json({ error: "Approval not found" }, { status: 404 });
+  }
+
+  if (existingApproval.status !== "pending") {
+    return NextResponse.json(
+      { error: "Approval already resolved", status: existingApproval.status },
+      { status: 409 },
+    );
+  }
+
   await updateApprovalStatus(id, body.action, body.decision, body.actor);
   const approval = await getApprovalById(id);
 

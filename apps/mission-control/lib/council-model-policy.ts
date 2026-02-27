@@ -3,9 +3,17 @@ export type CouncilModelPolicy = {
   synthesizer: string;
 };
 
+const OPENAI_COUNCIL_MODEL = "gpt-4o";
+
 const DEFAULT_POLICY: CouncilModelPolicy = {
-  voter: "gpt-4o",
-  synthesizer: "gpt-4o",
+  voter: OPENAI_COUNCIL_MODEL,
+  synthesizer: OPENAI_COUNCIL_MODEL,
+};
+
+const normalizeCouncilModel = (value: unknown): string => {
+  if (typeof value !== "string") return OPENAI_COUNCIL_MODEL;
+  const normalized = value.trim().toLowerCase();
+  return normalized === OPENAI_COUNCIL_MODEL ? OPENAI_COUNCIL_MODEL : OPENAI_COUNCIL_MODEL;
 };
 
 export function resolveCouncilModelPolicy(raw: unknown): CouncilModelPolicy {
@@ -14,12 +22,9 @@ export function resolveCouncilModelPolicy(raw: unknown): CouncilModelPolicy {
   }
 
   const policy = raw as Record<string, unknown>;
-  const voter = typeof policy.voter === "string" && policy.voter.trim().length > 0
-    ? policy.voter
-    : DEFAULT_POLICY.voter;
-  const synthesizer = typeof policy.synthesizer === "string" && policy.synthesizer.trim().length > 0
-    ? policy.synthesizer
-    : DEFAULT_POLICY.synthesizer;
 
-  return { voter, synthesizer };
+  return {
+    voter: normalizeCouncilModel(policy.voter),
+    synthesizer: normalizeCouncilModel(policy.synthesizer),
+  };
 }

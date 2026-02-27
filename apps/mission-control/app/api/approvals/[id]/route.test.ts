@@ -29,7 +29,9 @@ describe("/api/approvals/[id]", () => {
 
   it("PATCH approve flow updates status and returns updated record", async () => {
     vi.mocked(updateApprovalStatus).mockResolvedValueOnce();
-    vi.mocked(getApprovalById).mockResolvedValueOnce({ id: "apr-1", status: "approved" } as never);
+    vi.mocked(getApprovalById)
+      .mockResolvedValueOnce({ id: "apr-1", status: "pending" } as never)
+      .mockResolvedValueOnce({ id: "apr-1", status: "approved" } as never);
 
     const request = new Request("http://localhost", {
       method: "PATCH",
@@ -46,7 +48,9 @@ describe("/api/approvals/[id]", () => {
 
   it("PATCH reject flow updates status with reason", async () => {
     vi.mocked(updateApprovalStatus).mockResolvedValueOnce();
-    vi.mocked(getApprovalById).mockResolvedValueOnce({ id: "apr-1", status: "rejected" } as never);
+    vi.mocked(getApprovalById)
+      .mockResolvedValueOnce({ id: "apr-1", status: "pending" } as never)
+      .mockResolvedValueOnce({ id: "apr-1", status: "rejected" } as never);
 
     const request = new Request("http://localhost", {
       method: "PATCH",

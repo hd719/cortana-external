@@ -29,6 +29,9 @@ func main() {
 	router.GET("/auth/url", svc.AuthURLHandler)
 	router.GET("/auth/callback", svc.CallbackHandler)
 	router.GET("/whoop/data", svc.DataHandler)
+	router.GET("/health", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"status": "ok"})
+	})
 
 	// Tonal service
 	tonalEmail := os.Getenv("TONAL_EMAIL")
