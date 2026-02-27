@@ -427,3 +427,77 @@ export async function finalizeDecision(
     await run(prisma);
   }
 }
+
+
+export async function addCouncilMembers(
+  sessionId: string,
+  members: Array<{ agentId: string; role?: string | null; weight?: number; stance?: string | null }>,
+): Promise<void> {
+  if (members.length === 0) return;
+
+  const safeSessionId = escapeLiteral(sessionId);
+  const values = members
+    .map((member) => {
+      const agentId = `'${escapeLiteral(member.agentId)}'`;
+      const role = member.role ? `'${escapeLiteral(member.role)}'` : "NULL";
+      const weight = typeof member.weight === "number" ? member.weight : 1;
+      const stance = member.stance ? `'${escapeLiteral(member.stance)}'` : "NULL";
+      return `('${safeSessionId}', ${agentId}, ${role}, ${weight}, ${stance})`;
+    })
+    .join(",\n");
+
+  const sql = `
+    INSERT INTO mc_council_members (session_id, agent_id, role, weight, stance)
+    VALUES ${values}
+  `;
+
+  const taskPrisma = getTaskPrisma();
+  const preferred = taskPrisma ?? prisma;
+
+  const run = async (client: typeof prisma) => {
+    await client.$executeRawUnsafe(sql);
+  };
+
+  try {
+    await run(preferred);
+  } catch (error) {
+    if (!taskPrisma) throw error;
+    await run(prisma);
+  }
+}
+
+export async function appendCouncilMessage(data: {
+  sessionId: string;
+  turnNo: number;
+  speakerId: string;
+  messageType: string;
+  content: string;
+  metadata?: Record<string, unknown> | null;
+}): Promise<void> {
+  const safeSessionId = escapeLiteral(data.sessionId);
+  const safeSpeaker = escapeLiteral(data.speakerId);
+  const safeType = escapeLiteral(data.messageType);
+  const safeContent = escapeLiteral(data.content);
+  const metadata = data.metadata
+    ? `'${JSON.stringify(data.metadata).replaceAll("'", "''")}'::jsonb`
+    : "NULL";
+
+  const sql = `
+    INSERT INTO mc_council_messages (session_id, turn_no, speaker_id, message_type, content, metadata)
+    VALUES ('${safeSessionId}', ${data.turnNo}, '${safeSpeaker}', '${safeType}', '${safeContent}', ${metadata})
+  `;
+
+  const taskPrisma = getTaskPrisma();
+  const preferred = taskPrisma ?? prisma;
+
+  const run = async (client: typeof prisma) => {
+    await client.$executeRawUnsafe(sql);
+  };
+
+  try {
+    await run(preferred);
+  } catch (error) {
+    if (!taskPrisma) throw error;
+    await run(prisma);
+  }
+}
