@@ -176,6 +176,10 @@
   background: oklch(0.64 0.24 28);
 }
 
+.heartbeat-quiet {
+  background: oklch(0.65 0.05 260);
+}
+
 .heartbeat-unknown {
   background: oklch(0.64 0 0);
 }

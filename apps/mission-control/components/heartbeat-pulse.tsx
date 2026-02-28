@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-type HeartbeatStatus = "healthy" | "stale" | "missed" | "unknown";
+type HeartbeatStatus = "healthy" | "stale" | "missed" | "quiet" | "unknown";
 
 type HeartbeatPayload = {
   ok: boolean;
@@ -76,6 +76,8 @@ export function HeartbeatPulse() {
         return "Stale";
       case "missed":
         return "Missed";
+      case "quiet":
+        return "Quiet hours";
       default:
         return "Unknown";
     }
