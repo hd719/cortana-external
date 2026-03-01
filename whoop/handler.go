@@ -13,7 +13,10 @@ import (
 	"sync"
 	"time"
 
+	"services/authalert"
+
 	"github.com/gin-gonic/gin"
+	"golang.org/x/sync/singleflight"
 )
 
 const whoopAuthURL = "https://api.prod.whoop.com/oauth/oauth2/auth"
@@ -50,6 +53,9 @@ type Service struct {
 	TokenPath    string
 	DataPath     string
 	cache        *whoopDataCache
+
+	refreshGroup singleflight.Group
+	tokenMu      sync.Mutex
 }
 
 func (s *Service) AuthURLHandler(c *gin.Context) {
@@ -274,43 +280,66 @@ func (s *Service) tokenNeedsRefresh(tokens *TokenData) bool {
 
 func (s *Service) ensureValidToken(ctx context.Context, tokens *TokenData) error {
 	if !s.tokenNeedsRefresh(tokens) {
+		authalert.MarkSuccess("whoop")
 		return nil
 	}
 
-	if tokens.RefreshToken == "" {
-		return fmt.Errorf("token expired and no refresh token available")
-	}
-
-	if s.Logger != nil {
-		s.Logger.Printf("attempting token refresh (expires_at=%s)", tokens.ExpiresAt.Format(time.RFC3339))
-	}
-
-	refreshed, err := s.refreshTokenWithRetry(ctx, tokens.RefreshToken)
-	if err != nil {
-		return fmt.Errorf("refresh request failed: %w", err)
-	}
-
-	now := time.Now()
-	tokens.AccessToken = refreshed.AccessToken
-	if refreshed.RefreshToken != "" {
-		tokens.RefreshToken = refreshed.RefreshToken
-	}
-	if refreshed.ExpiresIn > 0 {
-		tokens.ExpiresAt = now.Add(time.Duration(refreshed.ExpiresIn) * time.Second)
-	}
-	tokens.LastRefreshAt = now
-
-	if err := SaveTokens(s.TokenPath, tokens); err != nil {
-		if s.Logger != nil {
-			s.Logger.Printf("warning: refreshed token obtained but failed to persist to disk: %v", err)
+	v, err, _ := s.refreshGroup.Do("whoop-token-refresh", func() (any, error) {
+		current := tokens
+		if reloaded, loadErr := LoadTokens(s.TokenPath); loadErr == nil {
+			current = reloaded
 		}
-		return nil
+
+		if !s.tokenNeedsRefresh(current) {
+			return current, nil
+		}
+
+		if current.RefreshToken == "" {
+			return nil, fmt.Errorf("token expired and no refresh token available")
+		}
+
+		if s.Logger != nil {
+			s.Logger.Printf("attempting token refresh (expires_at=%s)", current.ExpiresAt.Format(time.RFC3339))
+		}
+
+		refreshed, refreshErr := s.refreshTokenWithRetry(ctx, current.RefreshToken)
+		if refreshErr != nil {
+			return nil, fmt.Errorf("refresh request failed: %w", refreshErr)
+		}
+
+		now := time.Now()
+		current.AccessToken = refreshed.AccessToken
+		if refreshed.RefreshToken != "" {
+			current.RefreshToken = refreshed.RefreshToken
+		}
+		if refreshed.ExpiresIn > 0 {
+			current.ExpiresAt = now.Add(time.Duration(refreshed.ExpiresIn) * time.Second)
+		}
+		current.LastRefreshAt = now
+
+		if saveErr := SaveTokens(s.TokenPath, current); saveErr != nil {
+			return nil, fmt.Errorf("persist refreshed token: %w", saveErr)
+		}
+
+		if s.Logger != nil {
+			s.Logger.Printf("token refresh succeeded (new_expiry=%s, refresh_token_rotated=%t)", current.ExpiresAt.Format(time.RFC3339), refreshed.RefreshToken != "")
+		}
+
+		return current, nil
+	})
+	if err != nil {
+		_ = authalert.MarkFailure("whoop", err)
+		return err
 	}
 
-	if s.Logger != nil {
-		s.Logger.Printf("token refresh succeeded (new_expiry=%s, refresh_token_rotated=%t)", tokens.ExpiresAt.Format(time.RFC3339), refreshed.RefreshToken != "")
+	updated, _ := v.(*TokenData)
+	if updated != nil {
+		s.tokenMu.Lock()
+		*tokens = *updated
+		s.tokenMu.Unlock()
 	}
 
+	authalert.MarkSuccess("whoop")
 	return nil
 }
 
@@ -418,6 +447,16 @@ func (s *Service) refreshToken(ctx context.Context, refreshToken string) (*Token
 	return &token, nil
 }
 
+func isNonRetriableWhoopRefreshError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "invalid_grant") ||
+		strings.Contains(msg, "invalid_client") ||
+		strings.Contains(msg, "unauthorized_client")
+}
+
 func (s *Service) refreshTokenWithRetry(ctx context.Context, refreshToken string) (*TokenResponse, error) {
 	backoffs := []time.Duration{0, 2 * time.Second, 5 * time.Second}
 	var lastErr error
@@ -441,6 +480,9 @@ func (s *Service) refreshTokenWithRetry(ctx context.Context, refreshToken string
 		lastErr = err
 		if s.Logger != nil {
 			s.Logger.Printf("Whoop token refresh attempt %d/%d failed: %v", attempt+1, len(backoffs), err)
+		}
+		if isNonRetriableWhoopRefreshError(err) {
+			return nil, err
 		}
 	}
 

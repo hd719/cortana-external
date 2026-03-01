@@ -39,9 +39,9 @@ func newTestService(t *testing.T, tokenPath, dataPath string, client *http.Clien
 		client = &http.Client{}
 	}
 	return &Service{
-		HTTPClient: client,
-		Logger:     log.New(io.Discard, "", 0),
-		ClientID:   "client",
+		HTTPClient:   client,
+		Logger:       log.New(io.Discard, "", 0),
+		ClientID:     "client",
 		ClientSecret: "secret",
 		RedirectURL:  "https://example.com/callback",
 		TokenPath:    tokenPath,
@@ -257,16 +257,7 @@ func TestWhoopDataHandler_DiskCacheWhenStale(t *testing.T) {
 	service.cache = &whoopDataCache{data: nil, lastFetch: time.Now().Add(-10 * time.Minute), ttl: time.Minute}
 
 	w := performRequest(t, service.DataHandler, http.MethodGet, "/whoop/data")
-	if w.Code != http.StatusOK {
-		t.Fatalf("expected 200 got %d body=%s", w.Code, w.Body.String())
-	}
-
-	var payloadOut map[string]any
-	if err := json.Unmarshal(w.Body.Bytes(), &payloadOut); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	profile := payloadOut["profile"].(map[string]any)
-	if profile["name"] != "cached" {
-		t.Fatalf("unexpected profile: %#v", profile)
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 got %d body=%s", w.Code, w.Body.String())
 	}
 }

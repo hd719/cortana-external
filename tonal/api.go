@@ -8,10 +8,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/rand"
+	"net"
 	"net/http"
 	"os"
 	"strings"
 	"time"
+
+	"services/authalert"
 )
 
 const (
@@ -21,6 +25,16 @@ const (
 )
 
 var errTonalUnauthorized = errors.New("tonal unauthorized")
+
+type tonalAPIError struct {
+	StatusCode int
+	Status     string
+	Body       string
+}
+
+func (e *tonalAPIError) Error() string {
+	return fmt.Sprintf("tonal api error: %s - %s", e.Status, e.Body)
+}
 
 type authResponse struct {
 	IDToken      string `json:"id_token"`
@@ -184,6 +198,7 @@ func (s *Service) refreshAuthentication(ctx context.Context, refreshToken string
 func (s *Service) getValidToken(ctx context.Context) (string, error) {
 	tokens, err := LoadTokens(s.TokenPath)
 	if err == nil && time.Now().Before(tokens.ExpiresAt.Add(-1*time.Minute)) {
+		authalert.MarkSuccess("tonal")
 		return tokens.IDToken, nil
 	}
 
@@ -193,12 +208,17 @@ func (s *Service) getValidToken(ctx context.Context) (string, error) {
 		refreshed, refreshErr := s.refreshAuthentication(ctx, tokens.RefreshToken)
 		if refreshErr == nil {
 			if saveErr := SaveTokens(s.TokenPath, refreshed); saveErr != nil {
-				s.Logger.Printf("warning: failed to save refreshed tokens: %v", saveErr)
+				_ = authalert.MarkFailure("tonal", saveErr)
+				return "", fmt.Errorf("failed to save refreshed tokens: %w", saveErr)
 			}
+			authalert.MarkSuccess("tonal")
 			return refreshed.IDToken, nil
 		}
 
 		s.Logger.Printf("refresh token failed: %v", refreshErr)
+		if s.isAuthFailureError(refreshErr) || errors.Is(refreshErr, errTonalUnauthorized) {
+			_ = authalert.MarkFailure("tonal", refreshErr)
+		}
 		if s.canSelfHealWithCredentials() && s.isAuthFailureError(refreshErr) {
 			s.Logger.Printf("refresh failed with auth error, triggering Tonal token self-heal")
 			if healedToken, healErr := s.forceReAuthenticate(ctx); healErr == nil {
@@ -213,6 +233,9 @@ func (s *Service) getValidToken(ctx context.Context) (string, error) {
 	s.Logger.Println("authenticating with Tonal (password)...")
 	tokens, err = s.authenticate(ctx)
 	if err != nil {
+		if s.isAuthFailureError(err) || errors.Is(err, errTonalUnauthorized) {
+			_ = authalert.MarkFailure("tonal", err)
+		}
 		if s.canSelfHealWithCredentials() && s.isAuthFailureError(err) {
 			s.Logger.Printf("password auth returned auth error, triggering Tonal token self-heal")
 			if healedToken, healErr := s.forceReAuthenticate(ctx); healErr == nil {
@@ -225,9 +248,11 @@ func (s *Service) getValidToken(ctx context.Context) (string, error) {
 	}
 
 	if err := SaveTokens(s.TokenPath, tokens); err != nil {
-		s.Logger.Printf("warning: failed to save tokens: %v", err)
+		_ = authalert.MarkFailure("tonal", err)
+		return "", fmt.Errorf("failed to save tokens: %w", err)
 	}
 
+	authalert.MarkSuccess("tonal")
 	return tokens.IDToken, nil
 }
 
@@ -256,7 +281,7 @@ func (s *Service) fetchTonal(ctx context.Context, token, method, path string, he
 	}
 	if resp.StatusCode >= 400 {
 		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("tonal api error: %s - %s", resp.Status, string(body))
+		return nil, &tonalAPIError{StatusCode: resp.StatusCode, Status: resp.Status, Body: string(body)}
 	}
 
 	return io.ReadAll(resp.Body)
@@ -268,37 +293,86 @@ func (s *Service) fetchTonal(ctx context.Context, token, method, path string, he
 // 2. Retries the API call exactly once
 // 3. If retry still fails with 401/403, logs to stderr and exits non-zero
 func (s *Service) apiCallWithSelfHeal(ctx context.Context, operation func(ctx context.Context, token string) error) error {
-	// First attempt with current/loaded token.
+	backoffs := []time.Duration{200 * time.Millisecond, 400 * time.Millisecond, 800 * time.Millisecond}
+
 	token, err := s.getValidToken(ctx)
 	if err != nil {
 		return err
 	}
 
-	err = operation(ctx, token)
-	if !errors.Is(err, errTonalUnauthorized) {
-		return err
-	}
+	for attempt := 0; ; attempt++ {
+		err = operation(ctx, token)
+		if err == nil {
+			authalert.MarkSuccess("tonal")
+			return nil
+		}
 
-	s.Logger.Printf("TONAL SELF-HEAL: received 401/403, forcing token reset and re-authentication")
-	if _, healErr := s.forceReAuthenticate(ctx); healErr != nil {
-		return fmt.Errorf("tonal self-heal failed after unauthorized response: %w", healErr)
-	}
+		if errors.Is(err, errTonalUnauthorized) {
+			_ = authalert.MarkFailure("tonal", err)
+			s.Logger.Printf("TONAL SELF-HEAL: received 401/403, forcing token reset and re-authentication")
+			if _, healErr := s.forceReAuthenticate(ctx); healErr != nil {
+				_ = authalert.MarkFailure("tonal", healErr)
+				return fmt.Errorf("tonal self-heal failed after unauthorized response: %w", healErr)
+			}
 
-	retryToken, tokenErr := s.getValidToken(ctx)
-	if tokenErr != nil {
-		return fmt.Errorf("re-authentication failed after token reset: %w", tokenErr)
-	}
+			retryToken, tokenErr := s.getValidToken(ctx)
+			if tokenErr != nil {
+				_ = authalert.MarkFailure("tonal", tokenErr)
+				return fmt.Errorf("re-authentication failed after token reset: %w", tokenErr)
+			}
 
-	err = operation(ctx, retryToken)
-	if errors.Is(err, errTonalUnauthorized) {
-		return fmt.Errorf("retry also returned 401/403 after self-heal")
-	}
-	if err != nil {
-		return err
-	}
+			err = operation(ctx, retryToken)
+			if errors.Is(err, errTonalUnauthorized) {
+				_ = authalert.MarkFailure("tonal", err)
+				return fmt.Errorf("retry also returned 401/403 after self-heal")
+			}
+			if err != nil {
+				if s.isAuthFailureError(err) {
+					_ = authalert.MarkFailure("tonal", err)
+				}
+				return err
+			}
+			authalert.MarkSuccess("tonal")
+			s.Logger.Printf("TONAL SELF-HEAL: recovery succeeded after token reset")
+			return nil
+		}
 
-	s.Logger.Printf("TONAL SELF-HEAL: recovery succeeded after token reset")
-	return nil
+		if !isRetriableTonalError(err) || attempt >= len(backoffs) {
+			if s.isAuthFailureError(err) {
+				_ = authalert.MarkFailure("tonal", err)
+			}
+			return err
+		}
+
+		jitter := time.Duration(rand.Int63n(int64(150 * time.Millisecond)))
+		wait := backoffs[attempt] + jitter
+		select {
+		case <-time.After(wait):
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+}
+
+func isRetriableTonalError(err error) bool {
+	if err == nil {
+		return false
+	}
+	var apiErr *tonalAPIError
+	if errors.As(err, &apiErr) {
+		if apiErr.StatusCode >= 500 {
+			return true
+		}
+		return false
+	}
+	var netErr net.Error
+	if errors.As(err, &netErr) {
+		return true
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "connection reset") ||
+		strings.Contains(msg, "timeout") ||
+		strings.Contains(msg, "temporarily unavailable")
 }
 
 func (s *Service) canSelfHealWithCredentials() bool {
@@ -331,8 +405,10 @@ func (s *Service) forceReAuthenticate(ctx context.Context) (string, error) {
 		return "", fmt.Errorf("forced re-authentication failed: %w", err)
 	}
 	if err := SaveTokens(s.TokenPath, tokens); err != nil {
-		s.Logger.Printf("TONAL SELF-HEAL: warning - failed to save forced re-auth tokens: %v", err)
+		_ = authalert.MarkFailure("tonal", err)
+		return "", fmt.Errorf("failed to save forced re-auth tokens: %w", err)
 	}
+	authalert.MarkSuccess("tonal")
 	return tokens.IDToken, nil
 }
 
