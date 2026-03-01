@@ -1,7 +1,17 @@
-import { Prisma, RunStatus, Severity } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { resolveAssignedAgentId } from "@/lib/openclaw-assignment";
 import { deriveEvidenceGrade } from "@/lib/run-intelligence";
+
+type RunStatus = "queued" | "running" | "completed" | "failed" | "cancelled";
+type Severity = "info" | "warning" | "critical";
+
+type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
+
+type CortanaTaskUpdateManyMutationInput = {
+  status?: string;
+  outcome?: string | null;
+  completedAt?: Date | null;
+};
 
 export type OpenClawLifecycleStatus =
   | "queued"
@@ -42,22 +52,22 @@ export type OpenClawLifecycleEvent = {
   summary?: string;
   taskId?: number;
   taskStatus?: string;
-  metadata?: Prisma.JsonValue;
+  metadata?: JsonValue;
   timestamp?: string;
 };
 
 const runStatusFromLifecycle = (status: OpenClawLifecycleStatus): RunStatus => {
-  if (status === "done") return RunStatus.completed;
-  if (status === "failed" || status === "timeout") return RunStatus.failed;
-  if (status === "killed") return RunStatus.cancelled;
-  if (status === "running") return RunStatus.running;
-  return RunStatus.queued;
+  if (status === "done") return "completed";
+  if (status === "failed" || status === "timeout") return "failed";
+  if (status === "killed") return "cancelled";
+  if (status === "running") return "running";
+  return "queued";
 };
 
 const severityFromLifecycle = (status: OpenClawLifecycleStatus): Severity => {
-  if (status === "failed" || status === "timeout" || status === "killed") return Severity.critical;
-  if (status === "running") return Severity.info;
-  return Severity.info;
+  if (status === "failed" || status === "timeout" || status === "killed") return "critical";
+  if (status === "running") return "info";
+  return "info";
 };
 
 export async function ingestOpenClawLifecycleEvent(event: OpenClawLifecycleEvent) {
@@ -162,7 +172,7 @@ export async function ingestOpenClawLifecycleEvent(event: OpenClawLifecycleEvent
   const confidence = deriveEvidenceGrade({
     externalStatus: normalizedStatus,
     completedAt: isTerminal ? startedAt : null,
-    payload: run.payload,
+    payload: run.payload as JsonValue,
     summary: event.summary ?? run.summary,
   });
 
@@ -173,7 +183,7 @@ export async function ingestOpenClawLifecycleEvent(event: OpenClawLifecycleEvent
       type: `subagent.${normalizedStatus}`,
       severity:
         launchPhase === "phase2_running_unconfirmed"
-          ? Severity.warning
+          ? "warning"
           : severityFromLifecycle(normalizedStatus),
       message:
         launchPhase === "phase2_running_unconfirmed"
@@ -191,7 +201,7 @@ export async function ingestOpenClawLifecycleEvent(event: OpenClawLifecycleEvent
   });
 
   if (event.taskId) {
-    const taskUpdate: Prisma.CortanaTaskUpdateManyMutationInput = {};
+    const taskUpdate: CortanaTaskUpdateManyMutationInput = {};
 
     if (event.taskStatus) {
       taskUpdate.status = event.taskStatus;
@@ -245,7 +255,7 @@ export async function backfillOpenClawRunAssignments(limit = 100) {
         jobType: run.jobType,
         label: run.jobType,
         summary: run.summary,
-        payload: run.payload,
+        payload: run.payload as JsonValue,
       },
       agents
     );

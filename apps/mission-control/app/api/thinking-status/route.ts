@@ -93,7 +93,7 @@ export async function GET() {
     `,
   ]);
 
-  const activeSubagents = runningSubagents.filter((row) => row.session_id).length;
+  const activeSubagents = runningSubagents.filter((row: RunningSubagentRow) => row.session_id).length;
   const summary = taskSummary[0] ?? {
     in_progress_count: 0,
     completed_recent_count: 0,

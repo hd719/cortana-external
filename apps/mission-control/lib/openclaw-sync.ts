@@ -1,13 +1,14 @@
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { Prisma } from "@prisma/client";
 import {
   backfillOpenClawRunAssignments,
   ingestOpenClawLifecycleEvent,
   OpenClawLifecycleStatus,
 } from "@/lib/openclaw-bridge";
 import prisma from "@/lib/prisma";
+
+type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
 
 type OpenClawRunStoreRecord = {
   runId: string;
@@ -19,7 +20,7 @@ type OpenClawRunStoreRecord = {
   childSessionKey?: string;
   requesterSessionKey?: string;
   outcome?: { status?: string };
-  task?: Prisma.JsonValue;
+  task?: JsonValue;
   agent?: string;
   role?: string;
   assigned_to?: string;
@@ -27,6 +28,12 @@ type OpenClawRunStoreRecord = {
 
 type OpenClawRunStore = {
   runs?: Record<string, OpenClawRunStoreRecord>;
+};
+
+type StaleRunCandidate = {
+  id: string;
+  openclawRunId: string | null;
+  summary: string | null;
 };
 
 const DEFAULT_RUN_STORE_PATH = path.join(os.homedir(), ".openclaw", "subagents", "runs.json");
@@ -57,7 +64,7 @@ const toLifecycleStatus = (run: OpenClawRunStoreRecord): OpenClawLifecycleStatus
 const reconcileStaleRunningRuns = async (activeRunIds: Set<string>) => {
   const staleBefore = new Date(Date.now() - STALE_RUNNING_TTL_MS);
 
-  const staleCandidates = await prisma.run.findMany({
+  const staleCandidates = (await prisma.run.findMany({
     where: {
       openclawRunId: { not: null },
       OR: [
@@ -79,7 +86,7 @@ const reconcileStaleRunningRuns = async (activeRunIds: Set<string>) => {
       openclawRunId: true,
       summary: true,
     },
-  });
+  })) as StaleRunCandidate[];
 
   const staleRuns = staleCandidates.filter((run) => {
     const runId = run.openclawRunId;
@@ -164,9 +171,7 @@ export async function syncOpenClawRunsFromStore() {
   }
 
   const activeRunIds = new Set(
-    runRecords
-      .filter((run) => !run.endedAt && !!run.runId)
-      .map((run) => run.runId)
+    runRecords.filter((run) => !run.endedAt && !!run.runId).map((run) => run.runId)
   );
   lastActiveRunIds = activeRunIds;
 
@@ -204,9 +209,9 @@ export async function syncOpenClawRunsFromStore() {
         agent: run.agent ?? null,
         role: run.role ?? null,
         task: run.task ?? null,
-        childSessionKey: run.childSessionKey,
-        requesterSessionKey: run.requesterSessionKey,
-        outcome: run.outcome ?? null,
+        childSessionKey: run.childSessionKey ?? null,
+        requesterSessionKey: run.requesterSessionKey ?? null,
+        outcome: run.outcome ? { status: run.outcome.status ?? null } : null,
         endedReason: run.endedReason ?? null,
       },
     });

@@ -172,7 +172,7 @@ export async function getDecisionTraces(filters: DecisionFilters = {}): Promise<
     rows = await runQuery(prisma);
   }
 
-  const traces: DecisionTrace[] = rows.map((row) => ({
+  const traces: DecisionTrace[] = rows.map((row: any) => ({
     id: row.id,
     traceId: row.trace_id,
     eventId: row.event_id,
@@ -202,9 +202,9 @@ export async function getDecisionTraces(filters: DecisionFilters = {}): Promise<
   }));
 
   const facets = {
-    actionTypes: Array.from(new Set(traces.map((trace) => trace.actionType))).sort(),
-    triggerTypes: Array.from(new Set(traces.map((trace) => trace.triggerType))).sort(),
-    outcomes: Array.from(new Set(traces.map((trace) => trace.outcome))).sort(),
+    actionTypes: Array.from(new Set(traces.map((trace: any) => trace.actionType))).sort(),
+    triggerTypes: Array.from(new Set(traces.map((trace: any) => trace.triggerType))).sort(),
+    outcomes: Array.from(new Set(traces.map((trace: any) => trace.outcome))).sort(),
   };
 
   return { traces, facets, source, warning };

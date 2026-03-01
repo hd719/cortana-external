@@ -42,7 +42,7 @@ export default async function AgentsPage() {
               </tr>
             </thead>
             <tbody>
-              {agents.map((agent) => (
+              {agents.map((agent: (typeof agents)[number]) => (
                 <tr key={agent.id} className="border-t transition-colors hover:bg-muted/30">
                   <td className="px-3 py-3">
                     <Link href={`/agents/${agent.id}`} className="group block">

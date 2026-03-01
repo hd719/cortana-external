@@ -34,7 +34,7 @@ export function DecisionFiltersBar({
     <div className="space-y-3 rounded-md border bg-card/60 p-3">
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Range</span>
-        {ranges.map((hours) => (
+        {ranges.map((hours: any) => (
           <Link key={hours} href={buildHref(params, "rangeHours", String(hours))}>
             <Badge variant={selectedRange === String(hours) ? "secondary" : "outline"}>
               {hours < 24 ? `${hours}h` : `${Math.round(hours / 24)}d`}
@@ -48,7 +48,7 @@ export function DecisionFiltersBar({
         <Link href={buildHref(params, "triggerType", "all")}>
           <Badge variant={!filters.triggerType ? "secondary" : "outline"}>All</Badge>
         </Link>
-        {facets.triggerTypes.map((value) => (
+        {facets.triggerTypes.map((value: any) => (
           <Link key={value} href={buildHref(params, "triggerType", value)}>
             <Badge variant={filters.triggerType === value ? "secondary" : "outline"}>{value}</Badge>
           </Link>
@@ -60,7 +60,7 @@ export function DecisionFiltersBar({
         <Link href={buildHref(params, "actionType", "all")}>
           <Badge variant={!filters.actionType ? "secondary" : "outline"}>All</Badge>
         </Link>
-        {facets.actionTypes.map((value) => (
+        {facets.actionTypes.map((value: any) => (
           <Link key={value} href={buildHref(params, "actionType", value)}>
             <Badge variant={filters.actionType === value ? "secondary" : "outline"}>{value}</Badge>
           </Link>
@@ -69,7 +69,7 @@ export function DecisionFiltersBar({
 
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Outcome</span>
-        {["all", "success", "fail", ...facets.outcomes.filter((o) => !["success", "fail"].includes(o))].map((value) => (
+        {["all", "success", "fail", ...facets.outcomes.filter((o: any) => !["success", "fail"].includes(o))].map((value: any) => (
           <Link key={value} href={buildHref(params, "outcome", value)}>
             <Badge variant={selectedOutcome === value ? "secondary" : "outline"}>{value}</Badge>
           </Link>

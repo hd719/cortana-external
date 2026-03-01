@@ -1,8 +1,9 @@
 import { VariantProps } from "class-variance-authority";
 import { Badge, badgeVariants } from "@/components/ui/badge";
-import { AgentStatus, Severity } from "@prisma/client";
-
 type BadgeVariant = VariantProps<typeof badgeVariants>["variant"];
+
+type AgentStatus = "active" | "idle" | "degraded" | "offline";
+type Severity = "info" | "warning" | "critical";
 
 type StatusBadgeProps = {
   value: AgentStatus | Severity | string;

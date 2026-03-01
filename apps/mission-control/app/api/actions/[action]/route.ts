@@ -66,7 +66,7 @@ const runChaosTest = async () => {
   const client = getTaskClient();
 
   try {
-    await client.$queryRawUnsafe("SELECT 1");
+    await (client as any).$queryRawUnsafe("SELECT 1");
     checks.push({
       name: "PostgreSQL",
       passed: true,
@@ -135,7 +135,7 @@ const runChaosTest = async () => {
 const runReflectionSweep = async () => {
   const client = getTaskClient();
 
-  const items = (await client.$queryRawUnsafe(
+  const items = (await (client as any).$queryRawUnsafe(
     "SELECT id, title, status, completed_at, outcome FROM cortana_tasks WHERE status = 'done' AND completed_at > NOW() - INTERVAL '24 hours' ORDER BY completed_at DESC LIMIT 10"
   )) as ReflectionItem[];
 
@@ -190,7 +190,7 @@ const runBudgetCheck = () => {
 const runForceHeartbeat = async () => {
   const client = getTaskClient();
 
-  await client.$executeRawUnsafe(
+  await (client as any).$executeRawUnsafe(
     "INSERT INTO cortana_events (event_type, source, severity, message) VALUES ('manual_heartbeat', 'dashboard', 'info', 'Manual heartbeat forced from Mission Control')"
   );
 

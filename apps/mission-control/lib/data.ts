@@ -1,5 +1,4 @@
 import prisma from "@/lib/prisma";
-import { AgentStatus, Prisma, RunStatus, Severity } from "@prisma/client";
 import { unstable_noStore as noStore } from "next/cache";
 import { syncOpenClawRunsFromStore } from "@/lib/openclaw-sync";
 import { getTaskPrisma } from "@/lib/task-prisma";
@@ -13,10 +12,18 @@ import {
   deriveHealthBand,
 } from "@/lib/agent-health";
 
+type AgentStatus = "active" | "idle" | "degraded" | "offline";
+type RunStatus = "queued" | "running" | "completed" | "failed" | "cancelled";
+type Severity = "info" | "warning" | "critical";
+
+type JsonValue = unknown;
+type RunWithAgent = any;
+type CortanaTaskWithEpic = any;
+
 const normalizeIdentity = (value?: string | null) =>
   (value || "").trim().toLowerCase();
 
-const asObject = (value: Prisma.JsonValue | null | undefined): Record<string, unknown> | null => {
+const asObject = (value: JsonValue | null | undefined): Record<string, unknown> | null => {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   return value as Record<string, unknown>;
 };
@@ -26,13 +33,13 @@ const stringValue = (value: unknown): string | null =>
 
 const deriveAssignmentLabel = (run: {
   agent?: { name: string } | null;
-  payload?: Prisma.JsonValue | null;
+  payload?: JsonValue | null;
   jobType: string;
 }): string | null => {
   if (run.agent?.name) return run.agent.name;
 
   const payload = asObject(run.payload);
-  const metadata = asObject((payload?.metadata as Prisma.JsonValue | undefined) ?? null);
+  const metadata = asObject((payload?.metadata as JsonValue | undefined) ?? null);
 
   const candidates = [
     stringValue(payload?.assigned_to),
@@ -67,7 +74,7 @@ const reconcileStaleRunningRuns = async () => {
   const staleBefore = new Date(now - STALE_RUNNING_RECONCILE_MS);
   const staleRuns = await prisma.run.findMany({
     where: {
-      status: RunStatus.running,
+      status: "running",
       updatedAt: { lt: staleBefore },
     },
     select: {
@@ -82,11 +89,11 @@ const reconcileStaleRunningRuns = async () => {
   }
 
   await prisma.$transaction(
-    staleRuns.map((run) =>
+    staleRuns.map((run: any) =>
       prisma.run.update({
         where: { id: run.id },
         data: {
-          status: RunStatus.failed,
+          status: "failed",
           summary: appendReconcileNote(run.summary),
           completedAt: new Date(),
           externalStatus: "failed",
@@ -147,9 +154,9 @@ export const getAgents = async () => {
     if (!run.agentId) continue;
 
     if (
-      run.status !== RunStatus.completed &&
-      run.status !== RunStatus.failed &&
-      run.status !== RunStatus.cancelled
+      run.status !== "completed" &&
+      run.status !== "failed" &&
+      run.status !== "cancelled"
     ) {
       continue;
     }
@@ -160,16 +167,16 @@ export const getAgents = async () => {
     terminalRunsCountByAgent.set(run.agentId, counted + 1);
 
     const stats = ensureStats(run.agentId);
-    if (run.status === RunStatus.completed) stats.completedRuns += 1;
-    else if (run.status === RunStatus.failed) stats.failedRuns += 1;
-    else if (run.status === RunStatus.cancelled) stats.cancelledRuns += 1;
+    if (run.status === "completed") stats.completedRuns += 1;
+    else if (run.status === "failed") stats.failedRuns += 1;
+    else if (run.status === "cancelled") stats.cancelledRuns += 1;
 
     const recentRuns = recentRunsByAgent.get(run.agentId) || [];
     recentRuns.push({
       status:
-        run.status === RunStatus.completed
+        run.status === "completed"
           ? "completed"
-          : run.status === RunStatus.failed
+          : run.status === "failed"
             ? "failed"
             : "cancelled",
       timestamp: run.updatedAt,
@@ -217,7 +224,7 @@ export const getAgents = async () => {
     }
   }
 
-  return agents.map((agent) => {
+  return agents.map((agent: any) => {
     const stats = statsByAgent.get(agent.id) || {
       completedRuns: 0,
       failedRuns: 0,
@@ -233,17 +240,17 @@ export const getAgents = async () => {
       ...agent,
       healthScore,
       status:
-        agent.status === AgentStatus.offline && healthBand === "critical"
-          ? AgentStatus.offline
+        agent.status === "offline" && healthBand === "critical"
+          ? "offline"
           : healthBand === "healthy"
-            ? AgentStatus.active
-            : AgentStatus.degraded,
+            ? "active"
+            : "degraded",
       healthBand,
     };
   });
 };
 
-const latestRunOrder: Prisma.RunOrderByWithRelationInput[] = [
+const latestRunOrder: any[] = [
   { createdAt: "desc" },
   { updatedAt: "desc" },
   { startedAt: "desc" },
@@ -257,7 +264,7 @@ type GetRunsInput = {
 };
 
 export type RunsPage = {
-  runs: Prisma.RunGetPayload<{ include: { agent: true } }>[];
+  runs: RunWithAgent[];
   nextCursor: string | null;
   hasMore: boolean;
 };
@@ -285,7 +292,7 @@ export const getRuns = async ({ take = 20, cursor, agentId }: GetRunsInput = {})
   const pageRuns = hasMore ? runs.slice(0, normalizedTake) : runs;
   const nextCursor = hasMore ? pageRuns[pageRuns.length - 1]?.id ?? null : null;
 
-  const enrichedRuns = pageRuns.map((run) => ({
+  const enrichedRuns = pageRuns.map((run: any) => ({
     ...run,
     confidence: deriveEvidenceGrade(run),
     launchPhase: deriveLaunchPhase(run),
@@ -328,7 +335,7 @@ export const getDashboardSummary = async () => {
   ]);
 
   const agentCounts = agents.reduce(
-    (acc, agent) => {
+    (acc: any, agent: any) => {
       acc.total += 1;
       acc.byStatus[agent.status] = (acc.byStatus[agent.status] || 0) + 1;
       return acc;
@@ -337,7 +344,7 @@ export const getDashboardSummary = async () => {
   );
 
   const runCounts = runs.reduce(
-    (acc, run) => {
+    (acc: any, run: any) => {
       acc.total += 1;
       acc.byStatus[run.status] = (acc.byStatus[run.status] || 0) + 1;
       return acc;
@@ -346,7 +353,7 @@ export const getDashboardSummary = async () => {
   );
 
   const alertCounts = events.reduce(
-    (acc, event) => {
+    (acc: any, event: any) => {
       acc.total += 1;
       acc.bySeverity[event.severity] =
         (acc.bySeverity[event.severity] || 0) + 1;
@@ -357,7 +364,7 @@ export const getDashboardSummary = async () => {
 
   return {
     agents,
-    runs: runs.map((run) => ({
+    runs: runs.map((run: any) => ({
       ...run,
       assignmentLabel: deriveAssignmentLabel(run),
     })),
@@ -370,14 +377,12 @@ export const getDashboardSummary = async () => {
   };
 };
 
-export type TaskBoardTask = Prisma.CortanaTaskGetPayload<{
-  include: { epic: true };
-}> & {
+export type TaskBoardTask = CortanaTaskWithEpic & {
   dependencyReady: boolean;
   blockedBy: Array<{ id: number; title: string; status: string }>;
 };
 
-const pillarFromMetadata = (metadata: Prisma.JsonValue | null): string => {
+const pillarFromMetadata = (metadata: JsonValue | null): string => {
   if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) {
     return "Unspecified";
   }
@@ -386,7 +391,7 @@ const pillarFromMetadata = (metadata: Prisma.JsonValue | null): string => {
   return typeof pillar === "string" && pillar.length > 0 ? pillar : "Unspecified";
 };
 
-const feedbackIdFromMetadata = (metadata: Prisma.JsonValue | null): string | null => {
+const feedbackIdFromMetadata = (metadata: JsonValue | null): string | null => {
   const payload = asObject(metadata);
   return stringValue(payload?.feedback_id ?? payload?.feedbackId);
 };
@@ -460,7 +465,7 @@ export const getTaskBoard = async ({
   let taskSource: "cortana" | "app" = preferredTaskPrisma ? "cortana" : "app";
   const warnings: TaskBoardWarning[] = [];
 
-  let tasks: Prisma.CortanaTaskGetPayload<{ include: { epic: true } }>[];
+  let tasks: CortanaTaskWithEpic[];
 
   try {
     tasks = await readTaskBoardTasks(preferredTaskPrisma ?? prisma, {
@@ -504,11 +509,11 @@ export const getTaskBoard = async ({
   }
 
   const tasksMissingFeedback = tasks
-    .filter((task) => !feedbackIdFromMetadata(task.metadata ?? null))
-    .map((task) => task.id);
+    .filter((task: any) => !feedbackIdFromMetadata(task.metadata ?? null))
+    .map((task: any) => task.id);
 
   if (tasksMissingFeedback.length > 0) {
-    const idsLiteral = tasksMissingFeedback.map((id) => `'${id}'`).join(",");
+    const idsLiteral = tasksMissingFeedback.map((id: any) => `'${id}'`).join(",");
     const sql = `
       SELECT id, task_id
       FROM mc_feedback_items
@@ -535,7 +540,7 @@ export const getTaskBoard = async ({
 
     if (rows.length > 0) {
       const feedbackByTaskId = new Map<number, string>();
-      rows.forEach((row) => {
+      rows.forEach((row: any) => {
         if (!row.task_id) return;
         const taskId = Number(row.task_id);
         if (Number.isFinite(taskId)) {
@@ -544,7 +549,7 @@ export const getTaskBoard = async ({
       });
 
       if (feedbackByTaskId.size > 0) {
-        tasks.forEach((task) => {
+        tasks.forEach((task: any) => {
           if (feedbackIdFromMetadata(task.metadata ?? null)) return;
           const feedbackId = feedbackByTaskId.get(task.id);
           if (!feedbackId) return;
@@ -552,30 +557,30 @@ export const getTaskBoard = async ({
           task.metadata = {
             ...metadata,
             feedback_id: feedbackId,
-          } satisfies Prisma.JsonValue;
+          } satisfies JsonValue;
         });
       }
     }
   }
 
   const tasksById = tasks.reduce<
-    Record<number, Prisma.CortanaTaskGetPayload<{ include: { epic: true } }>>
+    Record<number, CortanaTaskWithEpic>
   >((acc, task) => {
     acc[task.id] = task;
     return acc;
   }, {});
 
-  const annotated: TaskBoardTask[] = tasks.map((task) => {
+  const annotated: TaskBoardTask[] = tasks.map((task: any) => {
     const dependencies = task.dependsOn || [];
     const blockers = dependencies
-      .map((id) => ({ id, task: tasksById[id] }))
-      .filter(({ task }) => {
+      .map((id: any) => ({ id, task: tasksById[id] }))
+      .filter(({ task }: { task: any }) => {
         if (!task) return true;
         const normalized = task.status.toLowerCase();
         return !COMPLETED_STATUSES.has(normalized);
       });
 
-    const blockedBy = blockers.map(({ id, task }) =>
+    const blockedBy = blockers.map(({ id, task }: { id: any; task: any }) =>
       task
         ? { id: task.id, title: task.title, status: task.status }
         : { id, title: "Unknown dependency", status: "missing" }
@@ -592,11 +597,11 @@ export const getTaskBoard = async ({
   const safeCompletedOffset = Math.max(0, completedOffset);
 
   const completedTasks = annotated
-    .filter((task) => COMPLETED_STATUSES.has(task.status.toLowerCase()))
+    .filter((task: any) => COMPLETED_STATUSES.has(task.status.toLowerCase()))
     .sort((a, b) => completionTime(b) - completionTime(a));
 
   const activeTasks = annotated
-    .filter((task) => !COMPLETED_STATUSES.has(task.status.toLowerCase()))
+    .filter((task: any) => !COMPLETED_STATUSES.has(task.status.toLowerCase()))
     .sort((a, b) => {
       const rankDiff = activeTaskSortRank(a) - activeTaskSortRank(b);
       if (rankDiff !== 0) return rankDiff;
@@ -701,7 +706,7 @@ export const getAgentDetail = async (agentId: string) => {
   const agent = await prisma.agent.findUnique({ where: { id: agentId } });
   if (!agent) return null;
 
-  const liveAgent = (await getAgents()).find((candidate) => candidate.id === agentId) ?? agent;
+  const liveAgent = (await getAgents()).find((candidate: any) => candidate.id === agentId) ?? agent;
 
   const [recentRuns, recentEvents] = await Promise.all([
     prisma.run.findMany({
@@ -717,7 +722,7 @@ export const getAgentDetail = async (agentId: string) => {
     }),
   ]);
 
-  const runSummaries = recentRuns.map((run) => {
+  const runSummaries = recentRuns.map((run: any) => {
     const endTime = run.completedAt ?? new Date();
     const minutes = minutesBetween(run.startedAt, endTime);
     return {
@@ -731,7 +736,7 @@ export const getAgentDetail = async (agentId: string) => {
         run.status === "failed" &&
         (run.summary?.toLowerCase().includes("timeout") ||
           recentEvents.some(
-            (event) =>
+            (event: any) =>
               event.runId === run.id &&
               (event.type.toLowerCase().includes("timeout") ||
                 event.message.toLowerCase().includes("timeout"))
@@ -740,7 +745,7 @@ export const getAgentDetail = async (agentId: string) => {
   });
 
   const failureEvents = recentEvents.filter(
-    (event) =>
+    (event: any) =>
       event.severity === "critical" ||
       event.type.toLowerCase().includes("fail") ||
       event.type.toLowerCase().includes("timeout") ||

@@ -1,4 +1,4 @@
-import { AgentStatus, Prisma, PrismaClient, RunStatus, Severity } from "@prisma/client";
+import { Prisma, PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
@@ -8,7 +8,7 @@ const agentSeeds = [
     role: "Systems Engineer",
     description: "Keeps infrastructure healthy and automates self-healing routines.",
     capabilities: "Infra automation, diagnostics, observability, runbook execution",
-    status: AgentStatus.active,
+    status: "active",
     healthScore: 94,
     lastSeen: new Date(),
   },
@@ -17,7 +17,7 @@ const agentSeeds = [
     role: "Forecaster",
     description: "Highlights risks and opportunities with quick scenario modeling.",
     capabilities: "Risk analysis, forecasting, alerting",
-    status: AgentStatus.active,
+    status: "active",
     healthScore: 88,
     lastSeen: new Date(Date.now() - 1000 * 60 * 12),
   },
@@ -26,7 +26,7 @@ const agentSeeds = [
     role: "Scout",
     description: "Surfaces research summaries, benchmarks, and supporting evidence.",
     capabilities: "Research synthesis, comparisons, source tracking",
-    status: AgentStatus.active,
+    status: "active",
     healthScore: 85,
     lastSeen: new Date(Date.now() - 1000 * 60 * 45),
   },
@@ -35,7 +35,7 @@ const agentSeeds = [
     role: "Knowledge Base",
     description: "Manages notes, memory, and retrieval across projects.",
     capabilities: "Indexing, retrieval, summarization, tagging",
-    status: AgentStatus.active,
+    status: "active",
     healthScore: 91,
     lastSeen: new Date(Date.now() - 1000 * 60 * 5),
   },
@@ -44,7 +44,7 @@ const agentSeeds = [
     role: "Guardian",
     description: "Watches health signals and raises alerts when SLAs drift.",
     capabilities: "Anomaly detection, alert routing, escalation policies",
-    status: AgentStatus.degraded,
+    status: "degraded",
     healthScore: 72,
     lastSeen: new Date(Date.now() - 1000 * 60 * 18),
   },
@@ -54,7 +54,7 @@ const runSeeds = [
   {
     agentName: "Huragok",
     jobType: "daily_sync",
-    status: RunStatus.completed,
+    status: "completed",
     summary: "Refreshed infra telemetry and updated cache.",
     payload: { scope: "telemetry", interval: "24h" },
     result: { durationMinutes: 8, refreshed: 124 },
@@ -64,7 +64,7 @@ const runSeeds = [
   {
     agentName: "Researcher",
     jobType: "literature_scan",
-    status: RunStatus.running,
+    status: "running",
     summary: "Scanning for new eval papers on agent reliability.",
     payload: { topic: "agent reliability", sources: ["arxiv", "openreview"] },
     result: null,
@@ -74,7 +74,7 @@ const runSeeds = [
   {
     agentName: "Monitor",
     jobType: "uptime_probe",
-    status: RunStatus.failed,
+    status: "failed",
     summary: "Missed heartbeat from staging gateway.",
     payload: { target: "gateway-staging", intervalSeconds: 60 },
     result: { lastResponseMs: null, attempts: 3 },
@@ -88,7 +88,7 @@ const eventSeeds = [
     agentName: "Monitor",
     runType: "uptime_probe",
     type: "alert",
-    severity: Severity.warning,
+    severity: "warning",
     message: "Gateway missed 2 consecutive heartbeats (staging).",
     metadata: { target: "gateway-staging", missed: 2 },
   },
@@ -96,7 +96,7 @@ const eventSeeds = [
     agentName: "Oracle",
     runType: null,
     type: "insight",
-    severity: Severity.info,
+    severity: "info",
     message: "No critical risks detected in the last 12h window.",
     metadata: { windowHours: 12 },
   },
@@ -104,7 +104,7 @@ const eventSeeds = [
     agentName: "Huragok",
     runType: "daily_sync",
     type: "health",
-    severity: Severity.info,
+    severity: "info",
     message: "Infra sync completed successfully.",
     metadata: { refreshed: 124 },
   },
@@ -229,14 +229,14 @@ const taskSeeds = [
 ];
 
 async function main() {
-  await prisma.event.deleteMany();
-  await prisma.run.deleteMany();
-  await prisma.agent.deleteMany();
-  await prisma.cortanaTask.deleteMany();
-  await prisma.cortanaEpic.deleteMany();
+  await prisma.event.deleteMany({});
+  await prisma.run.deleteMany({});
+  await prisma.agent.deleteMany({});
+  await prisma.cortanaTask.deleteMany({});
+  await prisma.cortanaEpic.deleteMany({});
 
   const agents = await Promise.all(
-    agentSeeds.map((agent) => prisma.agent.create({ data: agent }))
+    agentSeeds.map((agent: any) => prisma.agent.create({ data: agent }))
   );
 
   const agentIdByName = agents.reduce<Record<string, string>>((acc, agent) => {
@@ -245,7 +245,7 @@ async function main() {
   }, {});
 
   const runs = await Promise.all(
-    runSeeds.map((run) =>
+    runSeeds.map((run: any) =>
       prisma.run.create({
         data: {
           jobType: run.jobType,
@@ -267,7 +267,7 @@ async function main() {
   }, {});
 
   await Promise.all(
-    eventSeeds.map((event) =>
+    eventSeeds.map((event: any) =>
       prisma.event.create({
         data: {
           type: event.type,
@@ -282,7 +282,7 @@ async function main() {
   );
 
   const epics = await Promise.all(
-    epicSeeds.map((epic) =>
+    epicSeeds.map((epic: any) =>
       prisma.cortanaEpic.create({
         data: {
           title: epic.title,
@@ -303,7 +303,7 @@ async function main() {
 
   for (const task of taskSeeds) {
     const dependsOn = (task.dependsOnKeys || [])
-      .map((key) => createdTaskByKey[key])
+      .map((key: any) => createdTaskByKey[key])
       .filter(Boolean);
 
     const created = await prisma.cortanaTask.create({

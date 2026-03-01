@@ -39,8 +39,8 @@ export default async function FeedbackPage({
     if (value) search.set(key, value);
   });
 
-  const categories = Array.from(new Set(items.map((item) => item.category))).sort();
-  const maxDaily = Math.max(1, ...metrics.dailyCorrections.map((point) => point.count));
+  const categories = Array.from(new Set(items.map((item: any) => item.category))).sort();
+  const maxDaily = Math.max(1, ...metrics.dailyCorrections.map((point: any) => point.count));
 
   const openCount = metrics.byRemediationStatus.open ?? 0;
   const resolvedCount = metrics.byRemediationStatus.resolved ?? 0;
@@ -130,7 +130,7 @@ export default async function FeedbackPage({
           {metrics.dailyCorrections.length === 0 ? (
             <p className="text-sm text-muted-foreground">No corrections in the last 14 days.</p>
           ) : (
-            metrics.dailyCorrections.map((point) => (
+            metrics.dailyCorrections.map((point: any) => (
               <div key={point.day} className="space-y-1">
                 <div className="flex items-center justify-between text-xs text-muted-foreground">
                   <span>{point.day}</span>
@@ -156,7 +156,7 @@ export default async function FeedbackPage({
             </CardContent>
           </Card>
         ) : (
-          items.map((feedback) => <FeedbackCard key={feedback.id} feedback={feedback} />)
+          items.map((feedback: any) => <FeedbackCard key={feedback.id} feedback={feedback} />)
         )}
       </div>
     </div>

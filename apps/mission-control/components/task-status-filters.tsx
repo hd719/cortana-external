@@ -95,7 +95,7 @@ function TaskItem({ task }: { task: TaskBoardTask }) {
         {dueLabel && <span>Due {dueLabel}</span>}
         {task.blockedBy.length > 0 && (
           <span>
-            Waiting on: {task.blockedBy.map((b) => `${b.title} (${b.status})`).join(", ")}
+            Waiting on: {task.blockedBy.map((b: (typeof task.blockedBy)[number]) => `${b.title} (${b.status})`).join(", ")}
           </span>
         )}
         {dependencyCount > 0 && <span>{dependencyCount} dependency</span>}
@@ -193,7 +193,10 @@ export function TaskStatusFilters({
         throw new Error(`Request failed with ${response.status}`);
       }
 
-      const data = await response.json();
+      const data = (await response.json()) as {
+        completedTasks?: TaskBoardTask[];
+        completedPagination?: CompletedPagination;
+      };
       const incoming: TaskBoardTask[] = data.completedTasks ?? [];
 
       setCompletedTasks((current) => {
@@ -217,7 +220,9 @@ export function TaskStatusFilters({
       <CardHeader className="space-y-3">
         <CardTitle className="text-base">Status filters</CardTitle>
         <div className="flex flex-wrap gap-2">
-          {(["backlog", "scheduled", "ready", "pending", "in_progress", "auto_ready", "done"] as const).map((filter) => (
+          {(
+            ["backlog", "scheduled", "ready", "pending", "in_progress", "auto_ready", "done"] as const
+          ).map((filter) => (
             <Button
               key={filter}
               type="button"
@@ -250,7 +255,7 @@ export function TaskStatusFilters({
               : FILTER_EMPTY[activeFilter as Exclude<StatusFilter, "all">]}
           </p>
         ) : (
-          filteredTasks.map((task) => <TaskItem key={task.id} task={task} />)
+          filteredTasks.map((task: (typeof filteredTasks)[number]) => <TaskItem key={task.id} task={task} />)
         )}
 
         {(activeFilter === "done" || activeFilter === "all") && pagination.total > completedTasks.length && (

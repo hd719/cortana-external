@@ -122,7 +122,7 @@ export function JobsRunsTable({
   return (
     <div className="space-y-4">
       <div className="space-y-3 md:hidden">
-        {runs.map((run) => {
+        {runs.map((run: any) => {
           const effectiveStatus = (run.externalStatus || run.status).toString().toLowerCase();
           const role = getAgentRole(run.assignmentLabel, run.agent?.name);
 
@@ -221,7 +221,7 @@ export function JobsRunsTable({
             </tr>
           </thead>
           <tbody>
-            {runs.map((run) => {
+            {runs.map((run: any) => {
               const role = getAgentRole(run.assignmentLabel, run.agent?.name);
 
               return (

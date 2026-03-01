@@ -36,11 +36,11 @@ export async function reconcileTaskBoardSources(): Promise<ReconcileReport | nul
     prisma.cortanaTask.findMany({ select: { id: true } }),
   ]);
 
-  const preferredSet = new Set(preferredIds.map((t) => t.id));
-  const appSet = new Set(appIds.map((t) => t.id));
+  const preferredSet = new Set(preferredIds.map((t: any) => t.id));
+  const appSet = new Set(appIds.map((t: any) => t.id));
 
-  const missingInApp = preferredIds.filter((t) => !appSet.has(t.id)).map((t) => t.id);
-  const missingInPreferred = appIds.filter((t) => !preferredSet.has(t.id)).map((t) => t.id);
+  const missingInApp = preferredIds.filter((t: any) => !appSet.has(t.id)).map((t: any) => t.id);
+  const missingInPreferred = appIds.filter((t: any) => !preferredSet.has(t.id)).map((t: any) => t.id);
   const drift = missingInApp.length > 0 || missingInPreferred.length > 0;
 
   let reconciled: ReconcileReport["reconciled"];
@@ -51,8 +51,8 @@ export async function reconcileTaskBoardSources(): Promise<ReconcileReport | nul
       preferred.cortanaTask.findMany({ select: { id: true } }),
     ]);
 
-    const preferredEpicIds = preferredEpics.map((epic) => epic.id);
-    const preferredTaskIds = preferredTasks.map((task) => task.id);
+    const preferredEpicIds = preferredEpics.map((epic: any) => epic.id);
+    const preferredTaskIds = preferredTasks.map((task: any) => task.id);
 
     await prisma.$transaction(async (tx) => {
       for (const epic of preferredEpics) {

@@ -48,7 +48,7 @@ async function fetchPrCommitMessages(repo: string, prNumber: number): Promise<st
 
     return stdout
       .split("\n")
-      .map((line) => line.trim())
+      .map((line: any) => line.trim())
       .filter(Boolean);
   } catch {
     return [];
@@ -79,10 +79,10 @@ async function main() {
   }
 
   const labels = (
-    payload?.pull_request?.labels?.map((label) => label.name || "").filter(Boolean) ||
+    payload?.pull_request?.labels?.map((label: any) => label.name || "").filter(Boolean) ||
     (arg("--labels") || "")
       .split(",")
-      .map((item) => item.trim())
+      .map((item: any) => item.trim())
       .filter(Boolean)
   ) as string[];
 

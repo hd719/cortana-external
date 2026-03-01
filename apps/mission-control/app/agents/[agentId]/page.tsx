@@ -83,7 +83,7 @@ export default async function AgentDetailPage({
           {recentRuns.length === 0 ? (
             <p className="text-sm text-muted-foreground">No runs yet.</p>
           ) : (
-            recentRuns.map((run) => (
+            recentRuns.map((run: (typeof recentRuns)[number]) => (
               <div key={run.id} className="rounded-md border p-3 shadow-sm">
                 <div className="flex flex-wrap items-center gap-2">
                   <p className="font-medium text-foreground">{run.jobType}</p>
@@ -117,7 +117,7 @@ export default async function AgentDetailPage({
           {recentEvents.length === 0 ? (
             <p className="text-sm text-muted-foreground">No events yet.</p>
           ) : (
-            recentEvents.map((event) => {
+            recentEvents.map((event: (typeof recentEvents)[number]) => {
               const isFailure =
                 event.severity === "critical" ||
                 event.type.toLowerCase().includes("fail") ||

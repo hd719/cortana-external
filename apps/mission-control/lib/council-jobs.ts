@@ -437,20 +437,20 @@ export async function runCouncilDeliberationFanout(sessionId: string): Promise<C
   if (!session) return { sessionId, dispatched: 0, skipped: true, reason: "session_not_found" };
   if (session.status !== "running") return { sessionId, dispatched: 0, skipped: true, reason: "session_not_running" };
 
-  const pending = (session.members ?? []).filter((member) => !member.vote);
+  const pending = (session.members ?? []).filter((member: any) => !member.vote);
   if (pending.length === 0) {
     return { sessionId, dispatched: 0, skipped: true, reason: "no_pending_members" };
   }
 
   const allMembers = [...(session.members ?? [])].sort((a, b) => a.id - b.id);
-  const fanoutCount = (session.messages ?? []).filter((message) => message.messageType === "fanout_dispatch").length;
+  const fanoutCount = (session.messages ?? []).filter((message: any) => message.messageType === "fanout_dispatch").length;
   const deliberationIndex = Math.floor(fanoutCount / Math.max(allMembers.length, 1));
   const contrarianIndex = allMembers.length > 0
     ? (hashString(sessionId) + deliberationIndex) % allMembers.length
     : 0;
   const contrarianMemberId = allMembers[contrarianIndex]?.id;
 
-  const nextTurn = Math.max(0, ...(session.messages ?? []).map((m) => m.turnNo)) + 1;
+  const nextTurn = Math.max(0, ...(session.messages ?? []).map((m: any) => m.turnNo)) + 1;
 
   await Promise.all(
     pending.map(async (member, index) => {
@@ -561,13 +561,13 @@ export async function runCouncilDeliberationFanout(sessionId: string): Promise<C
   );
 
   const refreshed = await getCouncilSessionById(sessionId);
-  const votes = (refreshed?.members ?? []).filter((member) => member.vote);
+  const votes = (refreshed?.members ?? []).filter((member: any) => member.vote);
   const totalMembers = refreshed?.members?.length ?? 0;
 
   if (refreshed && totalMembers > 0 && votes.length === totalMembers) {
-    const synthTurn = Math.max(0, ...((refreshed.messages ?? []).map((m) => m.turnNo))) + 1;
+    const synthTurn = Math.max(0, ...((refreshed.messages ?? []).map((m: any) => m.turnNo))) + 1;
 
-    const normalizedVotes = votes.map((member) => normalizeVote(member.vote ?? "abstain"));
+    const normalizedVotes = votes.map((member: any) => normalizeVote(member.vote ?? "abstain"));
     const uniqueVotes = new Set(normalizedVotes);
     const consensusSuspicious = uniqueVotes.size === 1;
 
@@ -585,7 +585,7 @@ export async function runCouncilDeliberationFanout(sessionId: string): Promise<C
     });
 
     try {
-      const voteSummary = votes.map((member) => {
+      const voteSummary = votes.map((member: any) => {
         const parsedReasoning = member.reasoning ? extractJsonObject(member.reasoning) : null;
         const roleKey = normalizeRoleKey(member.agentId, member.role);
         const roleValidation = parsedReasoning
@@ -604,8 +604,8 @@ export async function runCouncilDeliberationFanout(sessionId: string): Promise<C
       });
 
       const schemaGaps = voteSummary
-        .filter((vote) => vote.roleValidation.missingFields.length > 0)
-        .map((vote) => ({
+        .filter((vote: any) => vote.roleValidation.missingFields.length > 0)
+        .map((vote: any) => ({
           agentId: vote.agentId,
           role: vote.role,
           missingFields: vote.roleValidation.missingFields,

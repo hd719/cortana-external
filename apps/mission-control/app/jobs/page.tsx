@@ -23,8 +23,8 @@ export default async function JobsPage({
 
   const filteredRuns = runsPage.runs;
 
-  const grouped = Object.values(
-    filteredRuns.reduce<Record<string, { label: string; count: number }>>((acc, run) => {
+  const grouped: Array<{ label: string; count: number }> = Object.values(
+    filteredRuns.reduce<Record<string, { label: string; count: number }>>((acc: Record<string, { label: string; count: number }>, run: (typeof filteredRuns)[number]) => {
       const label = run.externalStatus || run.status;
       acc[label] = acc[label] || { label, count: 0 };
       acc[label].count += 1;
@@ -32,7 +32,7 @@ export default async function JobsPage({
     }, {})
   );
 
-  const selectedAgent = agents.find((agent) => agent.id === selectedAgentId);
+  const selectedAgent = agents.find((agent: (typeof agents)[number]) => agent.id === selectedAgentId);
 
   return (
     <div className="space-y-6">
@@ -50,8 +50,8 @@ export default async function JobsPage({
         <Badge variant="secondary">
           {grouped.length > 0
             ? grouped
-                .sort((a, b) => b.count - a.count)
-                .map((item) => `${item.label}: ${item.count}`)
+                .sort((a: { label: string; count: number }, b: { label: string; count: number }) => b.count - a.count)
+                .map((item: { label: string; count: number }) => `${item.label}: ${item.count}`)
                 .join(" · ")
             : "No runs"}
         </Badge>
@@ -71,7 +71,7 @@ export default async function JobsPage({
                 <Badge variant="secondary">This agent: {selectedAgent?.name || selectedAgentId}</Badge>
               </Link>
             )}
-            {agents.map((agent) => (
+            {agents.map((agent: (typeof agents)[number]) => (
               <Link key={agent.id} href={`/jobs?agentId=${agent.id}`}>
                 <Badge variant={agent.id === selectedAgentId ? "secondary" : "outline"}>
                   {agent.name}

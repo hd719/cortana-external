@@ -96,8 +96,8 @@ export default async function Home() {
   }
 
   const totalAgents = data.metrics.agents.total;
-  const activeAgents = data.agents.filter((a) => a.status === "active").length;
-  const degradedAgents = data.agents.filter((a) =>
+  const activeAgents = data.agents.filter((a: (typeof data.agents)[number]) => a.status === "active").length;
+  const degradedAgents = data.agents.filter((a: (typeof data.agents)[number]) =>
     ["degraded", "offline"].includes(a.status)
   ).length;
   const agentsDescription =
@@ -113,10 +113,10 @@ export default async function Home() {
 
   const activeRuns = data.runs.filter(runIsActive).length;
   const runningRuns = data.runs.filter(
-    (r) => (r.externalStatus || r.status).toString().toLowerCase() === "running"
+    (r: (typeof data.runs)[number]) => (r.externalStatus || r.status).toString().toLowerCase() === "running"
   ).length;
   const queuedRuns = data.runs.filter(
-    (r) => (r.externalStatus || r.status).toString().toLowerCase() === "queued"
+    (r: (typeof data.runs)[number]) => (r.externalStatus || r.status).toString().toLowerCase() === "queued"
   ).length;
   const openAlerts =
     (data.metrics.alerts.bySeverity.warning || 0) +
@@ -193,7 +193,7 @@ export default async function Home() {
           </div>
 
           <div className="space-y-3 md:hidden">
-            {data.runs.map((run) => {
+            {data.runs.map((run: (typeof data.runs)[number]) => {
               const effectiveStatus = (run.externalStatus || run.status).toString().toLowerCase();
               const role = getAgentRole(run.assignmentLabel, run.agent?.name);
 
@@ -248,7 +248,7 @@ export default async function Home() {
                 </tr>
               </thead>
               <tbody>
-                {data.runs.map((run) => {
+                {data.runs.map((run: (typeof data.runs)[number]) => {
                   const role = getAgentRole(run.assignmentLabel, run.agent?.name);
                   return (
                     <tr key={run.id} className="border-t">

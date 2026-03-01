@@ -1,4 +1,4 @@
-import { Prisma } from "@prisma/client";
+type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
 
 export const OPENCLAW_AGENT_PREFIXES = ["Monitor", "Huragok", "Oracle", "Librarian", "Researcher"] as const;
 
@@ -15,11 +15,11 @@ type AssignmentSource = {
   label?: string | null;
   jobType?: string | null;
   summary?: string | null;
-  metadata?: Prisma.JsonValue;
-  payload?: Prisma.JsonValue;
+  metadata?: JsonValue;
+  payload?: JsonValue;
 };
 
-const asObject = (value: Prisma.JsonValue | null | undefined): Record<string, unknown> | null => {
+const asObject = (value: JsonValue | null | undefined): Record<string, unknown> | null => {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   return value as Record<string, unknown>;
 };

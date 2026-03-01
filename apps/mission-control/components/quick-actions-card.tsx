@@ -15,6 +15,12 @@ import {
 
 type ActionKey = "chaos-test" | "reflection-sweep" | "check-budget" | "force-heartbeat";
 
+type ActionConfig = {
+  key: ActionKey;
+  label: string;
+  icon: ComponentType<{ className?: string }>;
+};
+
 type ActionState = {
   state: "idle" | "loading" | "success" | "error";
   data?: unknown;
@@ -35,7 +41,7 @@ type ReflectionItem = {
   outcome: string | null;
 };
 
-const ACTIONS: Array<{ key: ActionKey; label: string; icon: ComponentType<{ className?: string }> }> = [
+const ACTIONS: ActionConfig[] = [
   { key: "chaos-test", label: "Run Chaos Test", icon: Play },
   { key: "reflection-sweep", label: "Reflection Sweep", icon: RefreshCcw },
   { key: "check-budget", label: "Check Budget", icon: Wallet },
@@ -60,7 +66,7 @@ function renderActionResult(action: ActionKey, data: unknown) {
     const checks = (payload.checks as HealthCheckResult[] | undefined) ?? [];
     return (
       <div className="space-y-2 font-mono text-xs leading-5">
-        {checks.map((check) => (
+        {checks.map((check: HealthCheckResult) => (
           <div key={check.name} className="rounded-md border border-border/60 bg-background/70 p-2">
             <div className={check.passed ? "text-emerald-300" : "text-destructive"}>
               {check.passed ? "PASS" : "FAIL"} · {check.name}
@@ -90,7 +96,7 @@ function renderActionResult(action: ActionKey, data: unknown) {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {rows.map((row) => (
+          {rows.map((row: ReflectionItem) => (
             <TableRow key={row.id}>
               <TableCell>{row.id}</TableCell>
               <TableCell className="max-w-[260px] truncate" title={row.title}>

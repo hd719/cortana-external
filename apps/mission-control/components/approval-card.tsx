@@ -171,7 +171,7 @@ export function ApprovalCard({ approval }: { approval: ApprovalRequest }) {
             <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Audit events</p>
             {events.length > 0 ? (
               <div className="mt-2 space-y-2">
-                {events.map((event) => (
+                {events.map((event: any) => (
                   <div key={event.id} className="rounded border bg-card/60 p-2 text-xs">
                     <p className="font-medium">{event.eventType}</p>
                     <p className="text-muted-foreground">{event.actor || "system"} · {toRelativeTime(event.createdAt)}</p>

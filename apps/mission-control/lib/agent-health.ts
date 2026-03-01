@@ -47,14 +47,14 @@ export const computeHealthScore = (
       : runReliability ?? taskReliability ?? 0.6;
 
   const now = Date.now();
-  const recentTerminalRuns = (recentRuns || []).filter((run) => {
+  const recentTerminalRuns = (recentRuns || []).filter((run: any) => {
     const timestamp = toTimestamp(run.timestamp);
     return Number.isFinite(timestamp) && now - timestamp <= RECENT_WINDOW_MS;
   });
 
   const recentRunSuccessRate =
     recentTerminalRuns.length > 0
-      ? recentTerminalRuns.filter((run) => run.status === "completed").length /
+      ? recentTerminalRuns.filter((run: any) => run.status === "completed").length /
         recentTerminalRuns.length
       : null;
 

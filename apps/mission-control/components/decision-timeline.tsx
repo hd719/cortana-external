@@ -38,7 +38,7 @@ export function DecisionTimeline({ traces }: { traces: DecisionTrace[] }) {
 
   return (
     <div className="space-y-4">
-      {traces.map((trace) => (
+      {traces.map((trace: any) => (
         <Card key={trace.id} className="overflow-hidden">
           <CardHeader className="pb-2">
             <CardTitle className="flex flex-wrap items-center gap-2 text-base">

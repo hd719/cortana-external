@@ -165,7 +165,7 @@ const isSameDay = (left: Date, right: Date) => toDayKey(left) === toDayKey(right
 
 const orderRecords = (records: Record<string, unknown>[]) => {
   return records
-    .map((record) => ({ record, date: getRecordDate(record) }))
+    .map((record: any) => ({ record, date: getRecordDate(record) }))
     .filter((item): item is { record: Record<string, unknown>; date: Date } =>
       Boolean(item.date)
     )

@@ -29,7 +29,7 @@ function TaskList({
         {tasks.length === 0 ? (
           <p className="text-sm text-muted-foreground">{empty}</p>
         ) : (
-          tasks.map((task) => <TaskItem key={task.id} task={task} />)
+          tasks.map((task: (typeof tasks)[number]) => <TaskItem key={task.id} task={task} />)
         )}
       </CardContent>
     </Card>
@@ -85,7 +85,7 @@ function TaskItem({ task }: { task: TaskBoardTask }) {
         {dueLabel && <span>Due {dueLabel}</span>}
         {task.blockedBy.length > 0 && (
           <span>
-            Waiting on: {task.blockedBy.map((b) => `${b.title} (${b.status})`).join(", ")}
+            Waiting on: {task.blockedBy.map((b: (typeof task.blockedBy)[number]) => `${b.title} (${b.status})`).join(", ")}
           </span>
         )}
         {dependencyCount > 0 && <span>{dependencyCount} dependency</span>}
@@ -146,7 +146,7 @@ export default async function TaskBoardPage() {
   } = data;
   const liveSyncActive = metadata.listener?.connected;
 
-  const pillarEntries = Object.entries(byPillar).sort((a, b) => a[0].localeCompare(b[0]));
+  const pillarEntries = Object.entries(byPillar).sort((a: [string, TaskBoardTask[]], b: [string, TaskBoardTask[]]) => a[0].localeCompare(b[0]));
 
   return (
     <div className="space-y-6">
@@ -185,7 +185,7 @@ export default async function TaskBoardPage() {
             <CardTitle className="text-base">Task Board running in fallback mode</CardTitle>
           </CardHeader>
           <CardContent className="space-y-1 text-sm text-muted-foreground">
-            {metadata.warnings.map((warning) => (
+            {metadata.warnings.map((warning: (typeof metadata.warnings)[number]) => (
               <div key={`${warning.code}-${warning.message}`}>
                 <p>{warning.message}</p>
                 {warning.cause && <p className="text-xs">Details: {warning.cause}</p>}
@@ -235,17 +235,17 @@ export default async function TaskBoardPage() {
           <CardTitle className="text-base">By pillar</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-4 md:grid-cols-2">
-          {pillarEntries.map(([pillar, pillarTasks]) => (
+          {pillarEntries.map(([pillar, pillarTasks]: [string, TaskBoardTask[]]) => (
             <div key={pillar} className="space-y-3 rounded-md border p-3 shadow-sm">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Badge variant="outline">{pillar}</Badge>
                   <Badge variant="secondary">{pillarTasks.length}</Badge>
                 </div>
-                <span className="text-xs text-muted-foreground">Auto: {pillarTasks.filter((t) => t.autoExecutable).length}</span>
+                <span className="text-xs text-muted-foreground">Auto: {pillarTasks.filter((t: (typeof pillarTasks)[number]) => t.autoExecutable).length}</span>
               </div>
               <div className="space-y-2">
-                {pillarTasks.map((task) => (
+                {pillarTasks.map((task: (typeof pillarTasks)[number]) => (
                   <TaskItem key={task.id} task={task} />
                 ))}
               </div>
@@ -265,7 +265,7 @@ export default async function TaskBoardPage() {
           {recentOutcomes.length === 0 ? (
             <p className="text-sm text-muted-foreground">No completed tasks recorded yet.</p>
           ) : (
-            recentOutcomes.map((task) => {
+            recentOutcomes.map((task: (typeof recentOutcomes)[number]) => {
               const completedLabel = task.completedAt
                 ? new Intl.DateTimeFormat("en", {
                     month: "short",

@@ -119,12 +119,24 @@ export function CronHealthCard() {
   }, [crons]);
 
   const failedOrLateCrons = useMemo(
-    () => crons.filter((cron) => cron.status !== "healthy").sort((a, b) => new Date(b.last_fire_time ?? 0).getTime() - new Date(a.last_fire_time ?? 0).getTime()),
+    () =>
+      crons
+        .filter((cron: CronHealthItem) => cron.status !== "healthy")
+        .sort(
+          (a, b) =>
+            new Date(b.last_fire_time ?? 0).getTime() - new Date(a.last_fire_time ?? 0).getTime(),
+        ),
     [crons],
   );
 
   const healthyCrons = useMemo(
-    () => crons.filter((cron) => cron.status === "healthy").sort((a, b) => new Date(b.last_fire_time ?? 0).getTime() - new Date(a.last_fire_time ?? 0).getTime()),
+    () =>
+      crons
+        .filter((cron: CronHealthItem) => cron.status === "healthy")
+        .sort(
+          (a, b) =>
+            new Date(b.last_fire_time ?? 0).getTime() - new Date(a.last_fire_time ?? 0).getTime(),
+        ),
     [crons],
   );
 
@@ -147,7 +159,7 @@ export function CronHealthCard() {
         {error && <p className="mb-3 text-xs text-destructive">{error}</p>}
 
         <div className="space-y-3">
-          {failedOrLateCrons.map((cron) => {
+          {failedOrLateCrons.map((cron: CronHealthItem) => {
             const status = statusUi[cron.status];
 
             return (
@@ -210,7 +222,7 @@ export function CronHealthCard() {
 
               {showHealthy && (
                 <div className="border-t">
-                  {healthyCrons.map((cron) => (
+                  {healthyCrons.map((cron: CronHealthItem) => (
                     <div
                       key={cron.name}
                       className="grid grid-cols-1 gap-1 px-3 py-2 text-xs sm:grid-cols-[minmax(0,1fr)_auto_auto_auto] sm:items-center sm:gap-3"

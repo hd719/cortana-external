@@ -69,7 +69,7 @@ async function loadStatsByAgent() {
     }
   }
 
-  return agents.map((agent) => ({
+  return agents.map((agent: any) => ({
     ...agent,
     stats:
       statsByAgent.get(agent.id) ||

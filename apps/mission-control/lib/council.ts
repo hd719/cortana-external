@@ -264,8 +264,8 @@ export async function getCouncilSessionById(id: string): Promise<CouncilSession 
 
     const session = mapSession(sessionRows[0]);
     const members = sessionRows
-      .filter((row) => row.member_id !== null)
-      .map((row) => mapMember({
+      .filter((row: SessionWithMemberRow) => row.member_id !== null)
+      .map((row: SessionWithMemberRow) => mapMember({
         id: Number(row.member_id),
         session_id: row.session_id as string,
         agent_id: row.agent_id as string,
@@ -291,8 +291,8 @@ export async function getCouncilSessionById(id: string): Promise<CouncilSession 
 
     const session = mapSession(sessionRows[0]);
     const members = sessionRows
-      .filter((row) => row.member_id !== null)
-      .map((row) => mapMember({
+      .filter((row: SessionWithMemberRow) => row.member_id !== null)
+      .map((row: SessionWithMemberRow) => mapMember({
         id: Number(row.member_id),
         session_id: row.session_id as string,
         agent_id: row.agent_id as string,
@@ -443,7 +443,7 @@ export async function addCouncilMembers(
 
   const safeSessionId = escapeLiteral(sessionId);
   const values = members
-    .map((member) => {
+    .map((member: (typeof members)[number]) => {
       const agentId = `'${escapeLiteral(member.agentId)}'`;
       const role = member.role ? `'${escapeLiteral(member.role)}'` : "NULL";
       const weight = typeof member.weight === "number" ? member.weight : 1;

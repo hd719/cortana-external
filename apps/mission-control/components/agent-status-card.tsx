@@ -60,7 +60,7 @@ export function AgentStatusCard() {
           <p className="text-sm text-muted-foreground">No agent activity yet.</p>
         ) : null}
 
-        {agents.map((agent) => (
+        {agents.map((agent: any) => (
           <div key={agent.name} className="rounded-lg border bg-card/60 px-3 py-3 shadow-sm">
             <p className="font-medium leading-tight">{agent.name}</p>
             <p className="mt-1 text-xs text-muted-foreground">

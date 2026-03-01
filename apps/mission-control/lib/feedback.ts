@@ -539,7 +539,7 @@ export async function getFeedbackMetrics(): Promise<FeedbackMetrics> {
 
   const toRecord = (rows: Array<{ [key: string]: string | number }>, keyName: string) => {
     const record: Record<string, number> = {};
-    rows.forEach((row) => {
+    rows.forEach((row: any) => {
       const key = String(row[keyName]);
       const count = Number(row.count || 0);
       record[key] = count;
@@ -554,7 +554,7 @@ export async function getFeedbackMetrics(): Promise<FeedbackMetrics> {
       byStatus: toRecord(statusRows as Array<{ [key: string]: string | number }>, "status"),
       byRemediationStatus: toRecord(remediationRows as Array<{ [key: string]: string | number }>, "status"),
       byCategory: toRecord(categoryRows as Array<{ [key: string]: string | number }>, "category"),
-      dailyCorrections: dailyRows.map((row) => ({ day: row.day, count: Number(row.count || 0) })),
+      dailyCorrections: dailyRows.map((row: any) => ({ day: row.day, count: Number(row.count || 0) })),
     };
   } catch (error) {
     if (!taskPrisma) throw error;
@@ -564,7 +564,7 @@ export async function getFeedbackMetrics(): Promise<FeedbackMetrics> {
       byStatus: toRecord(statusRows as Array<{ [key: string]: string | number }>, "status"),
       byRemediationStatus: toRecord(remediationRows as Array<{ [key: string]: string | number }>, "status"),
       byCategory: toRecord(categoryRows as Array<{ [key: string]: string | number }>, "category"),
-      dailyCorrections: dailyRows.map((row) => ({ day: row.day, count: Number(row.count || 0) })),
+      dailyCorrections: dailyRows.map((row: any) => ({ day: row.day, count: Number(row.count || 0) })),
     };
   }
 }

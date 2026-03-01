@@ -112,7 +112,7 @@ export function ActivityFeed() {
           <p className="px-1 py-2 text-muted-foreground">No activity yet.</p>
         ) : (
           <div className="space-y-1">
-            {orderedEvents.map((event) => (
+            {orderedEvents.map((event: ActivityEvent) => (
               <div
                 key={event.id}
                 className="rounded border border-white/5 bg-black/20 px-2 py-1.5"

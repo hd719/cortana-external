@@ -39,7 +39,7 @@ export function FeedbackFilters({
     <div className="space-y-3 rounded-md border bg-card/60 p-3">
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Remediation</span>
-        {remediationStatuses.map((status) => (
+        {remediationStatuses.map((status: any) => (
           <button key={status} type="button" onClick={() => setFilter("remediationStatus", status)}>
             <Badge variant={selectedRemediationStatus === status ? "secondary" : "outline"}>{humanize(status)}</Badge>
           </button>
@@ -48,7 +48,7 @@ export function FeedbackFilters({
 
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Status</span>
-        {statuses.map((status) => (
+        {statuses.map((status: any) => (
           <button key={status} type="button" onClick={() => setFilter("status", status)}>
             <Badge variant={selectedStatus === status ? "secondary" : "outline"}>{humanize(status)}</Badge>
           </button>
@@ -57,7 +57,7 @@ export function FeedbackFilters({
 
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Severity</span>
-        {severities.map((severity) => (
+        {severities.map((severity: any) => (
           <button key={severity} type="button" onClick={() => setFilter("severity", severity)}>
             <Badge variant={selectedSeverity === severity ? "secondary" : "outline"}>{humanize(severity)}</Badge>
           </button>
@@ -69,7 +69,7 @@ export function FeedbackFilters({
         <button type="button" onClick={() => setFilter("category", "all")}>
           <Badge variant={selectedCategory === "all" ? "secondary" : "outline"}>All</Badge>
         </button>
-        {categories.map((category) => (
+        {categories.map((category: any) => (
           <button key={category} type="button" onClick={() => setFilter("category", category)}>
             <Badge variant={selectedCategory === category ? "secondary" : "outline"}>{category}</Badge>
           </button>

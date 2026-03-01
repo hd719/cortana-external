@@ -1,6 +1,8 @@
-import { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { getTaskPrisma } from "@/lib/task-prisma";
+
+type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
+type InputJsonValue = JsonValue;
 
 type MergeRef = {
   repository?: string;
@@ -95,12 +97,17 @@ const formatOutcome = (ref: MergeRef) => {
   return pieces.join(" | ");
 };
 
+type TaskStatusRow = {
+  id: number;
+  status: string | null;
+};
+
 const verifyClosedTasks = async (taskIds: number[]) => {
   const taskPrisma = getTaskPrisma() || prisma;
-  const rows = await taskPrisma.cortanaTask.findMany({
+  const rows = (await taskPrisma.cortanaTask.findMany({
     where: { id: { in: taskIds } },
     select: { id: true, status: true },
-  });
+  })) as TaskStatusRow[];
 
   const doneTaskIds = rows
     .filter((row) => ["done", "completed"].includes((row.status || "").toLowerCase()))
@@ -121,7 +128,7 @@ const emitFailureAlert = async (message: string, metadata: Record<string, unknow
         type: "task.autoclose.verification_failed",
         severity: "critical",
         message,
-        metadata: metadata as Prisma.InputJsonValue,
+        metadata: metadata as InputJsonValue,
       },
     });
   } catch {

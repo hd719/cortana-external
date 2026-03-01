@@ -21,7 +21,7 @@ export function MainNav() {
   return (
     <nav className="w-full overflow-x-auto pb-1 sm:w-auto sm:overflow-visible sm:pb-0">
       <div className="flex min-w-max items-center gap-2 text-sm font-medium text-muted-foreground">
-        {links.map((link) => {
+        {links.map((link: any) => {
           const isActive =
             link.href === "/"
               ? pathname === link.href

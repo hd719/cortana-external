@@ -66,7 +66,7 @@ describe("lib/openclaw-sync", () => {
     const { syncOpenClawRunsFromStore } = await import("@/lib/openclaw-sync");
     await syncOpenClawRunsFromStore();
 
-    const statuses = ingestMock.mock.calls.map((call) => call[0]?.status);
+    const statuses = ingestMock.mock.calls.map((call: any) => call[0]?.status);
     expect(statuses).toEqual(["completed", "completed"]);
   });
 
