@@ -1,5 +1,7 @@
 # cortana-external (`~/Developer/cortana-external`)
 
+[![CI](https://github.com/hd719/cortana-external/actions/workflows/ci.yml/badge.svg)](https://github.com/hd719/cortana-external/actions/workflows/ci.yml)
+
 Runtime edge for Cortana: services, apps, and reliability infrastructure that support the `~/clawd` command brain.
 
 If `~/clawd` is strategy/memory/policy, **cortana-external is execution runtime**.
