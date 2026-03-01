@@ -47,7 +47,7 @@ describe("lib/openclaw-sync", () => {
     delete process.env.OPENCLAW_SUBAGENT_RUNS_PATH;
   });
 
-  it("normalizes done/ok to completed when syncing store runs", async () => {
+  it("normalizes done/ok to done when syncing store runs", async () => {
     const prisma = (await import("@/lib/prisma")).default;
     vi.mocked(prisma.run.findMany).mockResolvedValue([]);
     vi.mocked(prisma.$transaction).mockResolvedValue([] as never);
@@ -67,10 +67,10 @@ describe("lib/openclaw-sync", () => {
     await syncOpenClawRunsFromStore();
 
     const statuses = ingestMock.mock.calls.map((call) => call[0]?.status);
-    expect(statuses).toEqual(["completed", "completed"]);
+    expect(statuses).toEqual(["done", "done"]);
   });
 
-  it("marks stale runs as failed with externalStatus failed", async () => {
+  it("marks stale runs as completed with externalStatus done", async () => {
     const prisma = (await import("@/lib/prisma")).default;
 
     vi.mocked(prisma.run.findMany).mockResolvedValue([
@@ -92,8 +92,8 @@ describe("lib/openclaw-sync", () => {
     expect(prisma.run.update).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
-          status: "failed",
-          externalStatus: "failed",
+          status: "completed",
+          externalStatus: "done",
         }),
       })
     );

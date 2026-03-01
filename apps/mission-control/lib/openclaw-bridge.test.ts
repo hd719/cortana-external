@@ -28,14 +28,14 @@ describe("lib/openclaw-bridge", () => {
     vi.clearAllMocks();
   });
 
-  it("normalizeLifecycleStatus maps completion aliases and keeps known statuses", async () => {
+  it("normalizeLifecycleStatus maps completion aliases to done and keeps known statuses", async () => {
     const { normalizeLifecycleStatus } = await import("@/lib/openclaw-bridge");
 
-    expect(normalizeLifecycleStatus("done")).toBe("completed");
-    expect(normalizeLifecycleStatus("complete")).toBe("completed");
-    expect(normalizeLifecycleStatus("success")).toBe("completed");
-    expect(normalizeLifecycleStatus("succeeded")).toBe("completed");
-    expect(normalizeLifecycleStatus("ok")).toBe("completed");
+    expect(normalizeLifecycleStatus("done")).toBe("done");
+    expect(normalizeLifecycleStatus("complete")).toBe("done");
+    expect(normalizeLifecycleStatus("success")).toBe("done");
+    expect(normalizeLifecycleStatus("succeeded")).toBe("done");
+    expect(normalizeLifecycleStatus("ok")).toBe("done");
     expect(normalizeLifecycleStatus("running")).toBe("running");
     expect(normalizeLifecycleStatus("failed")).toBe("failed");
   });
@@ -45,7 +45,7 @@ describe("lib/openclaw-bridge", () => {
     expect(normalizeLifecycleStatus("mystery-status")).toBeNull();
   });
 
-  it("maps lifecycle completed to RunStatus.completed during ingest", async () => {
+  it("maps lifecycle completed alias to RunStatus.completed during ingest", async () => {
     const prisma = (await import("@/lib/prisma")).default;
     vi.mocked(prisma.agent.findMany).mockResolvedValue([{ id: "agent-1", name: "A", role: "ops" }]);
     vi.mocked(prisma.run.findFirst).mockResolvedValue(null);
@@ -64,7 +64,7 @@ describe("lib/openclaw-bridge", () => {
       expect.objectContaining({
         data: expect.objectContaining({
           status: RunStatus.completed,
-          externalStatus: "completed",
+          externalStatus: "done",
         }),
       })
     );

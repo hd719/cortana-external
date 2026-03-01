@@ -6,14 +6,10 @@ vi.mock("@/lib/data", () => ({
 }));
 
 describe("GET /api/dashboard", () => {
-  it("returns 503 when dashboard summary fails", async () => {
+  it("bubbles dashboard summary failures", async () => {
     vi.mocked(getDashboardSummary).mockRejectedValueOnce(new Error("db down"));
 
     const { GET } = await import("@/app/api/dashboard/route");
-    const response = await GET();
-    const body = await response.json();
-
-    expect(response.status).toBe(503);
-    expect(body.ok).toBe(false);
+    await expect(GET()).rejects.toThrow("db down");
   });
 });

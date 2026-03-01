@@ -12,12 +12,11 @@ vi.mock("@/lib/task-prisma", () => ({
   getTaskPrisma: vi.fn(() => null),
 }));
 
-const readFileMock = vi.fn();
-const writeFileMock = vi.fn();
+const execSyncMock = vi.fn();
 
-vi.mock("node:fs/promises", () => ({
-  readFile: readFileMock,
-  writeFile: writeFileMock,
+vi.mock("node:child_process", () => ({
+  execSync: execSyncMock,
+  default: { execSync: execSyncMock },
 }));
 
 describe("POST /api/actions/[action] force-heartbeat", () => {
@@ -25,11 +24,9 @@ describe("POST /api/actions/[action] force-heartbeat", () => {
     vi.clearAllMocks();
   });
 
-  it("updates heartbeat-state.json and inserts DB event", async () => {
-    vi.spyOn(Date, "now").mockReturnValue(1_700_000_000_000);
+  it("inserts DB event and triggers openclaw system event", async () => {
     executeRawMock.mockResolvedValueOnce(1);
-    readFileMock.mockResolvedValueOnce(JSON.stringify({ lastHeartbeat: 1, foo: "bar" }));
-    writeFileMock.mockResolvedValueOnce(undefined);
+    execSyncMock.mockReturnValueOnce("ok");
 
     const { POST } = await import("@/app/api/actions/[action]/route");
     const res = await POST(new Request("http://localhost/api/actions/force-heartbeat", { method: "POST" }), {
@@ -42,10 +39,9 @@ describe("POST /api/actions/[action] force-heartbeat", () => {
     expect(executeRawMock).toHaveBeenCalledWith(
       expect.stringContaining("INSERT INTO cortana_events")
     );
-    expect(writeFileMock).toHaveBeenCalledTimes(1);
-
-    const writtenJson = JSON.parse(writeFileMock.mock.calls[0][1]);
-    expect(writtenJson.lastHeartbeat).toBe(1_700_000_000_000);
-    expect(writtenJson.foo).toBe("bar");
+    expect(execSyncMock).toHaveBeenCalledWith(
+      expect.stringContaining('openclaw system event --text "Manual heartbeat forced from Mission Control" --mode now'),
+      expect.objectContaining({ timeout: 15000 })
+    );
   });
 });
