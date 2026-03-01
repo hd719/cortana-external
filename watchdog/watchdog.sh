@@ -366,16 +366,6 @@ check_tools() {
     log "info" "PostgreSQL: OK"
   fi
 
-  # LanceDB / Memory Extension
-  local lancedb_check_name="memory_extension"
-  if ! node --prefix /opt/homebrew/lib/node_modules/openclaw -e "require('@lancedb/lancedb')" &>/dev/null; then
-    # Log a dedicated memory_extension_down event in addition to the generic watchdog log
-    psql cortana -c "INSERT INTO cortana_events (event_type, source, severity, message) VALUES ('memory_extension_down', 'watchdog', 'high', 'LanceDB memory extension failed healthcheck');" &>/dev/null || true
-    alert "LanceDB memory extension healthcheck FAILED" "$lancedb_check_name" "critical"
-  else
-    recovery_alert "$lancedb_check_name" "LanceDB memory extension healthcheck passed"
-    log "info" "LanceDB memory extension: OK"
-  fi
 }
 
 check_degraded_agents() {
@@ -432,7 +422,7 @@ check_degraded_agents() {
 # ── D) Budget Guard ──
 check_budget() {
   local output
-  output=$(node /Users/hd/clawd/skills/telegram-usage/handler.js json 2>/dev/null) || { log "warning" "Budget check failed to run"; return; }
+  output=$(npx tsx ~/openclaw/skills/telegram-usage/handler.ts json 2>/dev/null) || { log "warning" "Budget check failed to run"; return; }
 
   local day_of_month
   day_of_month=$(date +%d | sed 's/^0//')
