@@ -12,11 +12,11 @@ declare module "@prisma/client" {
     findFirst: (args?: unknown) => PrismaPromise<T | null>;
     findUnique: (args?: unknown) => PrismaPromise<T | null>;
     findUniqueOrThrow: (args?: unknown) => PrismaPromise<T>;
-    create: (args: unknown) => PrismaPromise<T>;
-    update: (args: unknown) => PrismaPromise<T>;
-    updateMany: (args: unknown) => PrismaPromise<{ count: number }>;
-    upsert: (args: unknown) => PrismaPromise<T>;
-    deleteMany: (args: unknown) => PrismaPromise<{ count: number }>;
+    create: (args?: unknown) => PrismaPromise<T>;
+    update: (args?: unknown) => PrismaPromise<T>;
+    updateMany: (args?: unknown) => PrismaPromise<{ count: number }>;
+    upsert: (args?: unknown) => PrismaPromise<T>;
+    deleteMany: (args?: unknown) => PrismaPromise<{ count: number }>;
     count: (args?: unknown) => PrismaPromise<number>;
   };
 

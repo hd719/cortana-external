@@ -1,9 +1,9 @@
 import { PrismaClient } from "@prisma/client";
 
-const globalForTaskPrisma = globalThis as unknown as {
+const globalForTaskPrisma: typeof globalThis & {
   taskPrisma?: PrismaClient;
   taskPrismaSourceUrl?: string;
-};
+} = globalThis;
 
 const deriveCortanaUrl = () => {
   const explicit = process.env.CORTANA_DATABASE_URL?.trim();

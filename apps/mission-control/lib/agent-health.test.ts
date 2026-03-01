@@ -98,13 +98,13 @@ describe("computeHealthScore", () => {
     };
 
     const withEmpty = computeHealthScore(stats, []);
-    const withNullRecent = computeHealthScore(stats, null as unknown as []);
+    const withUndefinedRecent = computeHealthScore(stats, undefined);
     const withInvalidTimestamps = computeHealthScore(stats, [
       { status: "failed", timestamp: Number.NaN },
       { status: "completed", timestamp: "not-a-date" },
     ]);
 
-    expect(withEmpty).toBeCloseTo(withNullRecent, 5);
+    expect(withEmpty).toBeCloseTo(withUndefinedRecent, 5);
     expect(withEmpty).toBeCloseTo(withInvalidTimestamps, 5);
   });
 });
