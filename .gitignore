@@ -28,3 +28,6 @@ apps/mission-control/.env.local
 apps/mission-control/.env
 apps/mission-control/.env.*
 npm-debug.log
+fitness-service
+whoop_data.json
+watchdog/watchdog-state.json

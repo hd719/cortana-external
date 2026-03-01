@@ -32,7 +32,7 @@ type OpenClawRunStore = {
 const DEFAULT_RUN_STORE_PATH = path.join(os.homedir(), ".openclaw", "subagents", "runs.json");
 const RUN_STORE_PATH = process.env.OPENCLAW_SUBAGENT_RUNS_PATH || DEFAULT_RUN_STORE_PATH;
 
-export const STALE_RUNNING_TTL_MS = 1000 * 60 * 30;
+export const STALE_RUNNING_TTL_MS = 1000 * 60 * 10;
 
 let lastSyncAt = 0;
 let lastMtimeMs = 0;

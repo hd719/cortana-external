@@ -464,6 +464,25 @@ func (s *Service) HealthHandler(c *gin.Context) {
 	})
 }
 
+// CheckHealth returns a programmatic health summary used by aggregate /health checks.
+func (s *Service) CheckHealth() (map[string]any, error) {
+	if err := s.LoadKeys(); err != nil {
+		return map[string]any{"status": "unhealthy", "error": err.Error()}, err
+	}
+
+	url := s.keys.BaseURL + "/account"
+	if _, err := s.makeJSONRequest("GET", url, nil, http.StatusOK); err != nil {
+		return map[string]any{"status": "unhealthy", "error": err.Error()}, err
+	}
+
+	environment := "live"
+	if strings.Contains(s.keys.BaseURL, "paper-api.alpaca.markets") {
+		environment = "paper"
+	}
+
+	return map[string]any{"status": "healthy", "environment": environment}, nil
+}
+
 // AccountHandler returns account summary
 func (s *Service) AccountHandler(c *gin.Context) {
 	if err := s.ensureKeysLoaded(); err != nil {

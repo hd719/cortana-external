@@ -171,7 +171,13 @@ export function QuickActionsCard() {
           data: payload,
           message: payload.message || "Action completed",
         },
+
       }));
+
+      // After force-heartbeat, tell HeartbeatPulse to refresh (delay lets the run complete)
+      if (action === "force-heartbeat") {
+        setTimeout(() => window.dispatchEvent(new Event("heartbeat-refresh")), 3000);
+      }
     } catch (error) {
       setStatuses((prev) => ({
         ...prev,
@@ -180,6 +186,11 @@ export function QuickActionsCard() {
           message: error instanceof Error ? error.message : "Action failed",
         },
       }));
+
+      // After force-heartbeat, tell HeartbeatPulse to refresh (delay lets the run complete)
+      if (action === "force-heartbeat") {
+        setTimeout(() => window.dispatchEvent(new Event("heartbeat-refresh")), 3000);
+      }
     }
   };
 

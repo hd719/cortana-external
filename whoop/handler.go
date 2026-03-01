@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -47,6 +48,7 @@ type Service struct {
 	ClientSecret string
 	RedirectURL  string
 	TokenPath    string
+	DataPath     string
 	cache        *whoopDataCache
 }
 
@@ -136,32 +138,112 @@ func (s *Service) AuthStatusHandler(c *gin.Context) {
 }
 
 func (s *Service) DataHandler(c *gin.Context) {
+	data, statusCode, errPayload, servedStale := s.getWhoopData(c.Request.Context())
+	if errPayload != nil {
+		c.JSON(statusCode, errPayload)
+		return
+	}
+	if servedStale {
+		c.Header("Warning", `110 - "Serving stale Whoop cache after token refresh failure"`)
+	}
+
+	c.JSON(http.StatusOK, data)
+}
+
+func (s *Service) RecoveryHandler(c *gin.Context) {
+	data, statusCode, errPayload, servedStale := s.getWhoopData(c.Request.Context())
+	if errPayload != nil {
+		c.JSON(statusCode, errPayload)
+		return
+	}
+	if servedStale {
+		c.Header("Warning", `110 - "Serving stale Whoop cache after token refresh failure"`)
+	}
+
+	c.JSON(http.StatusOK, gin.H{"recovery": data.Recovery})
+}
+
+func (s *Service) RecoveryLatestHandler(c *gin.Context) {
+	data, statusCode, errPayload, servedStale := s.getWhoopData(c.Request.Context())
+	if errPayload != nil {
+		c.JSON(statusCode, errPayload)
+		return
+	}
+	if servedStale {
+		c.Header("Warning", `110 - "Serving stale Whoop cache after token refresh failure"`)
+	}
+
+	if len(data.Recovery) == 0 {
+		c.JSON(http.StatusNotFound, gin.H{"error": "no recovery data available"})
+		return
+	}
+
+	c.JSON(http.StatusOK, data.Recovery[0])
+}
+
+func (s *Service) HealthHandler(c *gin.Context) {
+	tokens, err := LoadTokens(s.TokenPath)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{
+			"status":                "ok",
+			"authenticated":         false,
+			"token_path":            s.TokenPath,
+			"refresh_token_present": false,
+			"error":                 err.Error(),
+		})
+		return
+	}
+
+	now := time.Now()
+	c.JSON(http.StatusOK, gin.H{
+		"status":                "ok",
+		"authenticated":         true,
+		"token_path":            s.TokenPath,
+		"expires_at":            tokens.ExpiresAt,
+		"expires_in_seconds":    int64(tokens.ExpiresAt.Sub(now).Seconds()),
+		"is_expired":            !tokens.ExpiresAt.IsZero() && now.After(tokens.ExpiresAt),
+		"needs_refresh":         s.tokenNeedsRefresh(tokens),
+		"refresh_token_present": tokens.RefreshToken != "",
+	})
+}
+
+func (s *Service) getWhoopData(ctx context.Context) (*WhoopData, int, gin.H, bool) {
 	// Initialize cache if not already done (lazy initialization for backward compatibility)
 	if s.cache == nil {
-		s.cache = &whoopDataCache{
-			ttl: defaultCacheTTL,
-		}
+		s.cache = &whoopDataCache{ttl: defaultCacheTTL}
 	}
 
 	// Check cache first - serve immediately if data is fresh
 	if cachedData, isFresh := s.cache.get(); isFresh {
-		c.JSON(http.StatusOK, cachedData)
-		return
+		return cachedData, 0, nil, false
+	}
+
+	// If in-memory cache is cold/expired (for example, after restart), try disk cache first.
+	if cachedData, err := s.loadDataFromDisk(); err == nil && cachedData != nil {
+		s.cache.set(cachedData)
+		return cachedData, 0, nil, false
 	}
 
 	tokens, err := LoadTokens(s.TokenPath)
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "not authenticated - visit /auth/url to authenticate"})
-		return
+		return nil, http.StatusUnauthorized, gin.H{"error": "not authenticated - visit /auth/url to authenticate"}, false
 	}
 
-	ctx := c.Request.Context()
 	if err := s.ensureValidToken(ctx, tokens); err != nil {
 		if s.Logger != nil {
 			s.Logger.Printf("token validation/refresh failed: %v", err)
 		}
-		c.JSON(http.StatusBadGateway, gin.H{"error": "token refresh failed"})
-		return
+
+		// Best-effort fallback: serve stale disk cache when token refresh fails.
+		if cachedData, cacheErr := s.loadDataFromDisk(); cacheErr == nil && cachedData != nil {
+			s.cache.set(cachedData)
+			if s.Logger != nil {
+				s.Logger.Printf("serving stale Whoop cache from disk due to token refresh failure")
+			}
+			return cachedData, 0, nil, true
+		}
+
+		return nil, http.StatusBadGateway, gin.H{"error": "token refresh failed"}, false
 	}
 
 	data, err := s.fetchAllWhoopData(ctx, tokens.AccessToken)
@@ -169,14 +251,16 @@ func (s *Service) DataHandler(c *gin.Context) {
 		if s.Logger != nil {
 			s.Logger.Printf("failed to fetch whoop data: %v", err)
 		}
-		c.JSON(http.StatusBadGateway, gin.H{"error": "failed to fetch whoop data"})
-		return
+		return nil, http.StatusBadGateway, gin.H{"error": "failed to fetch whoop data"}, false
 	}
 
 	// Update cache with fresh data
 	s.cache.set(data)
+	if err := s.saveDataToDisk(data); err != nil && s.Logger != nil {
+		s.Logger.Printf("warning: failed to persist Whoop cache: %v", err)
+	}
 
-	c.JSON(http.StatusOK, data)
+	return data, 0, nil, false
 }
 
 func (s *Service) tokenNeedsRefresh(tokens *TokenData) bool {
@@ -202,7 +286,7 @@ func (s *Service) ensureValidToken(ctx context.Context, tokens *TokenData) error
 		s.Logger.Printf("attempting token refresh (expires_at=%s)", tokens.ExpiresAt.Format(time.RFC3339))
 	}
 
-	refreshed, err := s.refreshToken(ctx, tokens.RefreshToken)
+	refreshed, err := s.refreshTokenWithRetry(ctx, tokens.RefreshToken)
 	if err != nil {
 		return fmt.Errorf("refresh request failed: %w", err)
 	}
@@ -272,6 +356,7 @@ func NewService(httpClient *http.Client, logger *log.Logger, clientID, clientSec
 		ClientSecret: clientSecret,
 		RedirectURL:  redirectURL,
 		TokenPath:    tokenPath,
+		DataPath:     "whoop_data.json",
 		cache: &whoopDataCache{
 			ttl: defaultCacheTTL,
 		},
@@ -332,4 +417,80 @@ func (s *Service) refreshToken(ctx context.Context, refreshToken string) (*Token
 		return nil, err
 	}
 	return &token, nil
+}
+
+func (s *Service) refreshTokenWithRetry(ctx context.Context, refreshToken string) (*TokenResponse, error) {
+	backoffs := []time.Duration{0, 2 * time.Second, 5 * time.Second}
+	var lastErr error
+
+	for attempt, backoff := range backoffs {
+		if backoff > 0 {
+			if s.Logger != nil {
+				s.Logger.Printf("retrying Whoop token refresh in %s (attempt %d/%d)", backoff, attempt+1, len(backoffs))
+			}
+			select {
+			case <-time.After(backoff):
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			}
+		}
+
+		refreshed, err := s.refreshToken(ctx, refreshToken)
+		if err == nil {
+			return refreshed, nil
+		}
+		lastErr = err
+		if s.Logger != nil {
+			s.Logger.Printf("Whoop token refresh attempt %d/%d failed: %v", attempt+1, len(backoffs), err)
+		}
+	}
+
+	return nil, lastErr
+}
+
+func (s *Service) loadDataFromDisk() (*WhoopData, error) {
+	if s.DataPath == "" {
+		return nil, fmt.Errorf("data path not configured")
+	}
+	data, err := os.ReadFile(s.DataPath)
+	if err != nil {
+		return nil, err
+	}
+	var payload WhoopData
+	if err := json.Unmarshal(data, &payload); err != nil {
+		return nil, err
+	}
+	return &payload, nil
+}
+
+func (s *Service) saveDataToDisk(data *WhoopData) error {
+	if s.DataPath == "" {
+		return fmt.Errorf("data path not configured")
+	}
+	payload, err := json.MarshalIndent(data, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(s.DataPath, payload, 0600)
+}
+
+// Warmup validates Whoop auth state at startup so auth issues are visible early.
+func (s *Service) Warmup(ctx context.Context) error {
+	tokens, err := LoadTokens(s.TokenPath)
+	if err != nil {
+		return err
+	}
+	return s.ensureValidToken(ctx, tokens)
+}
+
+// ProactiveRefreshIfExpiring refreshes token ahead of expiry to avoid first-request failures.
+func (s *Service) ProactiveRefreshIfExpiring(ctx context.Context, within time.Duration) error {
+	tokens, err := LoadTokens(s.TokenPath)
+	if err != nil {
+		return err
+	}
+	if !tokens.ExpiresAt.IsZero() && time.Until(tokens.ExpiresAt) > within {
+		return nil
+	}
+	return s.ensureValidToken(ctx, tokens)
 }

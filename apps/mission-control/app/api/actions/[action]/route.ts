@@ -194,10 +194,20 @@ const runForceHeartbeat = async () => {
     "INSERT INTO cortana_events (event_type, source, severity, message) VALUES ('manual_heartbeat', 'dashboard', 'info', 'Manual heartbeat forced from Mission Control')"
   );
 
+  // Trigger an actual OpenClaw heartbeat via system event (which wakes the heartbeat loop)
+  try {
+    execSync(
+      'openclaw system event --text "Manual heartbeat forced from Mission Control" --mode now',
+      { encoding: "utf8", timeout: 15000, stdio: ["ignore", "pipe", "pipe"] }
+    );
+  } catch {
+    // Best-effort: if CLI is not available, the DB event still got logged
+  }
+
   return {
     ok: true,
     action: "force-heartbeat" as const,
-    message: "Manual heartbeat event inserted",
+    message: "Heartbeat triggered via OpenClaw system event",
     timestamp: new Date().toISOString(),
   };
 };

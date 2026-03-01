@@ -15,7 +15,7 @@ function isQuietHours(): boolean {
   return etHour >= QUIET_START || etHour < QUIET_END;
 }
 
-const HEARTBEAT_FILE = "/Users/hd/clawd/memory/heartbeat-state.json";
+const HEARTBEAT_FILE = "/Users/hd/openclaw/memory/heartbeat-state.json";
 
 export function normalizeTimestamp(raw: unknown): number | null {
   if (typeof raw !== "number" || !Number.isFinite(raw)) return null;

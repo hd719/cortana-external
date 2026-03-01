@@ -63,7 +63,9 @@ export function HeartbeatPulse() {
   useEffect(() => {
     fetchHeartbeat();
     const interval = window.setInterval(fetchHeartbeat, POLL_MS);
-    return () => window.clearInterval(interval);
+    const onRefresh = () => fetchHeartbeat();
+    window.addEventListener("heartbeat-refresh", onRefresh);
+    return () => { window.clearInterval(interval); window.removeEventListener("heartbeat-refresh", onRefresh); };
   }, [fetchHeartbeat]);
 
   const status = data?.status ?? "unknown";

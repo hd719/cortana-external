@@ -197,13 +197,30 @@ func (s *Service) getValidToken(ctx context.Context) (string, error) {
 			}
 			return refreshed.IDToken, nil
 		}
-		s.Logger.Printf("refresh token failed, falling back to password auth: %v", refreshErr)
+
+		s.Logger.Printf("refresh token failed: %v", refreshErr)
+		if s.canSelfHealWithCredentials() && s.isAuthFailureError(refreshErr) {
+			s.Logger.Printf("refresh failed with auth error, triggering Tonal token self-heal")
+			if healedToken, healErr := s.forceReAuthenticate(ctx); healErr == nil {
+				return healedToken, nil
+			} else {
+				s.Logger.Printf("tonal self-heal failed after refresh auth error: %v", healErr)
+			}
+		}
 	}
 
 	// Fall back to full password authentication
 	s.Logger.Println("authenticating with Tonal (password)...")
 	tokens, err = s.authenticate(ctx)
 	if err != nil {
+		if s.canSelfHealWithCredentials() && s.isAuthFailureError(err) {
+			s.Logger.Printf("password auth returned auth error, triggering Tonal token self-heal")
+			if healedToken, healErr := s.forceReAuthenticate(ctx); healErr == nil {
+				return healedToken, nil
+			} else {
+				s.Logger.Printf("tonal self-heal failed after password auth error: %v", healErr)
+			}
+		}
 		return "", fmt.Errorf("authentication failed: %w", err)
 	}
 
@@ -262,36 +279,77 @@ func (s *Service) apiCallWithSelfHeal(ctx context.Context, operation func(ctx co
 		return err
 	}
 
-	// Auth failure detected; force a clean re-auth by deleting token file.
-	fmt.Printf("TONAL SELF-HEAL: received 401/403, deleting token file at %s to force re-authentication\n", s.TokenPath)
-	if removeErr := os.Remove(s.TokenPath); removeErr != nil {
-		if errors.Is(removeErr, os.ErrNotExist) {
-			fmt.Printf("TONAL SELF-HEAL: token file already missing, continuing with forced re-auth\n")
-		} else {
-			fmt.Printf("TONAL SELF-HEAL: warning - failed to delete token file: %v\n", removeErr)
-		}
-	} else {
-		fmt.Printf("TONAL SELF-HEAL: deleted token file successfully\n")
+	s.Logger.Printf("TONAL SELF-HEAL: received 401/403, forcing token reset and re-authentication")
+	if _, healErr := s.forceReAuthenticate(ctx); healErr != nil {
+		return fmt.Errorf("tonal self-heal failed after unauthorized response: %w", healErr)
 	}
 
-	fmt.Printf("TONAL SELF-HEAL: retrying API call once after forced re-authentication\n")
 	retryToken, tokenErr := s.getValidToken(ctx)
 	if tokenErr != nil {
-		fmt.Fprintf(os.Stderr, "TONAL SELF-HEAL: re-authentication failed after token deletion: %v\n", tokenErr)
-		os.Exit(1)
+		return fmt.Errorf("re-authentication failed after token reset: %w", tokenErr)
 	}
 
 	err = operation(ctx, retryToken)
 	if errors.Is(err, errTonalUnauthorized) {
-		fmt.Fprintf(os.Stderr, "TONAL SELF-HEAL: retry also returned 401/403; exiting with error\n")
-		os.Exit(1)
+		return fmt.Errorf("retry also returned 401/403 after self-heal")
 	}
 	if err != nil {
 		return err
 	}
 
-	fmt.Printf("TONAL SELF-HEAL: recovery succeeded after token reset\n")
+	s.Logger.Printf("TONAL SELF-HEAL: recovery succeeded after token reset")
 	return nil
+}
+
+func (s *Service) canSelfHealWithCredentials() bool {
+	return strings.TrimSpace(s.Email) != "" && strings.TrimSpace(s.Password) != ""
+}
+
+func (s *Service) isAuthFailureError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "invalid_grant") ||
+		strings.Contains(msg, "unauthorized") ||
+		strings.Contains(msg, "forbidden") ||
+		strings.Contains(msg, "invalid token") ||
+		strings.Contains(msg, "token")
+}
+
+func (s *Service) forceReAuthenticate(ctx context.Context) (string, error) {
+	if !s.canSelfHealWithCredentials() {
+		return "", fmt.Errorf("cannot self-heal tonal auth without TONAL_EMAIL and TONAL_PASSWORD")
+	}
+
+	if removeErr := os.Remove(s.TokenPath); removeErr != nil && !errors.Is(removeErr, os.ErrNotExist) {
+		s.Logger.Printf("TONAL SELF-HEAL: warning - failed to delete token file: %v", removeErr)
+	}
+
+	tokens, err := s.authenticate(ctx)
+	if err != nil {
+		return "", fmt.Errorf("forced re-authentication failed: %w", err)
+	}
+	if err := SaveTokens(s.TokenPath, tokens); err != nil {
+		s.Logger.Printf("TONAL SELF-HEAL: warning - failed to save forced re-auth tokens: %v", err)
+	}
+	return tokens.IDToken, nil
+}
+
+// Warmup validates Tonal auth state at startup so auth issues are visible early.
+func (s *Service) Warmup(ctx context.Context) error {
+	_, err := s.getValidToken(ctx)
+	return err
+}
+
+// ProactiveRefreshIfExpiring refreshes/validates token ahead of expiry.
+func (s *Service) ProactiveRefreshIfExpiring(ctx context.Context, within time.Duration) error {
+	tokens, err := LoadTokens(s.TokenPath)
+	if err == nil && !tokens.ExpiresAt.IsZero() && time.Until(tokens.ExpiresAt) > within {
+		return nil
+	}
+	_, err = s.getValidToken(ctx)
+	return err
 }
 
 func (s *Service) getUserInfo(ctx context.Context, token string) (string, error) {
