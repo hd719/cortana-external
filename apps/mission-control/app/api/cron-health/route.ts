@@ -134,7 +134,7 @@ export const toScheduleText = (schedule?: JobSchedule) => {
 export async function GET() {
   const raw = await fs.readFile(JOBS_PATH, "utf-8");
   const parsed = JSON.parse(raw) as JobsFile;
-  const jobs = (parsed.jobs || []).filter((job: any) => job.enabled !== false);
+  const jobs = (parsed.jobs || []).filter((job) => job.enabled !== false);
 
   const taskPrisma = getTaskPrisma();
   const client = taskPrisma ?? prisma;
@@ -162,10 +162,10 @@ export async function GET() {
     rows = await prisma.$queryRawUnsafe<HealthRow[]>(query);
   }
 
-  const byName = new Map(rows.map((row: any) => [row.cron_name, row]));
+  const byName = new Map(rows.map((row) => [row.cron_name, row]));
   const now = Date.now();
 
-  const crons = jobs.map((job: any) => {
+  const crons = jobs.map((job) => {
     const row = byName.get(job.name);
     const dbLastFire = row?.timestamp ? new Date(row.timestamp).getTime() : null;
     const stateLastFire = job.state?.lastRunAtMs ?? null;

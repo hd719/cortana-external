@@ -126,7 +126,7 @@ const flattenEvidence = (roleOutput: Record<string, unknown>, parsed: Record<str
     ...asStringArray(parsed.evidence),
   ];
 
-  const unique = Array.from(new Set(sourceCandidates.map((item: any) => item.trim()).filter(Boolean)));
+  const unique = Array.from(new Set(sourceCandidates.map((item) => item.trim()).filter(Boolean)));
   return unique.slice(0, 4);
 };
 
@@ -197,7 +197,7 @@ export function CouncilSessionCard({ session }: { session: CouncilSession }) {
 
     const schemaGapsRaw = Array.isArray(payload.schemaGaps) ? payload.schemaGaps : [];
     const schemaGapLines = schemaGapsRaw
-      .map((gap: any) => {
+      .map((gap) => {
         if (!gap || typeof gap !== "object" || Array.isArray(gap)) return null;
         const item = gap as Record<string, unknown>;
         const agentId = asString(item.agentId) || "unknown";
@@ -225,7 +225,7 @@ export function CouncilSessionCard({ session }: { session: CouncilSession }) {
     };
   }, [detail.finalDecision, voteTally.entries]);
 
-  const memberCards = useMemo(() => (detail.members ?? []).map((member: any) => {
+  const memberCards = useMemo(() => (detail.members ?? []).map((member) => {
     const parsed = member.reasoning ? extractJsonObject(member.reasoning) : null;
     const analysis = parsed ? asString(parsed.analysis) : "";
     const roleOutput = parsed && parsed.role_output && typeof parsed.role_output === "object" && !Array.isArray(parsed.role_output)
@@ -316,7 +316,7 @@ export function CouncilSessionCard({ session }: { session: CouncilSession }) {
                   <div className="space-y-1">
                     <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Schema gaps</p>
                     <ul className="list-disc space-y-1 pl-5 text-xs text-muted-foreground">
-                      {finalDecision.schemaGapLines.map((line: any) => (
+                      {finalDecision.schemaGapLines.map((line) => (
                         <li key={line}>{line}</li>
                       ))}
                     </ul>
@@ -359,7 +359,7 @@ export function CouncilSessionCard({ session }: { session: CouncilSession }) {
                       <div>
                         <p className="mb-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Key points</p>
                         <ul className="list-disc space-y-1 pl-4 text-xs">
-                          {keyPoints.slice(0, 6).map((point: any) => (
+                          {keyPoints.slice(0, 6).map((point) => (
                             <li key={point}>{point}</li>
                           ))}
                         </ul>
@@ -370,7 +370,7 @@ export function CouncilSessionCard({ session }: { session: CouncilSession }) {
                       <div>
                         <p className="mb-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Evidence</p>
                         <ul className="list-disc space-y-1 pl-4 text-muted-foreground">
-                          {evidence.map((item: any) => (
+                          {evidence.map((item) => (
                             <li key={item}>{item}</li>
                           ))}
                         </ul>
@@ -403,7 +403,7 @@ export function CouncilSessionCard({ session }: { session: CouncilSession }) {
             <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Vote timeline</p>
             {(detail.messages?.length ?? 0) > 0 ? (
               <div className="mt-2 space-y-2">
-                {(detail.messages ?? []).map((message: any) => (
+                {(detail.messages ?? []).map((message) => (
                   <div key={message.id} className={`rounded border p-2 text-xs ${messageToneClass(message.messageType)}`}>
                     <p className="font-medium">
                       T{message.turnNo} · {message.speakerId} · {message.messageType}

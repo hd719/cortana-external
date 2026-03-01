@@ -46,7 +46,7 @@ export async function POST(req: NextRequest) {
     prNumber: pr.number,
     prTitle: pr.title,
     prBody: pr.body,
-    labels: pr.labels?.map((label: any) => label.name || "").filter(Boolean),
+    labels: pr.labels?.map((label) => label.name || "").filter(Boolean),
     mergeCommitSha: pr.merge_commit_sha,
   });
 

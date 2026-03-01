@@ -44,7 +44,7 @@ export async function POST(request: Request) {
     }
   }
 
-  const runs = await Promise.all(events.map((event: any) => ingestOpenClawLifecycleEvent(event)));
+  const runs = await Promise.all(events.map((event) => ingestOpenClawLifecycleEvent(event)));
 
   return NextResponse.json({ ok: true, upserted: runs.length, runs });
 }

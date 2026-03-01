@@ -21,9 +21,9 @@ const normalizeSeverity = (severity?: string | null, eventType?: string) => {
   if (["success", "ok", "done", "completed"].includes(level)) return "success";
 
   const type = (eventType || "").toLowerCase();
-  if (["complete", "success", "merged", "done"].some((k: any) => type.includes(k))) return "success";
-  if (["fail", "error", "timeout", "crash"].some((k: any) => type.includes(k))) return "error";
-  if (["warn", "retry", "fallback"].some((k: any) => type.includes(k))) return "warning";
+  if (["complete", "success", "merged", "done"].some((k) => type.includes(k))) return "success";
+  if (["fail", "error", "timeout", "crash"].some((k) => type.includes(k))) return "error";
+  if (["warn", "retry", "fallback"].some((k) => type.includes(k))) return "warning";
   return "info";
 };
 
@@ -50,7 +50,7 @@ export async function GET() {
     rows = await fetchRows(prisma);
   }
 
-  const events = rows.map((row: any) => ({
+  const events = rows.map((row) => ({
     id: row.id,
     timestamp: row.timestamp.toISOString(),
     eventType: row.event_type,

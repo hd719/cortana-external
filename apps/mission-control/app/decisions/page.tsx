@@ -36,9 +36,9 @@ export default async function DecisionsPage({
   });
 
   const confidenceSeries = data.traces
-    .filter((trace: any) => typeof trace.confidence === "number")
+    .filter((trace) => typeof trace.confidence === "number")
     .slice(0, 20)
-    .map((trace: any) => Math.round((trace.confidence ?? 0) * 100));
+    .map((trace) => Math.round((trace.confidence ?? 0) * 100));
 
   return (
     <div className="space-y-6">

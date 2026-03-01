@@ -27,7 +27,7 @@ export function ApprovalFilters({
     <div className="space-y-3 rounded-md border bg-card/60 p-3">
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Status</span>
-        {statuses.map((status: any) => (
+        {statuses.map((status) => (
           <button key={status} type="button" onClick={() => setStatus(status)}>
             <Badge variant={selectedStatus === status ? "secondary" : "outline"}>
               {status === "all" ? "All" : status.charAt(0).toUpperCase() + status.slice(1)}

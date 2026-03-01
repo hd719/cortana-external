@@ -118,7 +118,7 @@ const TrendBars = ({ data, tone }: { data: TrendPoint[]; tone: string }) => {
 
   return (
     <div className="flex h-16 items-end gap-1">
-      {data.map((point: any) => {
+      {data.map((point) => {
         const height = point.value == null ? 12 : Math.max(12, Math.min(100, Math.round(point.value)));
         const label = point.value == null ? "—" : `${Math.round(point.value)}%`;
         return (
@@ -216,7 +216,7 @@ export default async function FitnessPage() {
           {data.alerts.length === 0 ? (
             <Badge variant="success">All clear</Badge>
           ) : (
-            data.alerts.map((alert: any) => (
+            data.alerts.map((alert) => (
               <Badge key={alert.id} variant={severityVariant(alert.severity)}>
                 {alert.label}
               </Badge>
@@ -355,7 +355,7 @@ export default async function FitnessPage() {
               </div>
             ) : (
               <div className="space-y-3">
-                {data.workouts.map((workout: any) => (
+                {data.workouts.map((workout) => (
                   <div
                     key={workout.id}
                     className="rounded-lg border border-muted/40 bg-muted/10 p-3 text-sm"
@@ -436,7 +436,7 @@ export default async function FitnessPage() {
             {data.alertHistory.length === 0 ? (
               <p className="text-sm text-muted-foreground">No recent threshold breaches.</p>
             ) : (
-              data.alertHistory.slice(0, 10).map((alert: any) => (
+              data.alertHistory.slice(0, 10).map((alert) => (
                 <div
                   key={alert.id}
                   className="flex flex-wrap items-start justify-between gap-2 rounded-lg border border-muted/40 bg-muted/5 p-3 text-sm"

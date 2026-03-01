@@ -79,7 +79,7 @@ export async function GET() {
     rows = await fetchRows(prisma);
   }
 
-  const byName = new Map(rows.map((row: any) => [row.name, row]));
+  const byName = new Map(rows.map((row) => [row.name, row]));
   const agents = COVENANT_AGENTS.map(({ name, role }) => {
     const row = byName.get(name);
     const lastActive = row?.last_active ?? null;

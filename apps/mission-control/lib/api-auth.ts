@@ -20,7 +20,7 @@ const parseCookieHeader = (cookieHeader: string | null) => {
   const map = new Map<string, string>();
   if (!cookieHeader) return map;
 
-  cookieHeader.split(";").forEach((pair: any) => {
+  cookieHeader.split(";").forEach((pair) => {
     const [rawKey, ...rest] = pair.trim().split("=");
     if (!rawKey) return;
     const key = rawKey.trim();
@@ -53,7 +53,7 @@ const extractToken = (request: Request): { token: string; source: TokenSource } 
 
 const resolveExpectedTokens = (additionalTokens?: Array<string | null | undefined>) => {
   const tokens = [normalizeToken(process.env.MISSION_CONTROL_API_TOKEN), ...(additionalTokens ?? [])];
-  return tokens.map((token: any) => normalizeToken(token)).filter((token): token is string => Boolean(token));
+  return tokens.map((token) => normalizeToken(token)).filter((token): token is string => Boolean(token));
 };
 
 const isSafeMethod = (method: string) =>
@@ -104,7 +104,7 @@ export const requireApiAuth = (
     };
   }
 
-  const matches = expectedTokens.some((expected: any) => safeEqual(provided.token, expected));
+  const matches = expectedTokens.some((expected) => safeEqual(provided.token, expected));
   if (!matches) {
     return {
       ok: false,

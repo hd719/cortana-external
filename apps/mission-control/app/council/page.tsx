@@ -32,10 +32,10 @@ export default async function CouncilPage({
     if (value) search.set(key, value);
   });
 
-  const running = sessions.filter((item: any) => item.status === "running").length;
-  const decided = sessions.filter((item: any) => item.status === "decided").length;
+  const running = sessions.filter((item) => item.status === "running").length;
+  const decided = sessions.filter((item) => item.status === "decided").length;
   const confidenceScores = sessions
-    .map((item: any) => item.confidence)
+    .map((item) => item.confidence)
     .filter((value): value is number => typeof value === "number");
   const avgConfidence = confidenceScores.length
     ? (confidenceScores.reduce((sum, value) => sum + value, 0) / confidenceScores.length).toFixed(2)
@@ -81,7 +81,7 @@ export default async function CouncilPage({
             </CardContent>
           </Card>
         ) : (
-          sessions.map((session: any) => <CouncilSessionCard key={session.id} session={session} />)
+          sessions.map((session) => <CouncilSessionCard key={session.id} session={session} />)
         )}
       </div>
     </div>

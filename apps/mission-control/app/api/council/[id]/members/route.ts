@@ -19,8 +19,8 @@ export async function POST(
   }
 
   const normalized = body.members
-    .filter((member: any) => typeof member.agentId === "string" && member.agentId.trim().length > 0)
-    .map((member: any) => ({
+    .filter((member) => typeof member.agentId === "string" && member.agentId.trim().length > 0)
+    .map((member) => ({
       agentId: member.agentId!.trim(),
       role: member.role ?? null,
       weight: typeof member.weight === "number" ? member.weight : 1,

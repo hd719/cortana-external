@@ -165,7 +165,7 @@ export function FeedbackCard({ feedback }: { feedback: FeedbackItem }) {
             <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Actions</p>
             {actions.length > 0 ? (
               <div className="mt-2 space-y-2">
-                {actions.map((action: any) => (
+                {actions.map((action) => (
                   <div key={action.id} className="rounded border bg-card/60 p-2 text-xs">
                     <p className="font-medium">{action.actionType}</p>
                     <p className="text-muted-foreground">{action.status} · {toRelativeTime(action.createdAt)}</p>
@@ -185,7 +185,7 @@ export function FeedbackCard({ feedback }: { feedback: FeedbackItem }) {
             <Input value={actionRef} onChange={(event) => setActionRef(event.target.value)} placeholder="Action ref (optional)" />
             <Textarea value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Description (optional)" />
             <div className="flex flex-wrap gap-2">
-              {(["planned", "applied", "verified", "failed"] as const).map((option: any) => (
+              {(["planned", "applied", "verified", "failed"] as const).map((option) => (
                 <button key={option} type="button" onClick={() => setStatus(option)}>
                   <Badge variant={status === option ? "secondary" : "outline"}>{option}</Badge>
                 </button>

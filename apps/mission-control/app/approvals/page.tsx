@@ -32,10 +32,10 @@ export default async function ApprovalsPage({
   });
 
   const counts = {
-    pending: approvals.filter((item: any) => item.status === "pending").length,
-    approved: approvals.filter((item: any) => ["approved", "approved_edited"].includes(item.status)).length,
-    rejected: approvals.filter((item: any) => item.status === "rejected").length,
-    expired: approvals.filter((item: any) => item.status === "expired").length,
+    pending: approvals.filter((item) => item.status === "pending").length,
+    approved: approvals.filter((item) => ["approved", "approved_edited"].includes(item.status)).length,
+    rejected: approvals.filter((item) => item.status === "rejected").length,
+    expired: approvals.filter((item) => item.status === "expired").length,
   };
 
   return (
@@ -74,7 +74,7 @@ export default async function ApprovalsPage({
             </CardContent>
           </Card>
         ) : (
-          approvals.map((approval: any) => <ApprovalCard key={approval.id} approval={approval} />)
+          approvals.map((approval) => <ApprovalCard key={approval.id} approval={approval} />)
         )}
       </div>
     </div>
