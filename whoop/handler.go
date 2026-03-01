@@ -138,7 +138,8 @@ func (s *Service) AuthStatusHandler(c *gin.Context) {
 }
 
 func (s *Service) DataHandler(c *gin.Context) {
-	data, statusCode, errPayload, servedStale := s.getWhoopData(c.Request.Context())
+	forceFresh := c.Query("fresh") == "true"
+	data, statusCode, errPayload, servedStale := s.getWhoopData(c.Request.Context(), forceFresh)
 	if errPayload != nil {
 		c.JSON(statusCode, errPayload)
 		return
@@ -151,7 +152,8 @@ func (s *Service) DataHandler(c *gin.Context) {
 }
 
 func (s *Service) RecoveryHandler(c *gin.Context) {
-	data, statusCode, errPayload, servedStale := s.getWhoopData(c.Request.Context())
+	forceFresh := c.Query("fresh") == "true"
+	data, statusCode, errPayload, servedStale := s.getWhoopData(c.Request.Context(), forceFresh)
 	if errPayload != nil {
 		c.JSON(statusCode, errPayload)
 		return
@@ -164,7 +166,8 @@ func (s *Service) RecoveryHandler(c *gin.Context) {
 }
 
 func (s *Service) RecoveryLatestHandler(c *gin.Context) {
-	data, statusCode, errPayload, servedStale := s.getWhoopData(c.Request.Context())
+	forceFresh := c.Query("fresh") == "true"
+	data, statusCode, errPayload, servedStale := s.getWhoopData(c.Request.Context(), forceFresh)
 	if errPayload != nil {
 		c.JSON(statusCode, errPayload)
 		return
@@ -207,21 +210,17 @@ func (s *Service) HealthHandler(c *gin.Context) {
 	})
 }
 
-func (s *Service) getWhoopData(ctx context.Context) (*WhoopData, int, gin.H, bool) {
+func (s *Service) getWhoopData(ctx context.Context, forceFresh bool) (*WhoopData, int, gin.H, bool) {
 	// Initialize cache if not already done (lazy initialization for backward compatibility)
 	if s.cache == nil {
 		s.cache = &whoopDataCache{ttl: defaultCacheTTL}
 	}
 
-	// Check cache first - serve immediately if data is fresh
-	if cachedData, isFresh := s.cache.get(); isFresh {
-		return cachedData, 0, nil, false
-	}
-
-	// If in-memory cache is cold/expired (for example, after restart), try disk cache first.
-	if cachedData, err := s.loadDataFromDisk(); err == nil && cachedData != nil {
-		s.cache.set(cachedData)
-		return cachedData, 0, nil, false
+	// Check cache first - serve immediately if data is fresh unless cache-busted.
+	if !forceFresh {
+		if cachedData, isFresh := s.cache.get(); isFresh {
+			return cachedData, 0, nil, false
+		}
 	}
 
 	tokens, err := LoadTokens(s.TokenPath)

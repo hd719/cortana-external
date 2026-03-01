@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"time"
 )
 
 const whoopAPIBase = "https://api.prod.whoop.com/developer"
@@ -117,35 +118,87 @@ func (s *Service) fetchWhoopCollection(ctx context.Context, accessToken, path st
 }
 
 func (s *Service) fetchWhoop(ctx context.Context, accessToken, path string, params url.Values) ([]byte, error) {
+	const maxAttempts = 3
+	backoffs := []time.Duration{1 * time.Second, 2 * time.Second, 4 * time.Second}
+
 	endpoint := fmt.Sprintf("%s%s", whoopAPIBase, path)
 	if len(params) > 0 {
 		endpoint = endpoint + "?" + params.Encode()
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "GET", endpoint, nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Authorization", "Bearer "+accessToken)
-	req.Header.Set("Accept", "application/json")
+	var lastErr error
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		req, err := http.NewRequestWithContext(ctx, "GET", endpoint, nil)
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Authorization", "Bearer "+accessToken)
+		req.Header.Set("Accept", "application/json")
 
-	resp, err := s.HTTPClient.Do(req)
-	if err != nil {
-		return nil, err
+		resp, err := s.HTTPClient.Do(req)
+		if err != nil {
+			lastErr = err
+		} else {
+			payload, reqErr := readWhoopResponse(resp)
+			if reqErr == nil {
+				return payload, nil
+			}
+			lastErr = reqErr
+		}
+
+		if !isWhoopRetriableError(lastErr) {
+			return nil, lastErr
+		}
+
+		if attempt == maxAttempts {
+			break
+		}
+
+		if s.Logger != nil {
+			s.Logger.Printf("retrying Whoop API call %s (attempt %d/%d) after error: %v", path, attempt+1, maxAttempts, lastErr)
+		}
+
+		select {
+		case <-time.After(backoffs[attempt-1]):
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
 	}
+
+	return nil, lastErr
+}
+
+func readWhoopResponse(resp *http.Response) ([]byte, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusUnauthorized {
 		return nil, errors.New("whoop unauthorized")
 	}
 	if resp.StatusCode >= 400 {
-		return nil, fmt.Errorf("whoop api error: %s", resp.Status)
+		return nil, fmt.Errorf("whoop api error: %d", resp.StatusCode)
 	}
 
 	payload, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
 	}
-
 	return payload, nil
+}
+
+func isWhoopRetriableError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	status := 0
+	if _, scanErr := fmt.Sscanf(err.Error(), "whoop api error: %d", &status); scanErr == nil {
+		switch status {
+		case http.StatusTooManyRequests, http.StatusInternalServerError, http.StatusBadGateway, http.StatusServiceUnavailable, http.StatusGatewayTimeout:
+			return true
+		default:
+			return false
+		}
+	}
+
+	return false
 }

@@ -44,7 +44,8 @@ type Service struct {
 	//
 	// IMPORTANT: Always use defer mu.Unlock() right after Lock() to ensure
 	// the lock is released even if the function returns early or panics.
-	mu sync.Mutex
+	mu    sync.Mutex
+	cache *tonalDataCache
 }
 
 const (
@@ -52,6 +53,15 @@ const (
 	// Tonal's API is paginated, so we fetch the most recent N and merge into cache.
 	workoutFetchLimit = 50
 )
+
+const defaultCacheTTL = 5 * time.Minute
+
+type tonalDataCache struct {
+	data      *DataResponse
+	lastFetch time.Time
+	ttl       time.Duration
+	mu        sync.RWMutex
+}
 
 type DataResponse struct {
 	Profile        map[string]any     `json:"profile"`
@@ -97,8 +107,39 @@ func (s *Service) HealthHandler(c *gin.Context) {
 
 // Note: reAuthOnUnauthorized removed - replaced by apiCallWithSelfHeal in api.go
 
+func (c *tonalDataCache) get() (*DataResponse, bool) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	if c.data == nil || time.Since(c.lastFetch) > c.ttl {
+		return nil, false
+	}
+	return c.data, true
+}
+
+func (c *tonalDataCache) set(data *DataResponse) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.data = data
+	c.lastFetch = time.Now()
+}
+
+func (s *Service) ensureCache() {
+	if s.cache == nil {
+		s.cache = &tonalDataCache{ttl: defaultCacheTTL}
+	}
+}
+
 func (s *Service) DataHandler(c *gin.Context) {
 	ctx := c.Request.Context()
+	forceFresh := c.Query("fresh") == "true"
+	s.ensureCache()
+
+	if !forceFresh {
+		if cached, ok := s.cache.get(); ok {
+			c.JSON(http.StatusOK, cached)
+			return
+		}
+	}
 
 	// Lock the mutex before accessing shared resources (cache files).
 	// This ensures only one request can read/modify the cache at a time.
@@ -199,7 +240,7 @@ func (s *Service) DataHandler(c *gin.Context) {
 		s.Logger.Printf("warning: failed to save cache: %v", err)
 	}
 
-	response := DataResponse{
+	response := &DataResponse{
 		Profile:        cache.Profile,
 		Workouts:       cache.Workouts,
 		WorkoutCount:   len(cache.Workouts),
@@ -207,6 +248,7 @@ func (s *Service) DataHandler(c *gin.Context) {
 		LastUpdated:    cache.LastUpdated,
 	}
 
+	s.cache.set(response)
 	c.JSON(http.StatusOK, response)
 }
 

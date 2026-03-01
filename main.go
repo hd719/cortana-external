@@ -2,9 +2,13 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"os"
+	"os/exec"
+	"strings"
 	"time"
 
 	"services/alpaca"
@@ -144,6 +148,10 @@ func main() {
 		port = "3033"
 	}
 	bindAddr := "127.0.0.1:" + port
+	if err := ensurePortAvailable(port); err != nil {
+		log.Fatalf("startup aborted: %v", err)
+	}
+
 	log.Printf("Starting server on %s", bindAddr)
 	if err := router.Run(bindAddr); err != nil {
 		log.Fatalf("server error: %v", err)
@@ -219,4 +227,30 @@ func serviceHealthTonal(ctx context.Context, svc *tonal.Service) map[string]any 
 func serviceHealthAlpaca(svc *alpaca.Service) map[string]any {
 	health, _ := svc.CheckHealth()
 	return health
+}
+
+func ensurePortAvailable(port string) error {
+	addr := "127.0.0.1:" + port
+	ln, err := net.Listen("tcp", addr)
+	if err == nil {
+		_ = ln.Close()
+		return nil
+	}
+
+	if !strings.Contains(strings.ToLower(err.Error()), "address already in use") {
+		return fmt.Errorf("could not check port %s availability: %w", port, err)
+	}
+
+	cmd := exec.Command("lsof", "-nP", "-iTCP:"+port, "-sTCP:LISTEN")
+	out, lsofErr := cmd.CombinedOutput()
+	if lsofErr != nil {
+		return fmt.Errorf("port %s is already in use (failed to inspect owner process: %v)", port, lsofErr)
+	}
+
+	owner := strings.TrimSpace(string(out))
+	if owner == "" {
+		owner = "(no process details returned by lsof)"
+	}
+
+	return fmt.Errorf("port %s is already in use. Conflicting process:\n%s", port, owner)
 }

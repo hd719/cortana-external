@@ -73,12 +73,8 @@ type FitnessResponse =
     };
 
 const getBaseUrl = async () => {
-  const headerList = await headers();
-  const host =
-    headerList.get("x-forwarded-host") ?? headerList.get("host") ?? "localhost:3000";
-  const protocol =
-    headerList.get("x-forwarded-proto") ?? (process.env.NODE_ENV === "development" ? "http" : "https");
-  return `${protocol}://${host}`;
+  // Always use localhost for server-side fetches to avoid DNS resolution issues
+  return `http://localhost:${process.env.PORT || "3000"}`;
 };
 
 const formatPercent = (value: number | null) =>

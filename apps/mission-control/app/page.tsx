@@ -8,6 +8,7 @@ import { HeartbeatPulse } from "@/components/heartbeat-pulse";
 import { ThinkingIndicator } from "@/components/thinking-indicator";
 import { ActivityFeed } from "@/components/activity-feed";
 import { TodayStatsCard } from "@/components/today-stats-card";
+import { FitnessCard } from "@/components/fitness-card";
 import { AutonomyGauge } from "@/components/autonomy-gauge";
 import { DbStatus } from "@/components/db-status";
 // Agent status moved to /agents roster page
@@ -164,6 +165,7 @@ export default async function Home() {
       </div>
 
       <TodayStatsCard />
+      <FitnessCard />
       <QuickActionsCard />
 
       <Card>
