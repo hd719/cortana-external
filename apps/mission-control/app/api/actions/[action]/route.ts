@@ -167,7 +167,7 @@ const runBudgetCheck = () => {
     };
   }
 
-  const output = execSync("node /Users/hd/clawd/skills/telegram-usage/handler.js json", {
+  const output = execSync("npx tsx /Users/hd/openclaw/skills/telegram-usage/handler.ts json", {
     encoding: "utf8",
     timeout: 10000,
     stdio: ["ignore", "pipe", "pipe"],
