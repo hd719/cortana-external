@@ -13,6 +13,7 @@ type AgentSeed = {
   role: string;
   description: string;
   capabilities: string;
+  model: string;
   status: AgentStatus;
   healthScore: number;
   lastSeen: Date;
@@ -65,6 +66,7 @@ const agentSeeds: AgentSeed[] = [
     role: "Systems Engineer",
     description: "Keeps infrastructure healthy and automates self-healing routines.",
     capabilities: "Infra automation, diagnostics, observability, runbook execution",
+    model: "openai-codex/gpt-5.3-codex",
     status: AgentStatus.active,
     healthScore: 94,
     lastSeen: new Date(),
@@ -74,6 +76,7 @@ const agentSeeds: AgentSeed[] = [
     role: "Forecaster",
     description: "Highlights risks and opportunities with quick scenario modeling.",
     capabilities: "Risk analysis, forecasting, alerting",
+    model: "openai-codex/gpt-5.3-codex",
     status: AgentStatus.active,
     healthScore: 88,
     lastSeen: new Date(Date.now() - 1000 * 60 * 12),
@@ -83,6 +86,7 @@ const agentSeeds: AgentSeed[] = [
     role: "Scout",
     description: "Surfaces research summaries, benchmarks, and supporting evidence.",
     capabilities: "Research synthesis, comparisons, source tracking",
+    model: "openai-codex/gpt-5.3-codex",
     status: AgentStatus.active,
     healthScore: 85,
     lastSeen: new Date(Date.now() - 1000 * 60 * 45),
@@ -92,6 +96,7 @@ const agentSeeds: AgentSeed[] = [
     role: "Knowledge Base",
     description: "Manages notes, memory, and retrieval across projects.",
     capabilities: "Indexing, retrieval, summarization, tagging",
+    model: "openai-codex/gpt-5.1",
     status: AgentStatus.active,
     healthScore: 91,
     lastSeen: new Date(Date.now() - 1000 * 60 * 5),
@@ -101,6 +106,7 @@ const agentSeeds: AgentSeed[] = [
     role: "Guardian",
     description: "Watches health signals and raises alerts when SLAs drift.",
     capabilities: "Anomaly detection, alert routing, escalation policies",
+    model: "openai-codex/gpt-5.1",
     status: AgentStatus.degraded,
     healthScore: 72,
     lastSeen: new Date(Date.now() - 1000 * 60 * 18),

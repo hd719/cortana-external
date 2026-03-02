@@ -235,9 +235,15 @@ export const getAgents = async () => {
 
     const healthScore = computeHealthScore(stats, recentRunsByAgent.get(agent.id));
     const healthBand = deriveHealthBand(healthScore);
+    const model =
+      agent.model ||
+      (normalizeIdentity(agent.name) === "cortana" || normalizeIdentity(agent.role) === "commander"
+        ? "anthropic/claude-opus-4-6"
+        : null);
 
     return {
       ...agent,
+      model,
       healthScore,
       status:
         agent.status === "offline" && healthBand === "critical"

@@ -7,6 +7,23 @@ import { StatusBadge } from "@/components/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { AutoRefresh } from "@/components/auto-refresh";
 
+const formatModelName = (model?: string | null) => {
+  if (!model) return "—";
+
+  switch (model) {
+    case "openai-codex/gpt-5.3-codex":
+      return "Codex 5.3";
+    case "openai-codex/gpt-5.1":
+      return "GPT-5.1";
+    case "anthropic/claude-opus-4-6":
+      return "Opus 4.6";
+    case "anthropic/claude-sonnet-4-20250514":
+      return "Sonnet 4";
+    default:
+      return model;
+  }
+};
+
 export default async function AgentsPage() {
   const agents = await getAgents();
 
@@ -37,6 +54,7 @@ export default async function AgentsPage() {
                 <th className="px-3 py-2">Agent</th>
                 <th className="px-3 py-2">Role</th>
                 <th className="hidden px-3 py-2 sm:table-cell">Capabilities</th>
+                <th className="px-3 py-2">Model</th>
                 <th className="px-3 py-2 text-right">Health</th>
                 <th className="px-3 py-2">Status</th>
               </tr>
@@ -57,6 +75,11 @@ export default async function AgentsPage() {
                   <td className="px-3 py-3 text-muted-foreground">{agent.role}</td>
                   <td className="hidden px-3 py-3 text-sm text-muted-foreground sm:table-cell">
                     {agent.capabilities}
+                  </td>
+                  <td className="px-3 py-3">
+                    <span className="text-muted-foreground text-xs font-mono">
+                      {formatModelName(agent.model)}
+                    </span>
                   </td>
                   <td className="px-3 py-3 text-right text-muted-foreground">
                     {typeof agent.healthScore === "number" ? agent.healthScore.toFixed(1) : "—"}
