@@ -1,0 +1,15 @@
+{
+  "name": "@cortana/token-optimizer",
+  "version": "1.0.0",
+  "description": "Token usage analysis and optimization for OpenClaw",
+  "main": "src/index.ts",
+  "scripts": {
+    "profile": "tsx src/index.ts --profile",
+    "usage": "tsx src/index.ts --usage",
+    "optimize": "tsx src/index.ts --optimize"
+  },
+  "devDependencies": {
+    "tsx": "^4.0.0",
+    "typescript": "^5.0.0"
+  }
+}
