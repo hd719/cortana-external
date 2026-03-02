@@ -372,3 +372,4 @@ Update whenever any of these change:
 - New top-level services/apps/tools
 
 Last refreshed: **2026-02-27** (README + test/status cross-check)
+
