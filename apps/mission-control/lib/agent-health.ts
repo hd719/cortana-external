@@ -35,6 +35,10 @@ export const computeHealthScore = (
   stats: AgentOperationalStats,
   recentRuns?: AgentRecentRun[]
 ) => {
+  if (stats.completedRuns === 0 && stats.failedRuns === 0) {
+    return 75;
+  }
+
   const runTerminal = stats.completedRuns + stats.failedRuns + stats.cancelledRuns;
   const taskTerminal = stats.completedTasks + stats.failedTasks;
 

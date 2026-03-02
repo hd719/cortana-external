@@ -22,7 +22,7 @@ describe("deriveHealthBand", () => {
 });
 
 describe("computeHealthScore", () => {
-  it("returns baseline score when no run/task history exists", () => {
+  it("returns floor score when no completed/failed run history exists", () => {
     const score = computeHealthScore({
       completedRuns: 0,
       failedRuns: 0,
@@ -31,7 +31,34 @@ describe("computeHealthScore", () => {
       failedTasks: 0,
     });
 
-    expect(score).toBeCloseTo(42, 5);
+    expect(score).toBe(75);
+    expect(deriveHealthBand(score)).toBe("healthy");
+  });
+
+  it("does not floor agents with only failed runs", () => {
+    const score = computeHealthScore({
+      completedRuns: 0,
+      failedRuns: 5,
+      cancelledRuns: 0,
+      completedTasks: 0,
+      failedTasks: 0,
+    });
+
+    expect(score).toBeLessThan(45);
+    expect(deriveHealthBand(score)).toBe("critical");
+  });
+
+  it("keeps good run history at a high score", () => {
+    const score = computeHealthScore({
+      completedRuns: 10,
+      failedRuns: 1,
+      cancelledRuns: 0,
+      completedTasks: 0,
+      failedTasks: 0,
+    });
+
+    expect(score).toBeGreaterThan(75);
+    expect(deriveHealthBand(score)).toBe("healthy");
   });
 
   it("returns a high score for all successful runs/tasks", () => {
