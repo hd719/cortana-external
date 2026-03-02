@@ -1,5 +1,12 @@
 export type AgentHealthBand = "healthy" | "degraded" | "critical";
 
+export const HEALTH_THRESHOLDS = {
+  HEALTHY_MIN: 75,
+  DEGRADED_MIN: 45,
+} as const;
+
+export const NO_DATA_DEFAULT_SCORE = HEALTH_THRESHOLDS.HEALTHY_MIN;
+
 export type AgentOperationalStats = {
   completedRuns: number;
   failedRuns: number;
@@ -14,8 +21,8 @@ export type AgentRecentRun = {
 };
 
 export const deriveHealthBand = (score: number): AgentHealthBand => {
-  if (score >= 75) return "healthy";
-  if (score >= 45) return "degraded";
+  if (score >= HEALTH_THRESHOLDS.HEALTHY_MIN) return "healthy";
+  if (score >= HEALTH_THRESHOLDS.DEGRADED_MIN) return "degraded";
   return "critical";
 };
 
@@ -36,7 +43,7 @@ export const computeHealthScore = (
   recentRuns?: AgentRecentRun[]
 ) => {
   if (stats.completedRuns === 0 && stats.failedRuns === 0) {
-    return 75;
+    return NO_DATA_DEFAULT_SCORE;
   }
 
   const runTerminal = stats.completedRuns + stats.failedRuns + stats.cancelledRuns;

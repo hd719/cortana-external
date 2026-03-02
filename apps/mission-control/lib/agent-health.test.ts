@@ -1,5 +1,10 @@
 import { describe, expect, it, vi, afterEach } from "vitest";
-import { computeHealthScore, deriveHealthBand } from "@/lib/agent-health";
+import {
+  computeHealthScore,
+  deriveHealthBand,
+  HEALTH_THRESHOLDS,
+  NO_DATA_DEFAULT_SCORE,
+} from "@/lib/agent-health";
 
 afterEach(() => {
   vi.useRealTimers();
@@ -7,12 +12,12 @@ afterEach(() => {
 
 describe("deriveHealthBand", () => {
   it("maps high scores to healthy", () => {
-    expect(deriveHealthBand(75)).toBe("healthy");
+    expect(deriveHealthBand(HEALTH_THRESHOLDS.HEALTHY_MIN)).toBe("healthy");
     expect(deriveHealthBand(99)).toBe("healthy");
   });
 
   it("maps mid scores to degraded", () => {
-    expect(deriveHealthBand(45)).toBe("degraded");
+    expect(deriveHealthBand(HEALTH_THRESHOLDS.DEGRADED_MIN)).toBe("degraded");
     expect(deriveHealthBand(74.9)).toBe("degraded");
   });
 
@@ -31,7 +36,7 @@ describe("computeHealthScore", () => {
       failedTasks: 0,
     });
 
-    expect(score).toBe(75);
+    expect(score).toBe(NO_DATA_DEFAULT_SCORE);
     expect(deriveHealthBand(score)).toBe("healthy");
   });
 
@@ -44,7 +49,7 @@ describe("computeHealthScore", () => {
       failedTasks: 0,
     });
 
-    expect(score).toBeLessThan(45);
+    expect(score).toBeLessThan(HEALTH_THRESHOLDS.DEGRADED_MIN);
     expect(deriveHealthBand(score)).toBe("critical");
   });
 
@@ -57,7 +62,7 @@ describe("computeHealthScore", () => {
       failedTasks: 0,
     });
 
-    expect(score).toBeGreaterThan(75);
+    expect(score).toBeGreaterThan(HEALTH_THRESHOLDS.HEALTHY_MIN);
     expect(deriveHealthBand(score)).toBe("healthy");
   });
 
@@ -82,8 +87,8 @@ describe("computeHealthScore", () => {
       failedTasks: 6,
     });
 
-    expect(score).toBeGreaterThan(45);
-    expect(score).toBeLessThan(75);
+    expect(score).toBeGreaterThan(HEALTH_THRESHOLDS.DEGRADED_MIN);
+    expect(score).toBeLessThan(HEALTH_THRESHOLDS.HEALTHY_MIN);
     expect(deriveHealthBand(score)).toBe("degraded");
   });
 
