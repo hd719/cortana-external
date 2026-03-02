@@ -1,6 +1,7 @@
 package alpaca
 
 import (
+	"bytes"
 	"encoding/json"
 	"io"
 	"log"
@@ -267,8 +268,8 @@ func TestEarningsHandler_MultipleSymbolsAndFallback(t *testing.T) {
 	}
 
 	var resp struct {
-		Results []EarningsResult `json:"results"`
-		Strategy string          `json:"strategy"`
+		Results  []EarningsResult `json:"results"`
+		Strategy string           `json:"strategy"`
 	}
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("unmarshal: %v", err)
@@ -293,5 +294,89 @@ func TestEarningsHandler_MultipleSymbolsAndFallback(t *testing.T) {
 	}
 	if got := bySymbol["TSLA"]; got.Source != "alpaca_news_only" || got.EarningsDate != "" {
 		t.Fatalf("expected TSLA fallback result, got %+v", got)
+	}
+}
+
+func TestBuildOrderPayload_OrderTypes(t *testing.T) {
+	qty := 1.0
+	limit := 150.25
+	stop := 145.5
+
+	limitPayload, err := buildOrderPayload(RecordTradeRequest{Qty: &qty, OrderType: "limit", LimitPrice: &limit}, "AAPL", "buy")
+	if err != nil {
+		t.Fatalf("limit order should succeed: %v", err)
+	}
+	if got := limitPayload["limit_price"]; got != "150.25" {
+		t.Fatalf("expected limit_price 150.25 got %#v", got)
+	}
+
+	stopPayload, err := buildOrderPayload(RecordTradeRequest{Qty: &qty, OrderType: "stop", StopPrice: &stop}, "AAPL", "buy")
+	if err != nil {
+		t.Fatalf("stop order should succeed: %v", err)
+	}
+	if got := stopPayload["stop_price"]; got != "145.50" {
+		t.Fatalf("expected stop_price 145.50 got %#v", got)
+	}
+
+	stopLimitPayload, err := buildOrderPayload(RecordTradeRequest{Qty: &qty, OrderType: "stop_limit", LimitPrice: &limit, StopPrice: &stop}, "AAPL", "buy")
+	if err != nil {
+		t.Fatalf("stop_limit order should succeed: %v", err)
+	}
+	if got := stopLimitPayload["limit_price"]; got != "150.25" {
+		t.Fatalf("expected limit_price 150.25 got %#v", got)
+	}
+	if got := stopLimitPayload["stop_price"]; got != "145.50" {
+		t.Fatalf("expected stop_price 145.50 got %#v", got)
+	}
+
+	marketPayload, err := buildOrderPayload(RecordTradeRequest{Qty: &qty}, "AAPL", "buy")
+	if err != nil {
+		t.Fatalf("market order should still work: %v", err)
+	}
+	if got := marketPayload["type"]; got != "market" {
+		t.Fatalf("expected market type got %#v", got)
+	}
+	if _, ok := marketPayload["limit_price"]; ok {
+		t.Fatalf("did not expect limit_price on market payload")
+	}
+	if _, ok := marketPayload["stop_price"]; ok {
+		t.Fatalf("did not expect stop_price on market payload")
+	}
+}
+
+func TestRecordTradeHandler_ValidationErrors(t *testing.T) {
+	keysPath := writeTestKeys(t, "http://localhost:9999", "http://localhost:9999")
+	svc := newTestService(t, keysPath, &http.Client{})
+
+	tests := []struct {
+		name string
+		body string
+	}{
+		{
+			name: "limit missing limit_price",
+			body: `{"symbol":"AAPL","side":"buy","qty":1,"order_type":"limit"}`,
+		},
+		{
+			name: "stop missing stop_price",
+			body: `{"symbol":"AAPL","side":"buy","qty":1,"order_type":"stop"}`,
+		},
+		{
+			name: "extended_hours non-limit order",
+			body: `{"symbol":"AAPL","side":"buy","qty":1,"order_type":"market","extended_hours":true}`,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(w)
+			c.Request = httptest.NewRequest(http.MethodPost, "/alpaca/trades", bytes.NewBufferString(tc.body))
+			c.Request.Header.Set("Content-Type", "application/json")
+
+			svc.RecordTradeHandler(c)
+			if w.Code != http.StatusBadRequest {
+				t.Fatalf("expected 400 got %d body=%s", w.Code, w.Body.String())
+			}
+		})
 	}
 }

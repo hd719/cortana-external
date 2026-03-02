@@ -94,16 +94,19 @@ type TradeRecord struct {
 }
 
 type RecordTradeRequest struct {
-	Symbol       string   `json:"symbol" binding:"required"`
-	Side         string   `json:"side" binding:"required"`
-	Qty          *float64 `json:"qty"`
-	Notional     *float64 `json:"notional"`
-	Thesis       string   `json:"thesis"`
-	SignalSource string   `json:"signal_source"`
-	TargetPrice  *float64 `json:"target_price"`
-	StopLoss     *float64 `json:"stop_loss"`
-	OrderType    string   `json:"order_type"`
-	TimeInForce  string   `json:"time_in_force"`
+	Symbol        string   `json:"symbol" binding:"required"`
+	Side          string   `json:"side" binding:"required"`
+	Qty           *float64 `json:"qty"`
+	Notional      *float64 `json:"notional"`
+	Thesis        string   `json:"thesis"`
+	SignalSource  string   `json:"signal_source"`
+	TargetPrice   *float64 `json:"target_price"`
+	StopLoss      *float64 `json:"stop_loss"`
+	OrderType     string   `json:"order_type"`
+	TimeInForce   string   `json:"time_in_force"`
+	LimitPrice    *float64 `json:"limit_price"`
+	StopPrice     *float64 `json:"stop_price"`
+	ExtendedHours *bool    `json:"extended_hours"`
 }
 
 type UpdateTradeRequest struct {
@@ -280,6 +283,65 @@ func parseNullableFloat(str string) *float64 {
 }
 
 func float64Ptr(v float64) *float64 { return &v }
+
+func buildOrderPayload(req RecordTradeRequest, symbol, side string) (map[string]any, error) {
+	orderType := strings.ToLower(strings.TrimSpace(req.OrderType))
+	if orderType == "" {
+		orderType = "market"
+	}
+	tif := strings.ToLower(strings.TrimSpace(req.TimeInForce))
+	if tif == "" {
+		tif = "day"
+	}
+
+	switch orderType {
+	case "limit":
+		if req.LimitPrice == nil {
+			return nil, fmt.Errorf("limit_price is required for limit orders")
+		}
+	case "stop":
+		if req.StopPrice == nil {
+			return nil, fmt.Errorf("stop_price is required for stop orders")
+		}
+	case "stop_limit":
+		if req.LimitPrice == nil || req.StopPrice == nil {
+			return nil, fmt.Errorf("limit_price and stop_price are required for stop_limit orders")
+		}
+	}
+
+	if req.ExtendedHours != nil && *req.ExtendedHours {
+		if orderType != "limit" {
+			return nil, fmt.Errorf("extended_hours is only supported for limit orders")
+		}
+		if tif != "day" {
+			return nil, fmt.Errorf("extended_hours requires time_in_force to be day")
+		}
+	}
+
+	orderPayload := map[string]any{
+		"symbol":        symbol,
+		"side":          side,
+		"type":          orderType,
+		"time_in_force": tif,
+	}
+	if req.Qty != nil {
+		orderPayload["qty"] = *req.Qty
+	}
+	if req.Notional != nil {
+		orderPayload["notional"] = *req.Notional
+	}
+	if req.LimitPrice != nil {
+		orderPayload["limit_price"] = fmt.Sprintf("%.2f", *req.LimitPrice)
+	}
+	if req.StopPrice != nil {
+		orderPayload["stop_price"] = fmt.Sprintf("%.2f", *req.StopPrice)
+	}
+	if req.ExtendedHours != nil && *req.ExtendedHours {
+		orderPayload["extended_hours"] = true
+	}
+
+	return orderPayload, nil
+}
 
 type EarningsResult struct {
 	Symbol       string `json:"symbol"`
@@ -880,10 +942,6 @@ func (s *Service) RecordTradeHandler(c *gin.Context) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
 		return
 	}
-	if err := s.ensureDB(); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
 
 	symbol := strings.ToUpper(strings.TrimSpace(req.Symbol))
 	side := normalizeSide(req.Side)
@@ -908,26 +966,15 @@ func (s *Service) RecordTradeHandler(c *gin.Context) {
 		return
 	}
 
-	orderType := strings.ToLower(strings.TrimSpace(req.OrderType))
-	if orderType == "" {
-		orderType = "market"
-	}
-	tif := strings.ToLower(strings.TrimSpace(req.TimeInForce))
-	if tif == "" {
-		tif = "day"
+	orderPayload, err := buildOrderPayload(req, symbol, side)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
 	}
 
-	orderPayload := map[string]any{
-		"symbol":        symbol,
-		"side":          side,
-		"type":          orderType,
-		"time_in_force": tif,
-	}
-	if req.Qty != nil {
-		orderPayload["qty"] = *req.Qty
-	}
-	if req.Notional != nil {
-		orderPayload["notional"] = *req.Notional
+	if err := s.ensureDB(); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
 	}
 
 	alpacaRespRaw, err := s.makeJSONRequest("POST", s.keys.BaseURL+"/orders", orderPayload, http.StatusOK, http.StatusCreated)
