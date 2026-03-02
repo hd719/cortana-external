@@ -1,6 +1,6 @@
 # cortana-external (`~/Developer/cortana-external`)
 
-[![CI](https://github.com/hd719/cortana-external/actions/workflows/ci.yml/badge.svg)](https://github.com/hd719/cortana-external/actions/workflows/ci.yml)
+[![CI](https://github.com/hd719/cortana-external/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/hd719/cortana-external/actions/workflows/ci.yml)
 
 Runtime edge for Cortana: services, apps, and reliability infrastructure that support the `~/clawd` command brain.
 
