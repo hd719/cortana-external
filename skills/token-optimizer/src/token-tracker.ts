@@ -5,7 +5,7 @@ import { MODEL_COSTS } from './types.js';
 const SESSIONS_PATH = process.env.SESSIONS_PATH ||
   `${process.env.HOME}/.openclaw/agents/main/sessions/sessions.json`;
 
-function classifySession(key: string): SessionKind {
+export function classifySession(key: string): SessionKind {
   if (key === 'agent:main:main') return 'main';
   if (key.includes(':cron:') && key.includes(':run:')) return 'cron-isolated';
   if (key.includes(':cron:')) return 'cron-main';

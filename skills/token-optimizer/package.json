@@ -6,10 +6,12 @@
   "scripts": {
     "profile": "tsx src/index.ts --profile",
     "usage": "tsx src/index.ts --usage",
-    "optimize": "tsx src/index.ts --optimize"
+    "optimize": "tsx src/index.ts --optimize",
+    "test": "vitest run"
   },
   "devDependencies": {
     "tsx": "^4.0.0",
-    "typescript": "^5.0.0"
+    "typescript": "^5.0.0",
+    "vitest": "^3.0.0"
   }
 }
