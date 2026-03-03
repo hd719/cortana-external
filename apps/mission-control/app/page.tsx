@@ -14,6 +14,7 @@ import { DbStatus } from "@/components/db-status";
 // Agent status moved to /agents roster page
 // import { AgentStatusCard } from "@/components/agent-status-card";
 import { QuickActionsCard } from "@/components/quick-actions-card";
+import { ReliabilitySloCard } from "@/components/reliability-slo-card";
 
 export const dynamic = "force-dynamic";
 
@@ -165,6 +166,7 @@ export default async function Home() {
       </div>
 
       <TodayStatsCard />
+      <ReliabilitySloCard />
       <FitnessCard />
       <QuickActionsCard />
 
