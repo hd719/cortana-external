@@ -34,11 +34,16 @@ import argparse
 import sys
 from datetime import datetime
 from typing import List, Dict, Optional
+import numpy as np
 import pandas as pd
+import yfinance as yf
 
 from data.universe import UniverseScreener, GROWTH_WATCHLIST
 from data.market_regime import MarketRegimeDetector, MarketRegime, MarketStatus
 from data.fundamentals import FundamentalsFetcher
+from data.risk_signals import RiskSignalFetcher
+from indicators import rsi
+from strategies.dip_buyer import DipBuyerStrategy, DIPBUYER_CONFIG
 
 
 class TradingAdvisor:
@@ -54,6 +59,7 @@ class TradingAdvisor:
         self.market_detector = MarketRegimeDetector()
         self.screener = UniverseScreener()
         self.fundamentals = FundamentalsFetcher()
+        self.risk_fetcher = RiskSignalFetcher()
         
         # Cache
         self._market_status: Optional[MarketStatus] = None
@@ -118,6 +124,238 @@ class TradingAdvisor:
             'position_sizing': market.position_sizing,
             'recommendation': recommendation,
         }
+
+    def _analyze_dip_with_context(
+        self,
+        symbol: str,
+        market: MarketStatus,
+        risk_snapshot: Dict,
+        quiet: bool = False,
+    ) -> Dict:
+        if not quiet:
+            print(f"\n{'='*60}")
+            print(f"📉 Dip Buyer Analysis: {symbol}")
+            print(f"{'='*60}\n")
+
+        try:
+            hist = yf.Ticker(symbol).history(period="6mo")
+        except Exception as e:
+            return {'symbol': symbol, 'error': str(e)}
+
+        if hist is None or hist.empty or len(hist) < 30:
+            return {'symbol': symbol, 'error': 'Insufficient price data'}
+
+        close = hist['Close']
+        price = close.iloc[-1]
+
+        rsi_values = rsi(close, DIPBUYER_CONFIG['quality']['rsi_period'])
+        current_rsi = rsi_values.iloc[-1]
+
+        fund = self.fundamentals.get_fundamentals(symbol)
+        eps_growth = fund.get('eps_growth')
+        rev_growth = fund.get('revenue_growth')
+
+        cfg = DIPBUYER_CONFIG
+
+        # Quality score
+        if current_rsi <= cfg['quality']['rsi_strong']:
+            rsi_score = 2
+        elif current_rsi <= cfg['quality']['rsi_soft']:
+            rsi_score = 1
+        else:
+            rsi_score = 0
+
+        eps_score = 1 if eps_growth is not None and eps_growth >= cfg['quality']['eps_growth_min'] else 0
+        rev_score = 1 if rev_growth is not None and rev_growth >= cfg['quality']['revenue_growth_min'] else 0
+        q_score = rsi_score + eps_score + rev_score
+
+        # Volatility / sentiment score
+        vix = risk_snapshot.get('vix', np.nan)
+        put_call = risk_snapshot.get('put_call', np.nan)
+        fear = risk_snapshot.get('fear_greed', np.nan)
+
+        vix_score = 0
+        if vix == vix:
+            if cfg['volatility']['vix_strong'][0] <= vix <= cfg['volatility']['vix_strong'][1]:
+                vix_score = 2
+            elif (cfg['volatility']['vix_soft'][0][0] <= vix < cfg['volatility']['vix_soft'][0][1]) or (
+                cfg['volatility']['vix_soft'][1][0] < vix <= cfg['volatility']['vix_soft'][1][1]
+            ):
+                vix_score = 1
+
+        put_call_score = 0
+        if put_call == put_call and cfg['volatility']['put_call_range'][0] <= put_call <= cfg['volatility']['put_call_range'][1]:
+            put_call_score = 1
+
+        fear_score = 0
+        if fear == fear and fear <= cfg['volatility']['fear_proxy_max']:
+            fear_score = 1
+
+        v_score = vix_score + put_call_score + fear_score
+
+        # Credit score
+        hy_spread = risk_snapshot.get('hy_spread', np.nan)
+        hy_change_10d = risk_snapshot.get('hy_spread_change_10d', np.nan)
+
+        credit_veto = False
+        if hy_spread == hy_spread:
+            if hy_spread < cfg['credit']['hy_spread_strong']:
+                c_score = 4
+            elif hy_spread < cfg['credit']['hy_spread_moderate']:
+                c_score = 2
+            elif hy_spread < cfg['credit']['hy_spread_weak']:
+                c_score = 1
+            else:
+                c_score = 0
+                credit_veto = True
+        else:
+            c_score = 0
+
+        if hy_change_10d == hy_change_10d and hy_change_10d > cfg['credit']['spread_widening_bps']:
+            c_score = max(c_score - 1, 0)
+
+        total_score = q_score + v_score + c_score
+
+        market_active = market.regime in [
+            MarketRegime.CORRECTION,
+            MarketRegime.UPTREND_UNDER_PRESSURE,
+        ]
+
+        if not market_active:
+            recommendation = {
+                'action': 'NO_BUY',
+                'reason': 'Dip Buyer only active in corrections or pressured uptrends.',
+            }
+        elif credit_veto:
+            recommendation = {
+                'action': 'NO_BUY',
+                'reason': 'Credit veto: HY spreads above 650 bps.',
+            }
+        elif total_score >= cfg['score_thresholds']['buy']:
+            stop_loss_pct = cfg['exits']['hard_stop']
+            stop_price = price * (1 - stop_loss_pct)
+
+            max_exposure = cfg['risk']['max_exposure_correction']
+            if market.regime == MarketRegime.UPTREND_UNDER_PRESSURE:
+                max_exposure = cfg['risk']['max_exposure_under_pressure']
+
+            recommendation = {
+                'action': 'BUY',
+                'entry': price,
+                'stop_loss': stop_price,
+                'stop_loss_pct': stop_loss_pct * 100,
+                'position_size_pct': cfg['risk']['max_position_pct'] * 100,
+                'max_exposure_pct': max_exposure * 100,
+                'tranches': '1/3 now, 1/3 at -3%, 1/3 on breadth stabilization',
+                'trim_targets': '+8%, +12%, trail runner',
+                'score': total_score,
+                'market_note': market.notes,
+            }
+        elif total_score >= cfg['score_thresholds']['watch']:
+            recommendation = {
+                'action': 'WATCH',
+                'reason': f'Score {total_score}/12 below buy threshold.',
+            }
+        else:
+            recommendation = {
+                'action': 'NO_BUY',
+                'reason': f'Score too low ({total_score}/12).',
+            }
+
+        return {
+            'symbol': symbol,
+            'price': price,
+            'rsi': current_rsi,
+            'fundamentals': fund,
+            'scores': {
+                'Q': q_score,
+                'V': v_score,
+                'C': c_score,
+            },
+            'total_score': total_score,
+            'market_regime': market.regime.value,
+            'recommendation': recommendation,
+        }
+
+    def analyze_dip_stock(self, symbol: str) -> Dict:
+        """
+        Dip Buyer analysis of a single stock.
+
+        Returns:
+            Dictionary with scores and recommendation
+        """
+        market = self.get_market_status()
+        risk_snapshot = self.risk_fetcher.get_snapshot()
+        return self._analyze_dip_with_context(symbol, market, risk_snapshot)
+
+    def scan_dip_opportunities(
+        self,
+        quick: bool = False,
+        min_score: int = 6,
+    ) -> pd.DataFrame:
+        """
+        Scan the universe for Dip Buyer opportunities.
+
+        Args:
+            quick: Use watchlist only (faster)
+            min_score: Minimum total score to include
+
+        Returns:
+            DataFrame of opportunities sorted by score
+        """
+        print("\n" + "="*60)
+        print("🔍 SCANNING FOR DIP BUYER OPPORTUNITIES")
+        print("="*60 + "\n")
+
+        market = self.get_market_status(refresh=True)
+        print(market)
+
+        if market.regime not in [MarketRegime.CORRECTION, MarketRegime.UPTREND_UNDER_PRESSURE]:
+            print("⚠️  Dip Buyer active only in corrections or pressured uptrends.")
+            return pd.DataFrame()
+
+        risk_snapshot = self.risk_fetcher.get_snapshot()
+
+        if quick:
+            symbols = GROWTH_WATCHLIST
+        else:
+            symbols = self.screener.get_universe()
+
+        candidates = []
+        for i, symbol in enumerate(symbols):
+            if (i + 1) % 10 == 0:
+                print(f"   Progress: {i + 1}/{len(symbols)}")
+
+            analysis = self._analyze_dip_with_context(
+                symbol,
+                market,
+                risk_snapshot,
+                quiet=True,
+            )
+
+            if 'error' in analysis:
+                continue
+
+            if analysis.get('total_score', 0) < min_score:
+                continue
+
+            scores = analysis.get('scores', {})
+            candidates.append({
+                'symbol': symbol,
+                'price': analysis.get('price'),
+                'rsi': analysis.get('rsi'),
+                'Q_score': scores.get('Q', 0),
+                'V_score': scores.get('V', 0),
+                'C_score': scores.get('C', 0),
+                'total_score': analysis.get('total_score', 0),
+            })
+
+        if not candidates:
+            return pd.DataFrame()
+
+        df = pd.DataFrame(candidates)
+        df = df.sort_values('total_score', ascending=False)
+        return df
     
     def _generate_recommendation(
         self,
