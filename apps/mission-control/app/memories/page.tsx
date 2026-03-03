@@ -200,7 +200,7 @@ export default function MemoriesPage() {
                   {dailyContentLoading ? (
                     <p className="text-sm text-muted-foreground">Loading content…</p>
                   ) : dailyContent.trim() ? (
-                    <div className="prose prose-sm max-w-none dark:prose-invert">
+                    <div className="prose prose-sm max-w-none dark:prose-invert prose-headings:font-semibold prose-li:marker:text-muted-foreground prose-code:rounded prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-code:before:content-[''] prose-code:after:content-[''] prose-pre:bg-muted prose-pre:text-foreground prose-a:text-primary">
                       <ReactMarkdown remarkPlugins={[remarkGfm]}>{dailyContent}</ReactMarkdown>
                     </div>
                   ) : (
@@ -226,7 +226,7 @@ export default function MemoriesPage() {
               ) : longTermLoading ? (
                 <p className="text-sm text-muted-foreground">Loading MEMORY.md…</p>
               ) : longTermContent.trim() ? (
-                <div className="prose prose-sm max-w-none dark:prose-invert">
+                <div className="prose prose-sm max-w-none dark:prose-invert prose-headings:font-semibold prose-li:marker:text-muted-foreground prose-code:rounded prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-code:before:content-[''] prose-code:after:content-[''] prose-pre:bg-muted prose-pre:text-foreground prose-a:text-primary">
                   <ReactMarkdown remarkPlugins={[remarkGfm]}>{longTermContent}</ReactMarkdown>
                 </div>
               ) : (
