@@ -83,9 +83,11 @@ export function Sidebar() {
 
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-40 flex max-md:w-60 flex-col border-r border-border bg-background transition-transform duration-300",
+          "fixed inset-y-0 left-0 z-40 flex max-md:w-60 flex-col overflow-hidden border-r border-border bg-background transition-transform duration-300",
           desktopWidthClass,
-          mobileOpen ? "max-md:translate-x-0" : "max-md:-translate-x-full md:translate-x-0"
+          mobileOpen
+            ? "max-md:translate-x-0 max-md:visible"
+            : "max-md:-translate-x-full max-md:invisible max-md:pointer-events-none md:translate-x-0 md:visible"
         )}
       >
         <div className={cn("flex h-14 items-center border-b border-border px-4", collapsed && "md:justify-center md:px-2")}>

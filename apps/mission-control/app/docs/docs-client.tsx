@@ -105,18 +105,15 @@ export default function DocsClient() {
   }, [selectedFile]);
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <p className="text-sm font-medium uppercase tracking-widest text-muted-foreground">
-            OpenClaw Docs
-          </p>
-          <h1 className="text-3xl font-semibold tracking-tight">Docs</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Browse markdown documentation from the OpenClaw knowledge base.
-          </p>
-        </div>
-        <Badge variant="outline">DOCS_PATH</Badge>
+    <div className="space-y-4">
+      <div className="space-y-1">
+        <p className="text-sm font-medium uppercase tracking-widest text-muted-foreground">
+          OpenClaw Docs
+        </p>
+        <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">Docs</h1>
+        <p className="text-sm text-muted-foreground">
+          Browse markdown documentation from the OpenClaw knowledge base.
+        </p>
       </div>
 
       {listError ? (
@@ -127,7 +124,7 @@ export default function DocsClient() {
           <CardContent className="text-sm text-muted-foreground">{listError}</CardContent>
         </Card>
       ) : (
-        <div className="grid gap-4 lg:grid-cols-[260px_minmax(0,1fr)]">
+        <div className="grid gap-4 md:grid-cols-[240px_minmax(0,1fr)]">
           <Card className="overflow-hidden">
             <CardHeader className="border-b">
               <CardTitle className="flex items-center justify-between text-base">
@@ -136,7 +133,7 @@ export default function DocsClient() {
               </CardTitle>
             </CardHeader>
             <CardContent className="px-0">
-              <div className="max-h-[360px] space-y-1 overflow-y-auto px-3 py-2 md:max-h-[520px]">
+              <div className="max-h-[200px] space-y-0.5 overflow-y-auto px-2 py-2 md:max-h-[520px] md:space-y-1 md:px-3">
                 {listLoading ? (
                   <p className="px-2 py-4 text-sm text-muted-foreground">
                     Loading docs...
@@ -154,10 +151,10 @@ export default function DocsClient() {
                         type="button"
                         onClick={() => setSelectedFile(file.name)}
                         className={cn(
-                          "flex w-full items-center justify-between gap-2 rounded-md border px-3 py-2 text-left text-sm transition-colors",
+                          "flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors",
                           isActive
-                            ? "border-primary/30 bg-primary/10 text-foreground"
-                            : "border-border/60 bg-background/70 text-muted-foreground hover:bg-muted/40"
+                            ? "bg-primary/10 text-foreground"
+                            : "text-muted-foreground hover:bg-muted/40"
                         )}
                       >
                         <span className="truncate font-medium text-foreground">{file.name}</span>
