@@ -1,8 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import { MainNav } from "@/components/main-nav";
-import { Badge } from "@/components/ui/badge";
+import { Sidebar } from "@/components/sidebar";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -28,18 +27,12 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} min-h-screen overflow-x-hidden bg-muted/50 antialiased`}
       >
-        <div className="border-b bg-background/80 backdrop-blur">
-          <div className="mx-auto flex max-w-6xl flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
-            <div className="flex items-center gap-3">
-              <div className="rounded-md bg-primary/10 px-2.5 py-1 text-sm font-semibold">
-                Mission Control
-              </div>
-              <Badge variant="outline">v1</Badge>
-            </div>
-            <MainNav />
-          </div>
+        <div className="flex min-h-screen">
+          <Sidebar />
+          <main className="min-w-0 w-full flex-1 px-4 py-6 sm:px-6 sm:py-8">
+            <div className="mx-auto max-w-6xl">{children}</div>
+          </main>
         </div>
-        <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-8">{children}</main>
       </body>
     </html>
   );
