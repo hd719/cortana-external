@@ -9,6 +9,7 @@ import {
 const prisma = new PrismaClient();
 
 type AgentSeed = {
+  id?: string;
   name: string;
   role: string;
   description: string;
@@ -70,6 +71,17 @@ const agentSeeds: AgentSeed[] = [
     status: AgentStatus.active,
     healthScore: 94,
     lastSeen: new Date(),
+  },
+  {
+    id: "huragok-worker",
+    name: "huragok-worker",
+    role: "Runbook Executor",
+    description: "Executes maintenance workflows and batch remediation tasks.",
+    capabilities: "Job orchestration, remediation, batch ops, lifecycle tracking",
+    model: "openai-codex/gpt-5.3-codex",
+    status: AgentStatus.active,
+    healthScore: 90,
+    lastSeen: new Date(Date.now() - 1000 * 60 * 8),
   },
   {
     name: "Oracle",

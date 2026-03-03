@@ -23,7 +23,9 @@ export default async function AgentsPage() {
             Known Cortana agents, their roles, capabilities, and recent health.
           </p>
         </div>
-        <Badge variant="outline">Seeded: Huragok · Oracle · Researcher · Librarian · Monitor</Badge>
+        <Badge variant="outline">
+          Seeded: Huragok · huragok-worker · Oracle · Researcher · Librarian · Monitor
+        </Badge>
       </div>
 
       <Card>
