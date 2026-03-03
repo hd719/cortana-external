@@ -500,6 +500,184 @@ class TradingAdvisor:
         
         return enriched_df
     
+    def scan_dip_opportunities(
+        self,
+        quick: bool = False,
+        min_score: int = 6,
+    ) -> pd.DataFrame:
+        """
+        Scan for Dip Buyer candidates.
+
+        Args:
+            quick: Use watchlist only (faster)
+            min_score: Minimum Dip Buyer score to include
+
+        Returns:
+            DataFrame of Dip Buyer opportunities sorted by score
+        """
+        print("\n" + "="*60)
+        print("📉 SCANNING FOR DIP BUYER OPPORTUNITIES")
+        print("="*60 + "\n")
+
+        market = self.get_market_status(refresh=True)
+        print(market)
+
+        if market.regime not in [
+            MarketRegime.CORRECTION,
+            MarketRegime.UPTREND_UNDER_PRESSURE,
+        ]:
+            print("⚠️  Dip Buyer only active in correction / under-pressure regimes.")
+            return pd.DataFrame()
+
+        if quick:
+            symbols = GROWTH_WATCHLIST
+            results = self.screener.screen(symbols, min_technical_score=max(min_score - 3, 0))
+        else:
+            results = self.screener.screen(min_technical_score=max(min_score - 3, 0))
+
+        if results.empty:
+            print("No candidates found.")
+            return results
+
+        print("\n📊 Scoring candidates with Dip Buyer strategy...")
+
+        enriched = []
+        for _, row in results.head(20).iterrows():
+            symbol = row['symbol']
+
+            try:
+                analysis = self.analyze_dip_stock(symbol)
+                if 'error' in analysis:
+                    continue
+
+                rec = analysis.get('recommendation', {})
+                row_dict = row.to_dict()
+                row_dict['Q_score'] = analysis.get('quality_score', 0)
+                row_dict['V_score'] = analysis.get('volatility_score', 0)
+                row_dict['C_credit_score'] = analysis.get('credit_score', 0)
+                row_dict['total_score'] = analysis.get('total_score', 0)
+                row_dict['action'] = rec.get('action', 'NO_BUY')
+                enriched.append(row_dict)
+
+            except Exception as e:
+                print(f"   ⚠️ Error scoring {symbol}: {e}")
+                continue
+
+        if not enriched:
+            return pd.DataFrame()
+
+        enriched_df = pd.DataFrame(enriched)
+        enriched_df = enriched_df.sort_values('total_score', ascending=False)
+        enriched_df = enriched_df[enriched_df['total_score'] >= min_score]
+
+        return enriched_df
+
+    def analyze_dip_stock(self, symbol: str) -> Dict:
+        """
+        Full Dip Buyer analysis of a single stock.
+
+        Returns:
+            Dictionary with Dip Buyer scores and recommendation
+        """
+        print(f"\n{'='*60}")
+        print(f"📉 Analyzing {symbol} (Dip Buyer)")
+        print(f"{'='*60}\n")
+
+        strategy = DipBuyerStrategy()
+        strategy.set_symbol(symbol)
+
+        data = yf.Ticker(symbol).history(period='1y', auto_adjust=False)
+        if data is None or data.empty:
+            return {'symbol': symbol, 'error': 'No price history available'}
+
+        if 'Close' not in data.columns:
+            return {'symbol': symbol, 'error': 'Close price not found in history'}
+
+        strategy_data = pd.DataFrame(index=data.index)
+        strategy_data['close'] = data['Close']
+
+        try:
+            strategy.generate_signals(strategy_data)
+            scores = strategy.get_current_scores()
+        except Exception as e:
+            return {'symbol': symbol, 'error': f'Dip Buyer scoring failed: {e}'}
+
+        if scores is None or scores.empty:
+            return {'symbol': symbol, 'error': 'No Dip Buyer scores generated'}
+
+        latest = scores.iloc[-1]
+
+        market = self.get_market_status()
+        risk_snapshot = self.risk_fetcher.get_snapshot()
+
+        price = float(strategy_data['close'].iloc[-1])
+        total_score = int(latest.get('Total', 0))
+        quality_score = int(latest.get('Q', 0))
+        volatility_score = int(latest.get('V', 0))
+        credit_score = int(latest.get('C', 0))
+        credit_veto = bool(latest.get('Credit_Veto', False))
+        market_active = bool(latest.get('Market_Active', False))
+
+        buy_threshold = DIPBUYER_CONFIG['score_thresholds']['buy']
+        watch_threshold = DIPBUYER_CONFIG['score_thresholds']['watch']
+
+        if credit_veto:
+            recommendation = {
+                'action': 'NO_BUY',
+                'reason': 'Credit veto active (HY spread too high).',
+            }
+        elif not market_active:
+            recommendation = {
+                'action': 'NO_BUY',
+                'reason': 'Dip Buyer inactive outside correction / under-pressure regimes.',
+            }
+        elif total_score >= buy_threshold:
+            stop_loss_pct = DIPBUYER_CONFIG['exits']['hard_stop']
+            stop_price = price * (1 - stop_loss_pct)
+            max_position_pct = DIPBUYER_CONFIG['risk']['max_position_pct'] * market.position_sizing
+
+            recommendation = {
+                'action': 'BUY',
+                'entry': price,
+                'stop_loss': stop_price,
+                'stop_loss_pct': stop_loss_pct * 100,
+                'position_size_pct': max_position_pct * 100,
+                'score': total_score,
+                'market_note': market.notes,
+                'reasons': [
+                    f"Quality score {quality_score}/4",
+                    f"Sentiment score {volatility_score}/4",
+                    f"Credit score {credit_score}/4",
+                ],
+            }
+        elif total_score >= watch_threshold:
+            recommendation = {
+                'action': 'WATCH',
+                'reason': f'Score {total_score}/12 in watch zone (need >= {buy_threshold} for BUY).',
+            }
+        else:
+            recommendation = {
+                'action': 'NO_BUY',
+                'reason': f'Score too low ({total_score}/12). Need >= {watch_threshold} to WATCH.',
+            }
+
+        return {
+            'symbol': symbol,
+            'price': price,
+            'fundamentals': strategy.fundamentals,
+            'total_score': total_score,
+            'quality_score': quality_score,
+            'volatility_score': volatility_score,
+            'credit_score': credit_score,
+            'rsi': float(latest.get('RSI', np.nan)) if pd.notna(latest.get('RSI', np.nan)) else np.nan,
+            'market_active': market_active,
+            'credit_veto': credit_veto,
+            'risk_snapshot': risk_snapshot,
+            'market_regime': market.regime.value,
+            'position_sizing': market.position_sizing,
+            'recommendation': recommendation,
+        }
+
     def get_recommendations(self, limit: int = 5) -> List[Dict]:
         """
         Get top trade recommendations.
