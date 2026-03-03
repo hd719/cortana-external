@@ -39,60 +39,60 @@ const statusUi: Record<CronHealthStatus, { icon: string; label: string; classNam
   failed: {
     icon: "❌",
     label: "Failed",
-    className: "bg-red-500/15 text-red-300 border-red-500/30",
+    className: "bg-red-500/15 text-black border-red-500/30",
   },
   late: {
     icon: "⚠️",
     label: "Overdue",
-    className: "bg-amber-500/15 text-amber-300 border-amber-500/30",
+    className: "bg-amber-500/15 text-black border-amber-500/30",
   },
   healthy: {
     icon: "✅",
     label: "Healthy",
-    className: "bg-emerald-500/15 text-emerald-300 border-emerald-500/30",
+    className: "bg-emerald-500/15 text-black border-emerald-500/30",
   },
 };
 
 const deliveryUi: Record<string, { label: string; className: string }> = {
   announce: {
     label: "Announce",
-    className: "bg-sky-500/20 text-sky-100 border-sky-400/40",
+    className: "bg-sky-500/20 text-black border-sky-400/40",
   },
   "manual-send": {
     label: "Manual send",
-    className: "bg-indigo-500/20 text-indigo-100 border-indigo-400/40",
+    className: "bg-indigo-500/20 text-black border-indigo-400/40",
   },
   none: {
     label: "No delivery",
-    className: "bg-zinc-500/20 text-zinc-100 border-zinc-400/40",
+    className: "bg-zinc-500/20 text-black border-zinc-400/40",
   },
 };
 
 const noReplyUi = {
   label: "NO_REPLY expected",
-  className: "bg-zinc-500/20 text-zinc-100 border-zinc-400/40",
+  className: "bg-zinc-500/20 text-black border-zinc-400/40",
   title: "Healthy runs may be silent by contract.",
 };
 
 const channelStatusUi: Record<CronHealthChannelStatus, { label: string; className: string; title: string }> = {
   delivery_required_failed: {
     label: "Delivery required + failed",
-    className: "bg-red-500/15 text-red-300 border-red-500/30",
+    className: "bg-red-500/15 text-black border-red-500/30",
     title: "Job was expected to deliver a message but delivery failed.",
   },
   healthy_silent: {
     label: "Healthy silent",
-    className: "bg-zinc-500/20 text-zinc-100 border-zinc-400/40",
+    className: "bg-zinc-500/20 text-black border-zinc-400/40",
     title: "Silent run is expected by contract.",
   },
   gateway_drain_retry_pending: {
     label: "Gateway drain (retry pending)",
-    className: "bg-amber-500/15 text-amber-300 border-amber-500/30",
+    className: "bg-amber-500/15 text-black border-amber-500/30",
     title: "Failure appears transient during gateway restart/drain.",
   },
   normal: {
     label: "Normal",
-    className: "bg-emerald-500/20 text-emerald-100 border-emerald-400/40",
+    className: "bg-emerald-500/20 text-black border-emerald-400/40",
     title: "No channel delivery anomaly detected.",
   },
 };
@@ -100,17 +100,17 @@ const channelStatusUi: Record<CronHealthChannelStatus, { label: string; classNam
 const actionUi: Record<CronActionRecommendation, { label: string; className: string; title: string }> = {
   watch: {
     label: "Action: Watch",
-    className: "bg-amber-500/15 text-amber-200 border-amber-500/30",
+    className: "bg-amber-500/15 text-black border-amber-500/30",
     title: "Single-interval overdue with no errors. Monitor the next run.",
   },
   "run-now": {
     label: "Action: Run now",
-    className: "bg-sky-500/15 text-sky-200 border-sky-500/30",
+    className: "bg-sky-500/15 text-black border-sky-500/30",
     title: "User-facing overdue job. Trigger an immediate run.",
   },
   investigate: {
     label: "Action: Investigate",
-    className: "bg-red-500/15 text-red-300 border-red-500/30",
+    className: "bg-red-500/15 text-black border-red-500/30",
     title: "Repeated overdue state or errors detected. Investigate before auto-retrying.",
   },
 };
@@ -127,7 +127,7 @@ const getDeliveryUi = (mode: string) => {
   const label = mode?.trim() ? `Delivery: ${mode.trim()}` : "No delivery";
   return {
     label,
-    className: "bg-zinc-500/20 text-zinc-100 border-zinc-400/40",
+    className: "bg-zinc-500/20 text-black border-zinc-400/40",
   };
 };
 
