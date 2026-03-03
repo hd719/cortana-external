@@ -15,6 +15,7 @@ const links = [
   { href: "/feedback", label: "Feedback" },
   { href: "/council", label: "Council" },
   { href: "/fitness", label: "Fitness" },
+  { href: "/docs", label: "Docs" },
 ];
 
 export function MainNav() {
