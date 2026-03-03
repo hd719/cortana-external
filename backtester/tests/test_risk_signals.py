@@ -3,6 +3,7 @@
 from datetime import datetime
 from unittest.mock import MagicMock, patch
 
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -172,3 +173,124 @@ def test_graceful_fallback_when_apis_fail_returns_empty_or_defaults():
 
     assert not history.empty
     assert (history["put_call"] == 1.0).all()
+
+
+def test_put_call_sanity_bounds_clamp_to_neutral_one():
+    """Values outside sanity bounds [0.3, 3.0] are clamped to neutral 1.0."""
+    fetcher = RiskSignalFetcher()
+    series = pd.Series([0.2, 0.3, 1.2, 3.0, 3.1])
+
+    cleaned = fetcher._validate_put_call_series(series)
+    assert cleaned.tolist() == [1.0, 0.3, 1.2, 3.0, 1.0]
+
+
+def test_put_call_history_uses_spy_options_proxy_when_cboe_fails():
+    """When CBOE path is empty, yfinance SPY option-chain proxy should be used."""
+    fetcher = RiskSignalFetcher()
+    idx = pd.date_range("2026-01-01", periods=3, freq="B")
+    proxy = pd.Series([1.1, 1.1, 1.1], index=idx, name="put_call")
+
+    with patch.object(fetcher, "_fetch_put_call_from_cboe", return_value=pd.Series(dtype=float)), patch.object(
+        fetcher, "_fetch_put_call_from_yfinance_options", return_value=proxy
+    ):
+        out = fetcher._fetch_put_call_history(datetime(2026, 1, 1), datetime(2026, 1, 10))
+
+    assert out.equals(proxy)
+
+
+def test_hy_spread_defaults_to_450_when_fred_fails():
+    """HY spread fallback default should be 450 bps when FRED is unavailable."""
+    fetcher = RiskSignalFetcher()
+    idx = pd.date_range("2026-01-01", periods=180, freq="B")
+    vix = pd.Series(np.linspace(20, 30, len(idx)), index=idx, name="vix")
+    spy = pd.Series(np.linspace(400, 420, len(idx)), index=idx, name="spy_close")
+
+    with patch.object(fetcher, "_fetch_vix_history", return_value=vix), patch.object(
+        fetcher, "_fetch_spy_history", return_value=spy
+    ), patch.object(fetcher, "_fetch_fred_series", return_value=pd.Series(dtype=float)), patch.object(
+        fetcher, "_fetch_put_call_history", return_value=pd.Series(dtype=float)
+    ):
+        history = fetcher.get_history(days=30)
+
+    assert (history["hy_spread"] == 450.0).all()
+
+
+def test_fear_proxy_uses_simple_fallback_when_hy_percentile_missing():
+    """Fear proxy should fallback to (vix_percentile + spy_distance_score)/2 when HY percentile is NaN."""
+    fetcher = RiskSignalFetcher()
+    idx = pd.date_range("2026-01-01", periods=220, freq="B")
+    vix = pd.Series(np.linspace(15, 35, len(idx)), index=idx, name="vix")
+    spy = pd.Series(np.linspace(500, 450, len(idx)), index=idx, name="spy_close")
+    pcr = pd.Series([1.0] * len(idx), index=idx, name="put_call")
+
+    def percentile_side_effect(series: pd.Series) -> pd.Series:
+        if series.name == "hy_spread":
+            return pd.Series(np.nan, index=series.index)
+        return RiskSignalFetcher._percentile_series(series)
+
+    with patch.object(fetcher, "_fetch_vix_history", return_value=vix), patch.object(
+        fetcher, "_fetch_spy_history", return_value=spy
+    ), patch.object(fetcher, "_fetch_fred_series", return_value=pd.Series(dtype=float)), patch.object(
+        fetcher, "_fetch_put_call_history", return_value=pcr
+    ), patch.object(fetcher, "_percentile_series", side_effect=percentile_side_effect):
+        history = fetcher.get_history(days=60)
+
+    expected = (history["vix_percentile"] + history["spy_distance_score"]) / 2
+    assert np.allclose(history["fear_greed"].values, expected.values, equal_nan=False)
+
+
+def test_fear_proxy_always_numeric_and_bounded_0_100():
+    """Fear proxy output should always be finite numeric values in [0, 100]."""
+    fetcher = RiskSignalFetcher()
+    idx = pd.date_range("2026-01-01", periods=220, freq="B")
+    vix = pd.Series([np.nan] * len(idx), index=idx, name="vix")
+    spy = pd.Series([np.nan] * len(idx), index=idx, name="spy_close")
+
+    with patch.object(fetcher, "_fetch_vix_history", return_value=vix), patch.object(
+        fetcher, "_fetch_spy_history", return_value=spy
+    ), patch.object(fetcher, "_fetch_fred_series", return_value=pd.Series(dtype=float)), patch.object(
+        fetcher, "_fetch_put_call_history", return_value=pd.Series(dtype=float)
+    ):
+        history = fetcher.get_history(days=20)
+
+    assert history["fear_greed"].notna().all()
+    assert np.isfinite(history["fear_greed"]).all()
+    assert ((history["fear_greed"] >= 0) & (history["fear_greed"] <= 100)).all()
+
+
+def test_get_snapshot_all_keys_present_and_numeric_non_nan():
+    """Snapshot should include expected keys and numeric fields must be real numbers (no NaN)."""
+    fetcher = RiskSignalFetcher()
+    idx = pd.date_range("2026-01-01", periods=12, freq="B")
+    history = pd.DataFrame(
+        {
+            "vix": [22.0] * 12,
+            "put_call": [1.0] * 12,
+            "hy_spread": [450.0] * 12,
+            "fear_greed": [50.0] * 12,
+            "vix_percentile": [55.0] * 12,
+            "hy_spread_percentile": [50.0] * 12,
+            "spy_distance_score": [45.0] * 12,
+        },
+        index=idx,
+    )
+
+    with patch.object(fetcher, "_build_history", return_value=history):
+        snap = fetcher.get_snapshot()
+
+    expected_keys = {
+        "timestamp",
+        "vix",
+        "put_call",
+        "hy_spread",
+        "fear_greed",
+        "vix_percentile",
+        "hy_spread_percentile",
+        "spy_distance_score",
+        "hy_spread_change_10d",
+    }
+    assert expected_keys == set(snap.keys())
+
+    for key in expected_keys - {"timestamp"}:
+        assert isinstance(snap[key], float)
+        assert not np.isnan(snap[key])
