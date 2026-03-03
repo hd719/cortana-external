@@ -6,6 +6,8 @@ import {
   normalizeDeliveryMode,
   isNoReplyExpected,
   deriveChannelStatus,
+  toDisplayStatus,
+  deriveActionRecommendation,
   toScheduleText,
 } from "@/app/api/cron-health/route";
 
@@ -60,6 +62,90 @@ describe("normalizeStatus", () => {
   it("marks healthy when no failures and not late", () => {
     expect(normalizeStatus("completed", 0, false)).toBe("healthy");
     expect(normalizeStatus(undefined, 0, false)).toBe("healthy");
+  });
+});
+
+describe("toDisplayStatus", () => {
+  it("maps legacy late status to overdue for display", () => {
+    expect(toDisplayStatus("late")).toBe("overdue");
+    expect(toDisplayStatus("healthy")).toBe("healthy");
+    expect(toDisplayStatus("failed")).toBe("failed");
+  });
+});
+
+describe("deriveActionRecommendation", () => {
+  it("returns null when not overdue", () => {
+    expect(
+      deriveActionRecommendation({
+        displayStatus: "healthy",
+        overdueIntervals: 0,
+        consecutiveFailures: 0,
+        hasError: false,
+        deliveryMode: "none",
+        noReplyExpected: true,
+      })
+    ).toBeNull();
+  });
+
+  it("returns watch for single-interval overdue with no errors", () => {
+    expect(
+      deriveActionRecommendation({
+        displayStatus: "overdue",
+        overdueIntervals: 1,
+        consecutiveFailures: 0,
+        hasError: false,
+        deliveryMode: "none",
+        noReplyExpected: true,
+      })
+    ).toBe("watch");
+  });
+
+  it("returns run-now for user-facing overdue jobs", () => {
+    expect(
+      deriveActionRecommendation({
+        displayStatus: "overdue",
+        overdueIntervals: 1,
+        consecutiveFailures: 0,
+        hasError: false,
+        deliveryMode: "announce",
+        noReplyExpected: false,
+      })
+    ).toBe("run-now");
+  });
+
+  it("returns investigate when overdue is repeated or errored", () => {
+    expect(
+      deriveActionRecommendation({
+        displayStatus: "overdue",
+        overdueIntervals: 3,
+        consecutiveFailures: 0,
+        hasError: false,
+        deliveryMode: "announce",
+        noReplyExpected: false,
+      })
+    ).toBe("investigate");
+
+    expect(
+      deriveActionRecommendation({
+        displayStatus: "overdue",
+        overdueIntervals: 1,
+        consecutiveFailures: 1,
+        hasError: false,
+        deliveryMode: "announce",
+        noReplyExpected: false,
+      })
+    ).toBe("investigate");
+
+    expect(
+      deriveActionRecommendation({
+        displayStatus: "overdue",
+        overdueIntervals: 1,
+        consecutiveFailures: 0,
+        hasError: true,
+        deliveryMode: "none",
+        noReplyExpected: true,
+      })
+    ).toBe("investigate");
   });
 });
 

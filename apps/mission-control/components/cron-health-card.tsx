@@ -5,6 +5,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 
 type CronHealthStatus = "healthy" | "late" | "failed";
+type CronDisplayStatus = "healthy" | "overdue" | "failed";
+type CronActionRecommendation = "watch" | "run-now" | "investigate";
 
 type CronHealthChannelStatus =
   | "delivery_required_failed"
@@ -18,6 +20,8 @@ type CronHealthItem = {
   last_fire_time: string | null;
   next_fire_time: string | null;
   status: CronHealthStatus;
+  display_status?: CronDisplayStatus;
+  action_recommendation?: CronActionRecommendation | null;
   channel_status?: CronHealthChannelStatus;
   consecutive_failures: number;
   last_duration_sec: number | null;
@@ -39,7 +43,7 @@ const statusUi: Record<CronHealthStatus, { icon: string; label: string; classNam
   },
   late: {
     icon: "⚠️",
-    label: "Late",
+    label: "Overdue",
     className: "bg-amber-500/15 text-amber-300 border-amber-500/30",
   },
   healthy: {
@@ -92,6 +96,30 @@ const channelStatusUi: Record<CronHealthChannelStatus, { label: string; classNam
     title: "No channel delivery anomaly detected.",
   },
 };
+
+const actionUi: Record<CronActionRecommendation, { label: string; className: string; title: string }> = {
+  watch: {
+    label: "Action: Watch",
+    className: "bg-amber-500/15 text-amber-200 border-amber-500/30",
+    title: "Single-interval overdue with no errors. Monitor the next run.",
+  },
+  "run-now": {
+    label: "Action: Run now",
+    className: "bg-sky-500/15 text-sky-200 border-sky-500/30",
+    title: "User-facing overdue job. Trigger an immediate run.",
+  },
+  investigate: {
+    label: "Action: Investigate",
+    className: "bg-red-500/15 text-red-300 border-red-500/30",
+    title: "Repeated overdue state or errors detected. Investigate before auto-retrying.",
+  },
+};
+
+export const getDisplayStatus = (cron: Pick<CronHealthItem, "status" | "display_status">): CronDisplayStatus =>
+  cron.display_status ?? (cron.status === "late" ? "overdue" : cron.status);
+
+export const getActionUi = (recommendation?: CronActionRecommendation | null) =>
+  recommendation ? actionUi[recommendation] : null;
 
 const getDeliveryUi = (mode: string) => {
   const normalized = (mode || "none").trim().toLowerCase();
@@ -223,6 +251,8 @@ export function CronHealthCard() {
         <div className="space-y-3">
           {failedOrLateCrons.map((cron: CronHealthItem) => {
             const status = statusUi[cron.status];
+            const displayStatus = getDisplayStatus(cron);
+            const action = getActionUi(cron.action_recommendation);
             const delivery = getDeliveryUi(cron.delivery_mode);
             const channel = channelStatusUi[cron.channel_status ?? "normal"];
 
@@ -245,6 +275,11 @@ export function CronHealthCard() {
                       <Badge className={channel.className} title={channel.title}>
                         {channel.label}
                       </Badge>
+                      {action && (
+                        <Badge className={action.className} title={action.title}>
+                          {action.label}
+                        </Badge>
+                      )}
                     </div>
                   </div>
                   <Badge className={status.className}>
@@ -271,7 +306,7 @@ export function CronHealthCard() {
                   </div>
                   <div>
                     <p className="text-[10px] uppercase tracking-wide">Status</p>
-                    <p className="font-mono text-foreground">{cron.status}</p>
+                    <p className="font-mono text-foreground">{displayStatus}</p>
                   </div>
                 </div>
 

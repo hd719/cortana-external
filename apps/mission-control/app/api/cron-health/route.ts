@@ -45,6 +45,8 @@ type HealthRow = {
 };
 
 export type CronHealthStatus = "healthy" | "late" | "failed";
+export type CronDisplayStatus = "healthy" | "overdue" | "failed";
+export type CronActionRecommendation = "watch" | "run-now" | "investigate";
 export type CronChannelStatus =
   | "delivery_required_failed"
   | "healthy_silent"
@@ -53,7 +55,7 @@ export type CronChannelStatus =
 
 const JOBS_PATH = path.join(os.homedir(), ".openclaw", "cron", "jobs.json");
 
-const CRON_LATE_MULTIPLIER = 2;
+const CRON_LATE_MULTIPLIER = 1;
 
 export const parseCronIntervalMs = (expr?: string | null) => {
   if (!expr) return null;
@@ -125,6 +127,9 @@ export const normalizeStatus = (
   return "healthy";
 };
 
+export const toDisplayStatus = (status: CronHealthStatus): CronDisplayStatus =>
+  status === "late" ? "overdue" : status;
+
 export const normalizeDeliveryMode = (delivery?: JobDefinition["delivery"]) => {
   const mode = delivery?.mode?.trim();
   return mode ? mode : "none";
@@ -167,6 +172,30 @@ export const deriveChannelStatus = (input: {
   }
 
   return "normal";
+};
+
+export const deriveActionRecommendation = (input: {
+  displayStatus: CronDisplayStatus;
+  overdueIntervals: number;
+  consecutiveFailures: number;
+  hasError: boolean;
+  deliveryMode: string;
+  noReplyExpected: boolean;
+}): CronActionRecommendation | null => {
+  if (input.displayStatus !== "overdue") return null;
+
+  const deliveryMode = (input.deliveryMode || "none").trim().toLowerCase();
+  const userFacing = deliveryMode !== "none" && !input.noReplyExpected;
+
+  if (input.overdueIntervals > 2 || input.consecutiveFailures > 0 || input.hasError) {
+    return "investigate";
+  }
+
+  if (userFacing) {
+    return "run-now";
+  }
+
+  return "watch";
 };
 
 export const toScheduleText = (schedule?: JobSchedule) => {
@@ -242,6 +271,7 @@ export async function GET() {
     const consecutiveFailures = Number(useStateOverDb ? stateFailures : (dbFailures || stateFailures));
 
     const status = normalizeStatus(effectiveStatus, consecutiveFailures, isLate);
+    const displayStatus = toDisplayStatus(status);
 
     const stateDurationSec = typeof job.state?.lastDurationMs === "number"
       ? Number(job.state.lastDurationMs) / 1000
@@ -268,12 +298,25 @@ export async function GET() {
       lastError,
     });
 
+    const overdueIntervals =
+      lastFireMs && expectedIntervalMs ? Math.max(0, Math.floor((now - Number(lastFireMs)) / Number(expectedIntervalMs))) : 0;
+    const actionRecommendation = deriveActionRecommendation({
+      displayStatus,
+      overdueIntervals,
+      consecutiveFailures,
+      hasError: Boolean(lastError),
+      deliveryMode,
+      noReplyExpected,
+    });
+
     return {
       name: job.name,
       schedule: toScheduleText(job.schedule),
       last_fire_time: lastFireMs ? new Date(lastFireMs).toISOString() : null,
       next_fire_time: nextFireMs ? new Date(nextFireMs).toISOString() : null,
       status,
+      display_status: displayStatus,
+      action_recommendation: actionRecommendation,
       channel_status: channelStatus,
       consecutive_failures: consecutiveFailures,
       last_duration_sec: typeof lastDurationSec === "number" ? Number(lastDurationSec) : null,
