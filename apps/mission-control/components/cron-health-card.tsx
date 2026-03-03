@@ -56,21 +56,21 @@ const statusUi: Record<CronHealthStatus, { icon: string; label: string; classNam
 const deliveryUi: Record<string, { label: string; className: string }> = {
   announce: {
     label: "Announce",
-    className: "bg-sky-500/15 text-sky-200 border-sky-500/30",
+    className: "bg-sky-500/20 text-sky-100 border-sky-400/40",
   },
   "manual-send": {
     label: "Manual send",
-    className: "bg-indigo-500/15 text-indigo-200 border-indigo-500/30",
+    className: "bg-indigo-500/20 text-indigo-100 border-indigo-400/40",
   },
   none: {
     label: "No delivery",
-    className: "bg-zinc-500/15 text-zinc-300 border-zinc-500/30",
+    className: "bg-zinc-500/20 text-zinc-100 border-zinc-400/40",
   },
 };
 
 const noReplyUi = {
   label: "NO_REPLY expected",
-  className: "bg-zinc-500/15 text-zinc-200 border-zinc-500/30",
+  className: "bg-zinc-500/20 text-zinc-100 border-zinc-400/40",
   title: "Healthy runs may be silent by contract.",
 };
 
@@ -82,7 +82,7 @@ const channelStatusUi: Record<CronHealthChannelStatus, { label: string; classNam
   },
   healthy_silent: {
     label: "Healthy silent",
-    className: "bg-zinc-500/15 text-zinc-200 border-zinc-500/30",
+    className: "bg-zinc-500/20 text-zinc-100 border-zinc-400/40",
     title: "Silent run is expected by contract.",
   },
   gateway_drain_retry_pending: {
@@ -92,7 +92,7 @@ const channelStatusUi: Record<CronHealthChannelStatus, { label: string; classNam
   },
   normal: {
     label: "Normal",
-    className: "bg-emerald-500/15 text-emerald-300 border-emerald-500/30",
+    className: "bg-emerald-500/20 text-emerald-100 border-emerald-400/40",
     title: "No channel delivery anomaly detected.",
   },
 };
@@ -127,7 +127,7 @@ const getDeliveryUi = (mode: string) => {
   const label = mode?.trim() ? `Delivery: ${mode.trim()}` : "No delivery";
   return {
     label,
-    className: "bg-zinc-500/15 text-zinc-300 border-zinc-500/30",
+    className: "bg-zinc-500/20 text-zinc-100 border-zinc-400/40",
   };
 };
 
