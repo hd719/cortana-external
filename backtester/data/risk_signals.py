@@ -11,9 +11,10 @@ Fetches macro risk indicators used by the Dip Buyer strategy:
 from __future__ import annotations
 
 import io
+import logging
 import os
 from datetime import datetime, timedelta
-from typing import Dict, Optional
+from typing import Dict
 
 import numpy as np
 import pandas as pd
@@ -43,6 +44,7 @@ class RiskSignalFetcher:
         self.spy_symbol = spy_symbol
         self.fred_series = fred_series
         self.fred_api_key = os.getenv(fred_api_key_env)
+        self.logger = logging.getLogger(__name__)
 
     # ---------------------------------------------------------------------
     # Fetch helpers
@@ -92,12 +94,29 @@ class RiskSignalFetcher:
         try:
             response = requests.get(url, params=params, timeout=10)
             response.raise_for_status()
-        except Exception:
+        except Exception as exc:
+            self.logger.warning(
+                "FRED fetch failed for %s: %s. Falling back to neutral HY spread.",
+                series_id,
+                exc,
+            )
             return pd.Series(dtype=float, name=series_id)
 
         payload = response.json()
+        if isinstance(payload, dict) and payload.get("error_code"):
+            self.logger.warning(
+                "FRED API returned error for %s: %s. Falling back to neutral HY spread.",
+                series_id,
+                payload.get("error_message", payload.get("error_code")),
+            )
+            return pd.Series(dtype=float, name=series_id)
+
         observations = payload.get("observations", [])
         if not observations:
+            self.logger.warning(
+                "FRED returned no observations for %s. Falling back to neutral HY spread.",
+                series_id,
+            )
             return pd.Series(dtype=float, name=series_id)
 
         df = pd.DataFrame(observations)
@@ -109,6 +128,21 @@ class RiskSignalFetcher:
         series = df.set_index('date')['value'].dropna()
         series.name = series_id
         series.index = pd.to_datetime(series.index).tz_localize(None)
+        return series
+
+    def _validate_put_call_series(self, series: pd.Series) -> pd.Series:
+        if series.empty:
+            return series
+
+        series = pd.to_numeric(series, errors='coerce')
+        invalid_mask = (series < 0.3) | (series > 3.0)
+        if invalid_mask.any():
+            self.logger.warning(
+                "Put/Call ratio out of sanity bounds [0.3, 3.0] for %d rows; defaulting to neutral 1.0.",
+                int(invalid_mask.sum()),
+            )
+            series = series.mask(invalid_mask, 1.0)
+
         return series
 
     def _extract_put_call_series(self, df: pd.DataFrame) -> pd.Series:
@@ -145,7 +179,7 @@ class RiskSignalFetcher:
         series = pd.Series(values.values, index=dates).dropna()
         series.name = "put_call"
         series.index = pd.to_datetime(series.index).tz_localize(None)
-        return series
+        return self._validate_put_call_series(series)
 
     def _fetch_put_call_from_cboe(self, start: datetime, end: datetime) -> pd.Series:
         endpoints = [
@@ -189,12 +223,44 @@ class RiskSignalFetcher:
 
             series = series[(series.index >= start) & (series.index <= end)]
             if not series.empty:
-                return series
+                return self._validate_put_call_series(series)
 
         return pd.Series(dtype=float, name="put_call")
 
+    def _fetch_put_call_from_yfinance_options(self, start: datetime, end: datetime) -> pd.Series:
+        """Fallback PCR proxy using SPY option chain volume (snapshot-based proxy)."""
+        try:
+            ticker = yf.Ticker(self.spy_symbol)
+            expirations = ticker.options or []
+            if not expirations:
+                return pd.Series(dtype=float, name="put_call")
+
+            put_volume = 0.0
+            call_volume = 0.0
+            for expiry in expirations[:3]:
+                chain = ticker.option_chain(expiry)
+                if chain.puts is not None and not chain.puts.empty:
+                    put_volume += pd.to_numeric(chain.puts.get('volume', 0), errors='coerce').fillna(0).sum()
+                if chain.calls is not None and not chain.calls.empty:
+                    call_volume += pd.to_numeric(chain.calls.get('volume', 0), errors='coerce').fillna(0).sum()
+
+            if call_volume <= 0:
+                return pd.Series(dtype=float, name="put_call")
+
+            ratio = float(put_volume / call_volume)
+            ratio = self._validate_put_call_series(pd.Series([ratio])).iloc[0]
+            idx = pd.date_range(start=start, end=end, freq='B')
+            return pd.Series(ratio, index=idx, name="put_call")
+        except Exception as exc:
+            self.logger.warning("yfinance option-chain PCR proxy failed: %s", exc)
+            return pd.Series(dtype=float, name="put_call")
+
     def _fetch_put_call_history(self, start: datetime, end: datetime) -> pd.Series:
         series = self._fetch_put_call_from_cboe(start, end)
+        if not series.empty:
+            return series
+
+        series = self._fetch_put_call_from_yfinance_options(start, end)
         if not series.empty:
             return series
 
@@ -202,7 +268,7 @@ class RiskSignalFetcher:
             hist = self._fetch_yfinance_history(symbol, start, end)
             if hist.empty or 'Close' not in hist.columns:
                 continue
-            series = hist['Close'].dropna().rename("put_call")
+            series = self._validate_put_call_series(hist['Close'].dropna().rename("put_call"))
             if not series.empty:
                 return series
 
@@ -250,19 +316,28 @@ class RiskSignalFetcher:
 
         df['vix'] = vix.reindex(df.index).ffill()
         df['spy_close'] = spy.reindex(df.index).ffill()
-        df['hy_spread'] = hy_spread.reindex(df.index).ffill()
+
+        if hy_spread.empty:
+            df['hy_spread'] = 450.0
+        else:
+            df['hy_spread'] = hy_spread.reindex(df.index).ffill().fillna(450.0)
 
         if put_call.empty:
             df['put_call'] = 1.0
         else:
-            df['put_call'] = put_call.reindex(df.index).ffill()
+            df['put_call'] = self._validate_put_call_series(put_call.reindex(df.index).ffill()).fillna(1.0)
 
         df['vix_percentile'] = self._percentile_series(df['vix'])
         df['hy_spread_percentile'] = self._percentile_series(df['hy_spread'])
         df['spy_distance_score'] = self._spy_distance_score(df['spy_close'])
-        df['fear_greed'] = (
+
+        composite_fear = (
             df['vix_percentile'] + df['hy_spread_percentile'] + df['spy_distance_score']
         ) / 3
+        simple_fear = (df['vix_percentile'] + df['spy_distance_score']) / 2
+        df['fear_greed'] = composite_fear.where(composite_fear.notna(), simple_fear)
+        df['fear_greed'] = pd.to_numeric(df['fear_greed'], errors='coerce').clip(lower=0, upper=100)
+        df['fear_greed'] = df['fear_greed'].fillna(50.0)
 
         return df.tail(days)
 

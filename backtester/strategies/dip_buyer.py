@@ -26,7 +26,7 @@ Scoring (0-12):
     - Spread widening > 75 bps / 10d: -1 (floor at 0)
 
 Thresholds:
-  - BUY: >= 8
+  - BUY: >= 7
   - WATCH: >= 6
 """
 
@@ -34,7 +34,6 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from typing import Dict
 
 import pandas as pd
 
@@ -49,7 +48,7 @@ from data.risk_signals import RiskSignalFetcher
 
 DIPBUYER_CONFIG = {
     "score_thresholds": {
-        "buy": 8,
+        "buy": 7,
         "watch": 6,
     },
     "quality": {
@@ -145,43 +144,57 @@ class DipBuyerStrategy(Strategy):
     def _volatility_score(self, risk: pd.DataFrame) -> pd.Series:
         cfg = DIPBUYER_CONFIG["volatility"]
 
-        vix = risk['vix']
-        put_call = risk['put_call']
-        fear = risk['fear_greed']
+        vix = pd.to_numeric(risk['vix'], errors='coerce')
+        put_call = pd.to_numeric(risk['put_call'], errors='coerce')
+        fear = pd.to_numeric(risk['fear_greed'], errors='coerce')
 
         vix_score = pd.Series(0, index=risk.index)
-        vix_score[(vix >= cfg["vix_strong"][0]) & (vix <= cfg["vix_strong"][1])] = 2
+        vix_available = vix.notna()
+        vix_score[vix_available & (vix >= cfg["vix_strong"][0]) & (vix <= cfg["vix_strong"][1])] = 2
 
         soft_ranges = cfg["vix_soft"]
         vix_score[
-            ((vix >= soft_ranges[0][0]) & (vix < soft_ranges[0][1])) |
-            ((vix > soft_ranges[1][0]) & (vix <= soft_ranges[1][1]))
+            vix_available & (
+                ((vix >= soft_ranges[0][0]) & (vix < soft_ranges[0][1])) |
+                ((vix > soft_ranges[1][0]) & (vix <= soft_ranges[1][1]))
+            )
         ] = 1
 
+        # If PCR/Fear are NaN, skip those sub-scores (do not force penalties).
         put_call_score = pd.Series(0, index=risk.index)
-        put_call_score[(put_call >= cfg["put_call_range"][0]) & (put_call <= cfg["put_call_range"][1])] = 1
+        put_call_available = put_call.notna()
+        put_call_score[
+            put_call_available
+            & (put_call >= cfg["put_call_range"][0])
+            & (put_call <= cfg["put_call_range"][1])
+        ] = 1
 
         fear_score = pd.Series(0, index=risk.index)
-        fear_score[fear <= cfg["fear_proxy_max"]] = 1
+        fear_available = fear.notna()
+        fear_score[fear_available & (fear <= cfg["fear_proxy_max"])] = 1
 
         return vix_score + put_call_score + fear_score
 
     def _credit_score(self, risk: pd.DataFrame) -> pd.Series:
         cfg = DIPBUYER_CONFIG["credit"]
-        hy_spread = risk['hy_spread']
-        widening = risk['hy_spread_change_10d'] > cfg["spread_widening_bps"]
+        hy_spread = pd.to_numeric(risk['hy_spread'], errors='coerce')
 
+        # Neutral when HY is unavailable.
         credit_score = pd.Series(0, index=risk.index)
+        credit_score[hy_spread.isna()] = 2
+
         credit_score[hy_spread < cfg["hy_spread_strong"]] = 4
         credit_score[(hy_spread >= cfg["hy_spread_strong"]) & (hy_spread < cfg["hy_spread_moderate"])] = 2
         credit_score[(hy_spread >= cfg["hy_spread_moderate"]) & (hy_spread < cfg["hy_spread_weak"])] = 1
 
+        widening = risk['hy_spread_change_10d'] > cfg["spread_widening_bps"]
+        widening = widening & hy_spread.notna()
         credit_score = credit_score.where(~widening, credit_score - 1)
         credit_score = credit_score.clip(lower=0)
 
         return credit_score
 
-    def generate_signals(self, data: pd.DataFrame) -> pd.Series:
+    def generate_signals(self, data: pd.DataFrame, verbose: bool = False) -> pd.Series:
         """
         Generate buy/sell signals for the Dip Buyer strategy.
         """
@@ -207,21 +220,20 @@ class DipBuyerStrategy(Strategy):
         risk.index = data.index
         risk = risk.ffill().bfill()
 
-        # Fill missing values with neutral defaults
+        # Fill missing values with neutral defaults (except where NaN semantics are intentional in scoring).
         risk = risk.fillna({
-            'vix': 20.0,
             'put_call': 1.0,
-            'hy_spread': 500.0,
+            'hy_spread': 450.0,
             'fear_greed': 50.0,
         })
-        risk['hy_spread_change_10d'] = risk['hy_spread'].diff(10).fillna(0)
+        risk['hy_spread_change_10d'] = pd.to_numeric(risk['hy_spread'], errors='coerce').diff(10).fillna(0)
 
         v_score = self._volatility_score(risk)
         c_score = self._credit_score(risk)
 
         total_score = q_score + v_score + c_score
 
-        credit_veto = risk['hy_spread'] > DIPBUYER_CONFIG["credit"]["hy_spread_weak"]
+        credit_veto = pd.to_numeric(risk['hy_spread'], errors='coerce') > DIPBUYER_CONFIG["credit"]["hy_spread_weak"]
 
         buy_condition = market_active & (total_score >= self.min_buy_score) & (~credit_veto)
         sell_condition = (not market_active) | credit_veto
@@ -242,6 +254,21 @@ class DipBuyerStrategy(Strategy):
             'Market_Active': market_active,
             'Credit_Veto': credit_veto,
         }, index=data.index)
+
+        if verbose:
+            latest = self._scores.iloc[-1]
+            print(f"[DipBuyer] Regime: {market.regime.value} | Market Active: {market_active}")
+            print(
+                "[DipBuyer] Risk Snapshot: "
+                f"VIX={latest['VIX']:.2f}, Put/Call={latest['PutCall']:.2f}, "
+                f"HY={latest['HY_Spread']:.2f}, Fear={latest['FearProxy']:.2f}"
+            )
+            print(
+                "[DipBuyer] Score Breakdown (latest): "
+                f"Q={latest['Q']}, V={latest['V']}, C={latest['C']}, Total={latest['Total']}"
+            )
+            print("[DipBuyer] Total Score Distribution:")
+            print(self._scores['Total'].value_counts().sort_index().to_string())
 
         return signals
 

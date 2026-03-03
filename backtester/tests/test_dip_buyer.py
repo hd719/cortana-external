@@ -180,3 +180,165 @@ def test_exit_rules_and_credit_veto_force_sell(price_data):
     assert DIPBUYER_CONFIG["exits"]["trim_1"] == pytest.approx(0.08)
     assert DIPBUYER_CONFIG["exits"]["trim_2"] == pytest.approx(0.12)
     assert (signals == -1).all(), "Credit veto (HY>650) should trigger full exit"
+
+
+def test_buy_threshold_default_is_7():
+    """Default buy threshold should reflect calibrated value of 7."""
+    with patch("strategies.dip_buyer.FundamentalsFetcher"), patch("strategies.dip_buyer.RiskSignalFetcher"), patch(
+        "strategies.dip_buyer.MarketRegimeDetector"
+    ):
+        strategy = DipBuyerStrategy()
+
+    assert strategy.min_buy_score == 7
+
+
+def test_nan_vix_results_in_zero_v_score_component():
+    """NaN VIX contributes 0 points while other V sub-scores can still contribute."""
+    idx = pd.date_range("2026-01-01", periods=1, freq="B")
+    strategy = _build_strategy(MarketRegime.CORRECTION, _risk_history(idx))
+    risk = pd.DataFrame(
+        {
+            "vix": [float("nan")],
+            "put_call": [1.0],
+            "fear_greed": [30.0],
+            "hy_spread": [430.0],
+            "hy_spread_change_10d": [0.0],
+        },
+        index=idx,
+    )
+
+    v_score = strategy._volatility_score(risk)
+    assert v_score.iloc[0] == 2  # PCR + fear only; no VIX points
+
+
+def test_nan_hy_spread_gives_neutral_credit_score_2():
+    """NaN HY spread should map to neutral credit score of 2."""
+    idx = pd.date_range("2026-01-01", periods=1, freq="B")
+    strategy = _build_strategy(MarketRegime.CORRECTION, _risk_history(idx))
+    risk = pd.DataFrame(
+        {
+            "hy_spread": [float("nan")],
+            "hy_spread_change_10d": [0.0],
+            "vix": [25.0],
+            "put_call": [1.0],
+            "fear_greed": [30.0],
+        },
+        index=idx,
+    )
+
+    c_score = strategy._credit_score(risk)
+    assert c_score.iloc[0] == 2
+
+
+def test_nan_pcr_subscore_skipped_does_not_block_volatility_score():
+    """NaN put/call should be skipped (0 points) without forcing penalties."""
+    idx = pd.date_range("2026-01-01", periods=1, freq="B")
+    strategy = _build_strategy(MarketRegime.CORRECTION, _risk_history(idx))
+    risk = pd.DataFrame(
+        {
+            "vix": [25.0],
+            "put_call": [float("nan")],
+            "fear_greed": [30.0],
+            "hy_spread": [430.0],
+            "hy_spread_change_10d": [0.0],
+        },
+        index=idx,
+    )
+
+    v_score = strategy._volatility_score(risk)
+    assert v_score.iloc[0] == 3  # VIX strong + fear; PCR skipped
+
+
+def test_nan_fear_subscore_skipped_in_volatility_score():
+    """NaN fear should be skipped (0 points) while other volatility inputs still score."""
+    idx = pd.date_range("2026-01-01", periods=1, freq="B")
+    strategy = _build_strategy(MarketRegime.CORRECTION, _risk_history(idx))
+    risk = pd.DataFrame(
+        {
+            "vix": [25.0],
+            "put_call": [1.0],
+            "fear_greed": [float("nan")],
+            "hy_spread": [430.0],
+            "hy_spread_change_10d": [0.0],
+        },
+        index=idx,
+    )
+
+    v_score = strategy._volatility_score(risk)
+    assert v_score.iloc[0] == 3  # VIX strong + PCR; fear skipped
+
+
+def test_verbose_true_outputs_breakdown_without_crashing(price_data, capsys):
+    """Verbose mode should execute safely and print diagnostics."""
+    strategy = _build_strategy(MarketRegime.CORRECTION, _risk_history(price_data.index, hy_spread=450.0))
+
+    with _patch_fillna_method_compat(), patch(
+        "strategies.dip_buyer.rsi", return_value=pd.Series([30] * len(price_data), index=price_data.index)
+    ):
+        strategy.generate_signals(price_data, verbose=True)
+
+    out = capsys.readouterr().out
+    assert "[DipBuyer] Regime:" in out
+    assert "Score Breakdown" in out
+
+
+def test_total_score_7_generates_buy_in_correction_regime(price_data):
+    """With Q=3, V=2, C=2 (total 7), strategy should emit BUY in correction regime."""
+    risk_df = pd.DataFrame(
+        {
+            "vix": [25.0] * len(price_data),
+            "put_call": [1.5] * len(price_data),  # out of scoring range
+            "hy_spread": [500.0] * len(price_data),
+            "fear_greed": [40.0] * len(price_data),  # above fear threshold; no fear point
+        },
+        index=price_data.index,
+    )
+    strategy = _build_strategy(
+        MarketRegime.CORRECTION,
+        risk_df,
+        fundamentals={"eps_growth": 25, "revenue_growth": 0},  # RSI 2 + EPS 1 + REV 0 = Q3
+    )
+
+    with _patch_fillna_method_compat(), patch(
+        "strategies.dip_buyer.rsi", return_value=pd.Series([30] * len(price_data), index=price_data.index)
+    ):
+        signals = strategy.generate_signals(price_data)
+
+    assert (signals == 1).all()
+
+
+def test_threshold_7_allows_signal_where_threshold_8_does_not(price_data):
+    """Calibrated threshold 7 should buy while threshold 8 should not for same 7-point setup."""
+    risk_df = pd.DataFrame(
+        {
+            "vix": [25.0] * len(price_data),
+            "put_call": [1.5] * len(price_data),
+            "hy_spread": [500.0] * len(price_data),
+            "fear_greed": [40.0] * len(price_data),
+        },
+        index=price_data.index,
+    )
+    s7 = _build_strategy(
+        MarketRegime.CORRECTION,
+        risk_df,
+        fundamentals={"eps_growth": 25, "revenue_growth": 0},
+    )
+    s8 = _build_strategy(
+        MarketRegime.CORRECTION,
+        risk_df,
+        fundamentals={"eps_growth": 25, "revenue_growth": 0},
+    )
+    s8.min_buy_score = 8
+
+    with _patch_fillna_method_compat(), patch(
+        "strategies.dip_buyer.rsi", return_value=pd.Series([30] * len(price_data), index=price_data.index)
+    ):
+        signals7 = s7.generate_signals(price_data)
+
+    with _patch_fillna_method_compat(), patch(
+        "strategies.dip_buyer.rsi", return_value=pd.Series([30] * len(price_data), index=price_data.index)
+    ):
+        signals8 = s8.generate_signals(price_data)
+
+    assert (signals7 == 1).all()
+    assert (signals8 != 1).all()
