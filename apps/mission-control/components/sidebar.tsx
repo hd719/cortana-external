@@ -13,12 +13,10 @@ import {
   FileText,
   GitBranch,
   LayoutDashboard,
-  Menu,
   MessageCircle,
   Play,
   ShieldCheck,
   Users,
-  X,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -42,7 +40,6 @@ const links = [
 export function Sidebar() {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
-  const [mobileOpen, setMobileOpen] = useState(false);
 
   useEffect(() => {
     const stored = localStorage.getItem(STORAGE_KEY);
@@ -55,56 +52,25 @@ export function Sidebar() {
     localStorage.setItem(STORAGE_KEY, String(collapsed));
   }, [collapsed]);
 
-  useEffect(() => {
-    setMobileOpen(false);
-  }, [pathname]);
-
   const desktopWidthClass = collapsed ? "md:w-16" : "md:w-60";
 
   return (
     <>
-      <div className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-border bg-background px-4 md:hidden">
-        <button
-          type="button"
-          onClick={() => setMobileOpen(true)}
-          className="rounded-md p-2 text-foreground transition-colors hover:bg-muted"
-          aria-label="Open navigation"
-        >
-          <Menu className="h-6 w-6" />
-        </button>
-        <div className="flex items-center gap-2">
-          <div className="rounded-md bg-primary/10 px-2.5 py-1 text-sm font-semibold text-foreground">
-            Mission Control
-          </div>
-        </div>
-      </div>
-
-      <div className={cn("hidden shrink-0 transition-all duration-300 md:block", desktopWidthClass)} />
+      <div className={cn("shrink-0 w-16 transition-all duration-300", desktopWidthClass)} />
 
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-40 flex max-md:w-60 flex-col overflow-hidden border-r border-border bg-background transition-transform duration-300",
-          desktopWidthClass,
-          mobileOpen
-            ? "max-md:translate-x-0 max-md:visible"
-            : "max-md:-translate-x-full max-md:invisible max-md:pointer-events-none md:translate-x-0 md:visible"
+          "fixed inset-y-0 left-0 z-40 flex w-16 flex-col overflow-hidden border-r border-border bg-background transition-all duration-300",
+          desktopWidthClass
         )}
       >
-        <div className={cn("flex h-14 items-center border-b border-border px-4", collapsed && "md:justify-center md:px-2")}>
+        <div className={cn("flex h-14 items-center border-b border-border px-2 md:px-4", collapsed ? "justify-center md:px-2" : "justify-start")}>
           <div className="flex items-center gap-2 overflow-hidden">
             <div className="rounded-md bg-primary/10 px-2.5 py-1 text-sm font-semibold text-foreground">
               {!collapsed ? "Mission Control" : "MC"}
             </div>
             {!collapsed ? <Badge variant="outline" className="hidden md:inline-flex">v1</Badge> : null}
           </div>
-          <button
-            type="button"
-            onClick={() => setMobileOpen(false)}
-            className="ml-auto rounded-md p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground md:hidden"
-            aria-label="Close navigation"
-          >
-            <X className="h-5 w-5" />
-          </button>
         </div>
 
         <nav className="flex-1 overflow-y-auto p-3">
@@ -122,13 +88,14 @@ export function Sidebar() {
                   href={link.href}
                   title={collapsed ? link.label : undefined}
                   className={cn(
-                    "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
+                    "flex items-center gap-3 rounded-md px-2 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground justify-center md:px-3",
                     isActive && "bg-primary/10 text-foreground",
-                    collapsed && "justify-center px-2"
+                    collapsed && "md:justify-center md:px-2",
+                    !collapsed && "md:justify-start"
                   )}
                 >
                   <Icon className="h-4 w-4 shrink-0" />
-                  <span className={cn("truncate", collapsed && "hidden")}>{link.label}</span>
+                  <span className={cn("truncate hidden md:inline", collapsed && "md:hidden")}>{link.label}</span>
                 </Link>
               );
             })}
@@ -151,15 +118,6 @@ export function Sidebar() {
           </button>
         </div>
       </aside>
-
-      {mobileOpen ? (
-        <button
-          type="button"
-          aria-label="Close navigation backdrop"
-          className="fixed inset-0 z-30 bg-black/50 md:hidden"
-          onClick={() => setMobileOpen(false)}
-        />
-      ) : null}
     </>
   );
 }
