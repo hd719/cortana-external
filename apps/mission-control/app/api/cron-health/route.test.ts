@@ -3,6 +3,7 @@ import {
   parseCronIntervalMs,
   getExpectedIntervalMs,
   normalizeStatus,
+  isCronLate,
   normalizeDeliveryMode,
   isNoReplyExpected,
   deriveChannelStatus,
@@ -62,6 +63,42 @@ describe("normalizeStatus", () => {
   it("marks healthy when no failures and not late", () => {
     expect(normalizeStatus("completed", 0, false)).toBe("healthy");
     expect(normalizeStatus(undefined, 0, false)).toBe("healthy");
+  });
+});
+
+describe("isCronLate", () => {
+  it("treats future next run as healthy when no failures", () => {
+    const now = Date.UTC(2026, 0, 1, 12, 0, 0);
+    const isLate = isCronLate({
+      now,
+      lastFireMs: now - 10 * 60_000,
+      nextFireMs: now + 5 * 60_000,
+      expectedIntervalMs: 60_000,
+      status: "completed",
+      consecutiveFailures: 0,
+    });
+    expect(isLate).toBe(false);
+
+    const status = normalizeStatus("completed", 0, isLate);
+    expect(status).toBe("healthy");
+    expect(toDisplayStatus(status)).toBe("healthy");
+  });
+
+  it("marks overdue when past due beyond tolerance", () => {
+    const now = Date.UTC(2026, 0, 1, 12, 0, 0);
+    const isLate = isCronLate({
+      now,
+      lastFireMs: now - 3 * 60_000,
+      nextFireMs: now - 2 * 60_000,
+      expectedIntervalMs: 60_000,
+      status: "completed",
+      consecutiveFailures: 0,
+    });
+    expect(isLate).toBe(true);
+
+    const status = normalizeStatus("completed", 0, isLate);
+    expect(status).toBe("late");
+    expect(toDisplayStatus(status)).toBe("overdue");
   });
 });
 

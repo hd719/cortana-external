@@ -107,14 +107,17 @@ export const getExpectedIntervalMs = (schedule?: JobSchedule) => {
   return null;
 };
 
+const isFailedLikeStatus = (status: string | null | undefined) => {
+  const value = (status || "").toLowerCase();
+  return value === "failed" || value === "error" || value === "timeout" || value === "stale";
+};
+
 export const normalizeStatus = (
   status: string | null | undefined,
   consecutiveFailures: number,
   isLate: boolean
 ): CronHealthStatus => {
-  const value = (status || "").toLowerCase();
-  const explicitlyFailed =
-    value === "failed" || value === "error" || value === "timeout" || value === "stale";
+  const explicitlyFailed = isFailedLikeStatus(status);
 
   if (explicitlyFailed || consecutiveFailures > 0) {
     return "failed";
@@ -125,6 +128,25 @@ export const normalizeStatus = (
   }
 
   return "healthy";
+};
+
+export const isCronLate = (input: {
+  now: number;
+  lastFireMs: number | null;
+  nextFireMs: number | null;
+  expectedIntervalMs: number | null;
+  status: string | null;
+  consecutiveFailures: number;
+}) => {
+  const { now, lastFireMs, nextFireMs, expectedIntervalMs, status, consecutiveFailures } = input;
+  if (!lastFireMs || !expectedIntervalMs) return false;
+
+  const hasFailures = consecutiveFailures > 0 || isFailedLikeStatus(status);
+  if (typeof nextFireMs === "number" && nextFireMs > now && !hasFailures) {
+    return false;
+  }
+
+  return now - Number(lastFireMs) > Number(expectedIntervalMs) * CRON_LATE_MULTIPLIER;
 };
 
 export const toDisplayStatus = (status: CronHealthStatus): CronDisplayStatus =>
@@ -256,11 +278,6 @@ export async function GET() {
     const lastFireMs = stateLastFire ?? dbLastFire;
     const useStateOverDb = stateLastFire != null;
 
-    const expectedIntervalMs = getExpectedIntervalMs(job.schedule);
-    const isLate =
-      Boolean(lastFireMs && expectedIntervalMs) &&
-      now - Number(lastFireMs) > Number(expectedIntervalMs) * CRON_LATE_MULTIPLIER;
-
     // Use the most recent source for status too
     const stateStatus = job.state?.lastStatus ?? null;
     const dbStatus = row?.status ?? null;
@@ -269,6 +286,17 @@ export async function GET() {
     const stateFailures = job.state?.consecutiveErrors ?? 0;
     const dbFailures = row?.consecutive_failures ?? 0;
     const consecutiveFailures = Number(useStateOverDb ? stateFailures : (dbFailures || stateFailures));
+
+    const expectedIntervalMs = getExpectedIntervalMs(job.schedule);
+    const nextFireMs = job.state?.nextRunAtMs ?? null;
+    const isLate = isCronLate({
+      now,
+      lastFireMs,
+      nextFireMs,
+      expectedIntervalMs,
+      status: effectiveStatus,
+      consecutiveFailures,
+    });
 
     const status = normalizeStatus(effectiveStatus, consecutiveFailures, isLate);
     const displayStatus = toDisplayStatus(status);
@@ -282,8 +310,6 @@ export async function GET() {
     const stateError = job.state?.lastError ?? null;
     const dbError = row?.last_error ?? null;
     const lastError = useStateOverDb ? (stateError ?? dbError) : (dbError ?? stateError);
-
-    const nextFireMs = job.state?.nextRunAtMs ?? null;
 
     const deliveryMode = normalizeDeliveryMode(job.delivery);
     const noReplyExpected = isNoReplyExpected(job.delivery);
