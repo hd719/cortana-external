@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
+  Activity,
   Bot,
   Brain,
   ChevronLeft,
@@ -29,6 +30,7 @@ const STORAGE_KEY = "mc-sidebar-collapsed";
 
 const links = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/system-stats", label: "System Stats", icon: Activity },
   { href: "/task-board", label: "Task Board", icon: ClipboardList },
   { href: "/memories", label: "Memories", icon: Brain },
   { href: "/agents", label: "Agents", icon: Bot },

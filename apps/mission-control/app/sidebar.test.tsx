@@ -23,10 +23,12 @@ vi.mock("next/link", () => ({
 
 const NAV_LABELS = [
   "Dashboard",
+  "System Stats",
   "Task Board",
   "Memories",
   "Agents",
   "Jobs & Runs",
+  "Cron Jobs",
   "Decision Traces",
   "Approvals",
   "Feedback",
@@ -40,10 +42,12 @@ const NAV_LABELS = [
 
 const ICON_CLASSES = [
   ".lucide-layout-dashboard",
+  ".lucide-activity",
   ".lucide-clipboard-list",
   ".lucide-brain",
   ".lucide-bot",
   ".lucide-play",
+  ".lucide-clock",
   ".lucide-git-branch",
   ".lucide-shield-check",
   ".lucide-message-circle",
