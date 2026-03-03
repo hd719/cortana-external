@@ -26,6 +26,8 @@ type JobDefinition = {
     lastError?: string;
     consecutiveErrors?: number;
     lastDurationMs?: number;
+    lastDeliveryStatus?: string;
+    lastDelivered?: boolean;
   };
 };
 
@@ -43,6 +45,11 @@ type HealthRow = {
 };
 
 export type CronHealthStatus = "healthy" | "late" | "failed";
+export type CronChannelStatus =
+  | "delivery_required_failed"
+  | "healthy_silent"
+  | "gateway_drain_retry_pending"
+  | "normal";
 
 const JOBS_PATH = path.join(os.homedir(), ".openclaw", "cron", "jobs.json");
 
@@ -127,6 +134,39 @@ export const isNoReplyExpected = (delivery?: JobDefinition["delivery"]) => {
   const target = delivery?.to;
   if (!target) return false;
   return String(target).trim().toUpperCase() === "NO_REPLY";
+};
+
+const isGatewayDrainError = (error: string | null | undefined) =>
+  (error || "").toLowerCase().includes("gatewaydrainingerror");
+
+export const deriveChannelStatus = (input: {
+  status: CronHealthStatus;
+  deliveryMode: string;
+  noReplyExpected: boolean;
+  lastDeliveryStatus?: string | null;
+  lastDelivered?: boolean | null;
+  lastError?: string | null;
+}): CronChannelStatus => {
+  const deliveryMode = (input.deliveryMode || "none").trim().toLowerCase();
+
+  if (input.status === "failed" && isGatewayDrainError(input.lastError)) {
+    return "gateway_drain_retry_pending";
+  }
+
+  const deliveryRequired = deliveryMode !== "none" && !input.noReplyExpected;
+  const deliveryFailed =
+    input.lastDelivered === false ||
+    ((input.lastDeliveryStatus || "").trim().toLowerCase() === "not-delivered");
+
+  if (deliveryRequired && deliveryFailed) {
+    return "delivery_required_failed";
+  }
+
+  if (input.status === "healthy" && (input.noReplyExpected || deliveryMode === "none")) {
+    return "healthy_silent";
+  }
+
+  return "normal";
 };
 
 export const toScheduleText = (schedule?: JobSchedule) => {
@@ -217,6 +257,16 @@ export async function GET() {
 
     const deliveryMode = normalizeDeliveryMode(job.delivery);
     const noReplyExpected = isNoReplyExpected(job.delivery);
+    const lastDeliveryStatus = job.state?.lastDeliveryStatus ?? null;
+    const lastDelivered = typeof job.state?.lastDelivered === "boolean" ? job.state.lastDelivered : null;
+    const channelStatus = deriveChannelStatus({
+      status,
+      deliveryMode,
+      noReplyExpected,
+      lastDeliveryStatus,
+      lastDelivered,
+      lastError,
+    });
 
     return {
       name: job.name,
@@ -224,6 +274,7 @@ export async function GET() {
       last_fire_time: lastFireMs ? new Date(lastFireMs).toISOString() : null,
       next_fire_time: nextFireMs ? new Date(nextFireMs).toISOString() : null,
       status,
+      channel_status: channelStatus,
       consecutive_failures: consecutiveFailures,
       last_duration_sec: typeof lastDurationSec === "number" ? Number(lastDurationSec) : null,
       last_error: status === "healthy" ? null : lastError,

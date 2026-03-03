@@ -6,12 +6,19 @@ import { Badge } from "@/components/ui/badge";
 
 type CronHealthStatus = "healthy" | "late" | "failed";
 
+type CronHealthChannelStatus =
+  | "delivery_required_failed"
+  | "healthy_silent"
+  | "gateway_drain_retry_pending"
+  | "normal";
+
 type CronHealthItem = {
   name: string;
   schedule: string;
   last_fire_time: string | null;
   next_fire_time: string | null;
   status: CronHealthStatus;
+  channel_status?: CronHealthChannelStatus;
   consecutive_failures: number;
   last_duration_sec: number | null;
   last_error: string | null;
@@ -61,6 +68,29 @@ const noReplyUi = {
   label: "NO_REPLY expected",
   className: "bg-zinc-500/15 text-zinc-200 border-zinc-500/30",
   title: "Healthy runs may be silent by contract.",
+};
+
+const channelStatusUi: Record<CronHealthChannelStatus, { label: string; className: string; title: string }> = {
+  delivery_required_failed: {
+    label: "Delivery required + failed",
+    className: "bg-red-500/15 text-red-300 border-red-500/30",
+    title: "Job was expected to deliver a message but delivery failed.",
+  },
+  healthy_silent: {
+    label: "Healthy silent",
+    className: "bg-zinc-500/15 text-zinc-200 border-zinc-500/30",
+    title: "Silent run is expected by contract.",
+  },
+  gateway_drain_retry_pending: {
+    label: "Gateway drain (retry pending)",
+    className: "bg-amber-500/15 text-amber-300 border-amber-500/30",
+    title: "Failure appears transient during gateway restart/drain.",
+  },
+  normal: {
+    label: "Normal",
+    className: "bg-emerald-500/15 text-emerald-300 border-emerald-500/30",
+    title: "No channel delivery anomaly detected.",
+  },
 };
 
 const getDeliveryUi = (mode: string) => {
@@ -194,6 +224,7 @@ export function CronHealthCard() {
           {failedOrLateCrons.map((cron: CronHealthItem) => {
             const status = statusUi[cron.status];
             const delivery = getDeliveryUi(cron.delivery_mode);
+            const channel = channelStatusUi[cron.channel_status ?? "normal"];
 
             return (
               <div
@@ -211,6 +242,9 @@ export function CronHealthCard() {
                           {noReplyUi.label}
                         </Badge>
                       )}
+                      <Badge className={channel.className} title={channel.title}>
+                        {channel.label}
+                      </Badge>
                     </div>
                   </div>
                   <Badge className={status.className}>
@@ -265,6 +299,7 @@ export function CronHealthCard() {
                 <div className="border-t">
                   {healthyCrons.map((cron: CronHealthItem) => {
                     const delivery = getDeliveryUi(cron.delivery_mode);
+                    const channel = channelStatusUi[cron.channel_status ?? "normal"];
 
                     return (
                       <div
@@ -280,6 +315,9 @@ export function CronHealthCard() {
                                 {noReplyUi.label}
                               </Badge>
                             )}
+                            <Badge className={channel.className} title={channel.title}>
+                              {channel.label}
+                            </Badge>
                           </div>
                         </div>
                       <p className="font-mono text-muted-foreground">
