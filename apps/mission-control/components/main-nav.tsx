@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 const links = [
   { href: "/", label: "Dashboard" },
   { href: "/task-board", label: "Task Board" },
+  { href: "/memories", label: "Memories" },
   { href: "/agents", label: "Agents" },
   { href: "/jobs", label: "Jobs & Runs" },
   { href: "/decisions", label: "Decision Traces" },
