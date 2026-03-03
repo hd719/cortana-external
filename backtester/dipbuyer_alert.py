@@ -16,6 +16,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from advisor import TradingAdvisor
+from data.x_sentiment import XSentimentAnalyzer
 from strategies.dip_buyer import DIPBUYER_CONFIG
 
 
@@ -64,8 +65,19 @@ def _macro_gate_line(snapshot: dict) -> str:
     )
 
 
+def _sentiment_tag(sentiment: str) -> str:
+    mapping = {
+        "VERY_BEARISH": "🐦 Contrarian ✅",
+        "BEARISH": "🐦 Bearish",
+        "NEUTRAL": "🐦 Neutral",
+        "BULLISH": "🐦 Caution ⚠️",
+    }
+    return mapping.get(sentiment, "")
+
+
 def format_alert(limit: int = 8, min_score: int = 6) -> str:
     advisor = TradingAdvisor()
+    sentiment_analyzer = XSentimentAnalyzer()
 
     market = _run_quiet(advisor.get_market_status, True)
     snapshot = _run_quiet(advisor.risk_fetcher.get_snapshot)
@@ -90,12 +102,17 @@ def format_alert(limit: int = 8, min_score: int = 6) -> str:
         return "\n".join(lines)
 
     candidates = []
+    watch_threshold = DIPBUYER_CONFIG["score_thresholds"]["watch"]
+    sentiment_checked = 0
+    contrarian_count = 0
+
     for _, row in scan_df.head(limit).iterrows():
         symbol = row["symbol"]
         analysis = _run_quiet(advisor.analyze_dip_stock, symbol)
         rec = analysis.get("recommendation", {})
 
         action = rec.get("action", "NO_BUY")
+        score = int(analysis.get("total_score", row.get("total_score", 0)))
         reason = rec.get("reason")
         if action == "BUY":
             reason = (
@@ -105,12 +122,22 @@ def format_alert(limit: int = 8, min_score: int = 6) -> str:
         elif not reason:
             reason = "Watch setup"
 
+        sentiment_tag = ""
+        if score >= watch_threshold and action in {"BUY", "WATCH"}:
+            sentiment = sentiment_analyzer.analyze(symbol)
+            if sentiment.get("sentiment") != "UNAVAILABLE":
+                sentiment_checked += 1
+            if sentiment.get("sentiment") == "VERY_BEARISH":
+                contrarian_count += 1
+            sentiment_tag = _sentiment_tag(sentiment.get("sentiment", ""))
+
         candidates.append(
             {
                 "symbol": symbol,
-                "score": int(analysis.get("total_score", row.get("total_score", 0))),
+                "score": score,
                 "action": action,
                 "reason": reason,
+                "sentiment_tag": sentiment_tag,
             }
         )
 
@@ -121,10 +148,16 @@ def format_alert(limit: int = 8, min_score: int = 6) -> str:
     lines.append(
         f"Summary: {len(candidates)} candidates | BUY {buy_count} | WATCH {watch_count} | NO_BUY {no_buy_count}"
     )
+    lines.append(
+        f"🐦 Sentiment: {sentiment_checked}/{max(buy_count + watch_count, 0)} checked | {contrarian_count} contrarian signals"
+    )
     lines.append("")
 
     for c in candidates:
-        lines.append(f"• {c['symbol']} ({c['score']}/12) → {c['action']}")
+        line = f"• {c['symbol']} ({c['score']}/12) → {c['action']}"
+        if c["sentiment_tag"]:
+            line = f"{line} | {c['sentiment_tag']}"
+        lines.append(line)
         lines.append(f"  {c['reason']}")
 
     lines.append("")
