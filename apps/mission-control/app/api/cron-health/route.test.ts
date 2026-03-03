@@ -5,6 +5,7 @@ import {
   normalizeStatus,
   normalizeDeliveryMode,
   isNoReplyExpected,
+  deriveChannelStatus,
   toScheduleText,
 } from "@/app/api/cron-health/route";
 
@@ -76,6 +77,43 @@ describe("delivery metadata", () => {
     expect(isNoReplyExpected({ to: "NO_REPLY" })).toBe(true);
     expect(isNoReplyExpected({ to: " no_reply " })).toBe(true);
     expect(isNoReplyExpected({ to: "telegram" })).toBe(false);
+  });
+});
+
+describe("deriveChannelStatus", () => {
+  it("flags transient gateway drain as retry pending", () => {
+    expect(
+      deriveChannelStatus({
+        status: "failed",
+        deliveryMode: "announce",
+        noReplyExpected: false,
+        lastDeliveryStatus: "not-delivered",
+        lastDelivered: false,
+        lastError: "GatewayDrainingError: gateway restart in progress",
+      })
+    ).toBe("gateway_drain_retry_pending");
+  });
+
+  it("flags delivery-required jobs with failed delivery", () => {
+    expect(
+      deriveChannelStatus({
+        status: "healthy",
+        deliveryMode: "announce",
+        noReplyExpected: false,
+        lastDeliveryStatus: "not-delivered",
+        lastDelivered: false,
+      })
+    ).toBe("delivery_required_failed");
+  });
+
+  it("marks healthy silent jobs explicitly", () => {
+    expect(
+      deriveChannelStatus({
+        status: "healthy",
+        deliveryMode: "none",
+        noReplyExpected: true,
+      })
+    ).toBe("healthy_silent");
   });
 });
 
