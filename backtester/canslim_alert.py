@@ -72,14 +72,23 @@ def format_alert(limit: int = 8, min_score: int = 6, universe_size: int = 120) -
         "📈 Trading Advisor - CANSLIM Scan",
         f"Run: {now_et}",
         f"Market: {market.regime.value} | Position Sizing: {market.position_sizing:.0%}",
+        f"Market Data Source: {getattr(market, 'data_source', 'unknown')} | staleness={float(getattr(market, 'snapshot_age_seconds', 0.0) or 0.0):.0f}s",
+        f"Run Status: {getattr(market, 'status', 'ok')}",
         f"Status: {market.notes}",
         f"Scanner: universe={len(symbols)} | priority_symbols={priority_count}",
         "",
     ]
+    if getattr(market, "status", "ok") == "degraded":
+        lines.append(f"⚠️ Degraded Data: {getattr(market, 'degraded_reason', 'market data fallback in use')}")
+        lines.append(f"Fallback Staleness: {float(getattr(market, 'snapshot_age_seconds', 0.0) or 0.0):.0f}s")
+        lines.append(f"Next Action: {getattr(market, 'next_action', 'retry market fetch after cooldown')}")
+        lines.append("")
 
     evaluated = 0
     passed = []
     rejected = []
+    source_counts = Counter()
+    max_input_staleness = 0.0
 
     for symbol in symbols:
         analysis = _run_quiet(advisor.analyze_stock, symbol)
@@ -87,6 +96,8 @@ def format_alert(limit: int = 8, min_score: int = 6, universe_size: int = 120) -
             continue
 
         evaluated += 1
+        source_counts[analysis.get("data_source", "unknown")] += 1
+        max_input_staleness = max(max_input_staleness, float(analysis.get("data_staleness_seconds", 0.0) or 0.0))
         score = int(analysis.get("total_score", 0))
         rec = analysis.get("recommendation", {})
         action = rec.get("action", "NO_BUY")
@@ -117,6 +128,8 @@ def format_alert(limit: int = 8, min_score: int = 6, universe_size: int = 120) -
     lines.append(
         f"Summary: scanned {len(symbols)} | evaluated {evaluated} | threshold-passed {len(passed)} | BUY {buy_count} | WATCH {watch_count} | NO_BUY {no_buy_count}"
     )
+    source_breakdown = ", ".join([f"{k}={v}" for k, v in sorted(source_counts.items())]) if source_counts else "none"
+    lines.append(f"Data Inputs: {source_breakdown} | max_staleness={max_input_staleness:.0f}s")
 
     reason_counts = Counter(r["reason"] for r in rejected)
     if reason_counts:

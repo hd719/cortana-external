@@ -36,9 +36,8 @@ from datetime import datetime
 from typing import List, Dict, Optional
 import numpy as np
 import pandas as pd
-import yfinance as yf
-
 from data.universe import UniverseScreener, GROWTH_WATCHLIST
+from data.market_data_provider import MarketDataProvider
 from data.market_regime import MarketRegimeDetector, MarketRegime, MarketStatus
 from data.fundamentals import FundamentalsFetcher
 from data.risk_signals import RiskSignalFetcher
@@ -60,6 +59,7 @@ class TradingAdvisor:
         self.screener = UniverseScreener()
         self.fundamentals = FundamentalsFetcher()
         self.risk_fetcher = RiskSignalFetcher()
+        self.market_data = MarketDataProvider()
         
         # Cache
         self._market_status: Optional[MarketStatus] = None
@@ -138,7 +138,8 @@ class TradingAdvisor:
             print(f"{'='*60}\n")
 
         try:
-            hist = yf.Ticker(symbol).history(period="6mo")
+            hist_result = self.market_data.get_history(symbol, period="6mo")
+            hist = hist_result.frame
         except Exception as e:
             return {'symbol': symbol, 'error': str(e)}
 
@@ -274,6 +275,9 @@ class TradingAdvisor:
             },
             'total_score': total_score,
             'market_regime': market.regime.value,
+            'data_source': hist_result.source,
+            'data_staleness_seconds': hist_result.staleness_seconds,
+            'data_status': hist_result.status,
             'recommendation': recommendation,
         }
 
@@ -586,7 +590,11 @@ class TradingAdvisor:
         strategy = DipBuyerStrategy()
         strategy.set_symbol(symbol)
 
-        data = yf.Ticker(symbol).history(period='1y', auto_adjust=False)
+        try:
+            history_result = self.market_data.get_history(symbol, period='1y', auto_adjust=False)
+            data = history_result.frame
+        except Exception as e:
+            return {'symbol': symbol, 'error': str(e)}
         if data is None or data.empty:
             return {'symbol': symbol, 'error': 'No price history available'}
 
@@ -684,6 +692,9 @@ class TradingAdvisor:
             'profile': profile_name,
             'buy_threshold': buy_threshold,
             'watch_threshold': watch_threshold,
+            'data_source': history_result.source,
+            'data_staleness_seconds': history_result.staleness_seconds,
+            'data_status': history_result.status,
             'recommendation': recommendation,
         }
 
