@@ -145,6 +145,7 @@ def format_alert(limit: int = 8, min_score: int = 6, universe_size: int = 120) -
     evaluated = 0
     passed = []
     rejected = []
+    rejected_no_buy = []
     sentiment_checked = 0
     contrarian_count = 0
     source_counts = Counter()
@@ -175,6 +176,8 @@ def format_alert(limit: int = 8, min_score: int = 6, universe_size: int = 120) -
             passed.append({"symbol": symbol, "score": score, "action": action, "reason": reason, "rec": rec, "sentiment_tag": sentiment_tag})
         else:
             rejected.append({"symbol": symbol, "reason": f"Below min-score filter ({score}<{min_score})"})
+            if action == "NO_BUY":
+                rejected_no_buy.append({"symbol": symbol, "score": score, "reason": reason})
 
         if action == "NO_BUY":
             rejected.append({"symbol": symbol, "reason": reason})
@@ -216,6 +219,11 @@ def format_alert(limit: int = 8, min_score: int = 6, universe_size: int = 120) -
             lines.append(f"  Entry ${c['rec'].get('entry', 0):.2f} | Stop ${c['rec'].get('stop_loss', 0):.2f}")
         else:
             lines.append(f"  {c['reason']}")
+
+    if rejected_no_buy:
+        for r in rejected_no_buy[: max(0, limit - len(candidates)) or 1]:
+            lines.append(f"• {r['symbol']} ({r['score']}/12) → NO_BUY")
+            lines.append(f"  {r['reason']}")
 
     lines.append("")
     lines.append("⚠️ Signals are decision support only (not financial advice).")
