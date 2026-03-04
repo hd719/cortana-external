@@ -324,3 +324,18 @@ def test_get_snapshot_all_keys_present_and_numeric_non_nan():
     assert snap["hy_spread_source"] == "unknown"
     assert snap["hy_spread_fallback"] is False
     assert snap["hy_spread_warning"] == ""
+
+def test_fred_fetch_retries_after_api_error_payload_then_recovers():
+    """Fetcher should retry on FRED error payload and recover on a later successful response."""
+    fetcher = RiskSignalFetcher()
+    error_payload = {"error_code": 429, "error_message": "Too many requests"}
+    ok_payload = {"observations": [{"date": "2026-01-05", "value": "451.3"}]}
+
+    with patch(
+        "data.risk_signals.requests.get",
+        side_effect=[_Response(payload=error_payload), _Response(payload=ok_payload)],
+    ) as mock_get:
+        series = fetcher._fetch_fred_series("BAMLH0A0HYM2", datetime(2026, 1, 1), datetime(2026, 1, 10))
+
+    assert mock_get.call_count == 2
+    assert series.iloc[-1] == pytest.approx(451.3)

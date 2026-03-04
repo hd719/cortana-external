@@ -7,6 +7,7 @@ import pandas as pd
 
 from data.market_regime import MarketRegime
 from dipbuyer_alert import _macro_gate_line, format_alert
+from strategies.dip_buyer import DIPBUYER_CONFIG
 
 
 class _FakeAdvisor:
@@ -120,3 +121,46 @@ def test_format_alert_displays_no_candidates_message_when_scan_empty():
         text = format_alert(limit=5, min_score=6)
 
     assert "No Dip Buyer candidates met the current scan threshold." in text
+
+def test_macro_gate_boundary_hy_spread_equal_threshold_stays_open():
+    """HY spread veto should trigger only above threshold; equality keeps gate OPEN."""
+    weak = DIPBUYER_CONFIG["credit"]["hy_spread_weak"]
+    line = _macro_gate_line(
+        {
+            "vix": 24,
+            "put_call": 1.0,
+            "hy_spread": weak,
+            "fear_greed": 30,
+            "hy_spread_source": "fred",
+            "hy_spread_fallback": False,
+        }
+    )
+
+    assert "Macro Gate: OPEN" in line
+    assert "Fallback impact" not in line
+
+
+def test_format_alert_keeps_no_buy_when_credit_veto_triggered():
+    """Formatter should preserve NO_BUY action text when macro conditions are hostile."""
+    fake = _FakeAdvisor()
+    fake.risk_fetcher = SimpleNamespace(
+        get_snapshot=lambda: {
+            "vix": 24.0,
+            "put_call": 1.01,
+            "hy_spread": DIPBUYER_CONFIG["credit"]["hy_spread_weak"] + 50,
+            "fear_greed": 28.0,
+            "hy_spread_source": "fred",
+        }
+    )
+    fake._scan = pd.DataFrame([{"symbol": "TSLA", "total_score": 9}])
+    fake._analysis = {
+        "TSLA": {"total_score": 9, "recommendation": {"action": "NO_BUY", "reason": "Credit stress veto"}}
+    }
+
+    with patch("dipbuyer_alert.TradingAdvisor", return_value=fake):
+        text = format_alert(limit=8, min_score=6)
+
+    assert "Macro Gate: CLOSED" in text
+    assert "Summary: 1 candidates | BUY 0 | WATCH 0 | NO_BUY 1" in text
+    assert "• TSLA (9/12) → NO_BUY" in text
+    assert "Credit stress veto" in text
