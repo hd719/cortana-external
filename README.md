@@ -131,6 +131,49 @@ pnpm dev
 tailscale ip -4
 ```
 
+### Deploy / refresh checklist after UI merges (Mission Control)
+Use this whenever a PR touching `apps/mission-control` is merged and the UI still looks stale.
+
+1. **Update code to latest main**
+```bash
+cd ~/Developer/cortana-external
+git fetch --all --prune
+git checkout main
+git pull --ff-only origin main
+```
+
+2. **Stop old Mission Control processes (including orphans)**
+```bash
+launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/com.cortana.mission-control.plist 2>/dev/null || true
+launchctl remove com.cortana.mission-control 2>/dev/null || true
+/usr/sbin/lsof -tiTCP:3000 -sTCP:LISTEN | xargs -r kill
+pkill -f 'cortana-external/apps/mission-control' || true
+pkill -f 'next-server' || true
+```
+
+3. **Rebuild app**
+```bash
+cd ~/Developer/cortana-external/apps/mission-control
+pnpm build
+```
+
+4. **Start service cleanly via launchd**
+```bash
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.cortana.mission-control.plist 2>/dev/null || true
+launchctl kickstart -k gui/$(id -u)/com.cortana.mission-control
+```
+
+5. **Verify health**
+```bash
+curl -sS http://127.0.0.1:3000/api/heartbeat-status
+```
+Expected: JSON with `ok: true` and current heartbeat status.
+
+6. **Browser refresh**
+- Hard refresh (`Cmd+Shift+R`) after restart.
+
+> Note: Tailscale Serve usually is **not** the root cause for stale UI data. It proxies whatever local app process on `127.0.0.1:3000` is currently serving.
+
 ### What it shows
 - Dashboard (`/`): system metrics + recent activity
 - Council (`/council`): deliberation sessions, weighted votes, and decision rationale timeline
