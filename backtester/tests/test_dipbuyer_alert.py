@@ -80,7 +80,9 @@ def test_format_alert_output_structure_and_tags_buy_watch_no_buy():
     assert "📉 Trading Advisor - Dip Buyer Scan" in text
     assert "Market: correction" in text
     assert "Macro Gate: OPEN" in text
-    assert "Summary: 3 candidates | BUY 1 | WATCH 1 | NO_BUY 1" in text
+    assert "Summary: scanned" in text
+    assert "| BUY 1 | WATCH 1 | NO_BUY 1" in text
+    assert "Dip Profile: correction" in text
     assert "• MSFT (9/12) → BUY" in text
     assert "• AAPL (7/12) → WATCH" in text
     assert "• TSLA (5/12) → NO_BUY" in text
@@ -161,6 +163,7 @@ def test_format_alert_keeps_no_buy_when_credit_veto_triggered():
         text = format_alert(limit=8, min_score=6)
 
     assert "Macro Gate: CLOSED" in text
-    assert "Summary: 1 candidates | BUY 0 | WATCH 0 | NO_BUY 1" in text
+    assert "Summary: scanned" in text
+    assert "| BUY 0 | WATCH 0 | NO_BUY 1" in text
     assert "• TSLA (9/12) → NO_BUY" in text
     assert "Credit stress veto" in text
