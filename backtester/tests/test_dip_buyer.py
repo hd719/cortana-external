@@ -125,6 +125,21 @@ def test_total_score_combines_q_v_c_layers(price_data):
     assert (scores["Total"] == scores["Q"] + scores["V"] + scores["C"]).all()
 
 
+def test_profile_selection_by_regime():
+    """Profile selection should map correction/pressure/uptrend regimes deterministically."""
+    with patch("strategies.dip_buyer.FundamentalsFetcher"), patch("strategies.dip_buyer.RiskSignalFetcher"), patch(
+        "strategies.dip_buyer.MarketRegimeDetector"
+    ):
+        strategy = DipBuyerStrategy()
+
+    name, _ = strategy._select_profile(MarketRegime.CORRECTION)
+    assert name == "correction"
+    name, _ = strategy._select_profile(MarketRegime.UPTREND_UNDER_PRESSURE)
+    assert name == "under_pressure"
+    name, _ = strategy._select_profile(MarketRegime.CONFIRMED_UPTREND)
+    assert name == "bull"
+
+
 def test_regime_gating_blocks_buys_in_confirmed_uptrend(price_data):
     """Validate strategy emits no buys when market regime is outside active Dip Buyer states."""
     risk_df = _risk_history(price_data.index, hy_spread=430.0)
@@ -157,12 +172,13 @@ def test_threshold_logic_buy_watch_no_buy_scores(price_data):
 
 
 def test_position_sizing_constraints_in_config():
-    """Validate Dip Buyer position and exposure caps are fixed to risk policy limits."""
+    """Validate Dip Buyer correction profile keeps capped sizing and tighter stop defaults."""
     risk_cfg = DIPBUYER_CONFIG["risk"]
-    assert risk_cfg["max_position_pct"] == pytest.approx(0.06)
-    assert risk_cfg["max_exposure_correction"] == pytest.approx(0.25)
-    assert risk_cfg["max_exposure_under_pressure"] == pytest.approx(0.40)
+    correction = DIPBUYER_CONFIG["profiles"]["correction"]
     assert risk_cfg["max_positions"] == 5
+    assert correction["risk"]["max_position_pct"] == pytest.approx(0.05)
+    assert correction["risk"]["max_exposure_pct"] == pytest.approx(0.25)
+    assert correction["risk"]["hard_stop"] == pytest.approx(0.06)
 
 
 def test_exit_rules_and_credit_veto_force_sell(price_data):

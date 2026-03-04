@@ -32,6 +32,7 @@ Thresholds:
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
@@ -46,10 +47,30 @@ from data.market_regime import MarketRegimeDetector, MarketRegime
 from data.risk_signals import RiskSignalFetcher
 
 
+def _env_float(name: str, default: float) -> float:
+    raw = os.getenv(name)
+    if raw in (None, ""):
+        return default
+    try:
+        return float(raw)
+    except ValueError:
+        return default
+
+
+def _env_int(name: str, default: int) -> int:
+    raw = os.getenv(name)
+    if raw in (None, ""):
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        return default
+
+
 DIPBUYER_CONFIG = {
     "score_thresholds": {
-        "buy": 7,
-        "watch": 6,
+        "buy": _env_int("DIPBUYER_DEFAULT_BUY_THRESHOLD", 7),
+        "watch": _env_int("DIPBUYER_DEFAULT_WATCH_THRESHOLD", 6),
     },
     "quality": {
         "rsi_period": 14,
@@ -89,6 +110,42 @@ DIPBUYER_CONFIG = {
         "max_exposure_under_pressure": 0.40,
         "max_positions": 5,
     },
+    "profiles": {
+        "bull": {
+            "score_thresholds": {
+                "buy": _env_int("DIPBUYER_BULL_BUY_THRESHOLD", 8),
+                "watch": _env_int("DIPBUYER_BULL_WATCH_THRESHOLD", 7),
+            },
+            "risk": {
+                "max_position_pct": _env_float("DIPBUYER_BULL_MAX_POSITION_PCT", 0.04),
+                "max_exposure_pct": _env_float("DIPBUYER_BULL_MAX_EXPOSURE_PCT", 0.20),
+            },
+            "notes": "Healthy uptrend profile: selective dip exposure.",
+        },
+        "correction": {
+            "score_thresholds": {
+                "buy": _env_int("DIPBUYER_CORRECTION_BUY_THRESHOLD", 7),
+                "watch": _env_int("DIPBUYER_CORRECTION_WATCH_THRESHOLD", 6),
+            },
+            "risk": {
+                "max_position_pct": _env_float("DIPBUYER_CORRECTION_MAX_POSITION_PCT", 0.05),
+                "max_exposure_pct": _env_float("DIPBUYER_CORRECTION_MAX_EXPOSURE_PCT", 0.25),
+                "hard_stop": _env_float("DIPBUYER_CORRECTION_HARD_STOP", 0.06),
+            },
+            "notes": "Correction profile: tactical entries only, tight risk, no averaging down outside plan.",
+        },
+        "under_pressure": {
+            "score_thresholds": {
+                "buy": _env_int("DIPBUYER_UNDER_PRESSURE_BUY_THRESHOLD", 7),
+                "watch": _env_int("DIPBUYER_UNDER_PRESSURE_WATCH_THRESHOLD", 6),
+            },
+            "risk": {
+                "max_position_pct": _env_float("DIPBUYER_UNDER_PRESSURE_MAX_POSITION_PCT", 0.06),
+                "max_exposure_pct": _env_float("DIPBUYER_UNDER_PRESSURE_MAX_EXPOSURE_PCT", 0.35),
+            },
+            "notes": "Under-pressure profile: reduced exposure while trend quality is mixed.",
+        },
+    },
 }
 
 
@@ -121,6 +178,18 @@ class DipBuyerStrategy(Strategy):
 
         self.symbol = None
         self.fundamentals = None
+        self.active_profile = "inactive"
+        self.active_profile_config = {}
+
+    def _select_profile(self, regime: MarketRegime) -> tuple[str, dict]:
+        profiles = DIPBUYER_CONFIG.get("profiles", {})
+        if regime == MarketRegime.CORRECTION:
+            return "correction", profiles.get("correction", {})
+        if regime == MarketRegime.UPTREND_UNDER_PRESSURE:
+            return "under_pressure", profiles.get("under_pressure", {})
+        if regime == MarketRegime.CONFIRMED_UPTREND:
+            return "bull", profiles.get("bull", {})
+        return "inactive", {}
 
     def set_symbol(self, symbol: str) -> None:
         """Set the symbol and pre-fetch fundamentals."""
@@ -205,6 +274,10 @@ class DipBuyerStrategy(Strategy):
         signals = pd.Series(0, index=data.index)
 
         market = self.market_detector.get_status()
+        profile_name, profile = self._select_profile(market.regime)
+        self.active_profile = profile_name
+        self.active_profile_config = profile
+
         market_active = market.regime in [
             MarketRegime.CORRECTION,
             MarketRegime.UPTREND_UNDER_PRESSURE,
@@ -235,7 +308,10 @@ class DipBuyerStrategy(Strategy):
 
         credit_veto = pd.to_numeric(risk['hy_spread'], errors='coerce') > DIPBUYER_CONFIG["credit"]["hy_spread_weak"]
 
-        buy_condition = market_active & (total_score >= self.min_buy_score) & (~credit_veto)
+        buy_threshold = profile.get("score_thresholds", {}).get("buy", self.min_buy_score)
+        watch_threshold = profile.get("score_thresholds", {}).get("watch", self.min_watch_score)
+
+        buy_condition = market_active & (total_score >= buy_threshold) & (~credit_veto)
         sell_condition = (not market_active) | credit_veto
 
         signals[buy_condition] = 1
@@ -253,6 +329,9 @@ class DipBuyerStrategy(Strategy):
             'FearProxy': risk['fear_greed'],
             'Market_Active': market_active,
             'Credit_Veto': credit_veto,
+            'Buy_Threshold': buy_threshold,
+            'Watch_Threshold': watch_threshold,
+            'Profile': profile_name,
         }, index=data.index)
 
         if verbose:
@@ -276,10 +355,15 @@ class DipBuyerStrategy(Strategy):
         return True
 
     def stop_loss_pct(self) -> float:
+        if self.active_profile == "correction":
+            return float(self.active_profile_config.get("risk", {}).get("hard_stop", DIPBUYER_CONFIG["exits"]["hard_stop"]))
         return DIPBUYER_CONFIG["exits"]["hard_stop"]
 
     def get_current_scores(self) -> pd.DataFrame:
         return self._scores if hasattr(self, '_scores') else None
+
+    def get_active_profile(self) -> tuple[str, dict]:
+        return self.active_profile, self.active_profile_config
 
     def describe(self) -> str:
         return f"""

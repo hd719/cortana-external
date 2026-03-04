@@ -618,8 +618,15 @@ class TradingAdvisor:
         credit_veto = bool(latest.get('Credit_Veto', False))
         market_active = bool(latest.get('Market_Active', False))
 
-        buy_threshold = DIPBUYER_CONFIG['score_thresholds']['buy']
-        watch_threshold = DIPBUYER_CONFIG['score_thresholds']['watch']
+        profile_name, profile_cfg = strategy.get_active_profile()
+        score_buy_threshold = latest.get('Buy_Threshold', DIPBUYER_CONFIG['score_thresholds']['buy'])
+        score_watch_threshold = latest.get('Watch_Threshold', DIPBUYER_CONFIG['score_thresholds']['watch'])
+        buy_threshold = int(score_buy_threshold) if pd.notna(score_buy_threshold) else DIPBUYER_CONFIG['score_thresholds']['buy']
+        watch_threshold = int(score_watch_threshold) if pd.notna(score_watch_threshold) else DIPBUYER_CONFIG['score_thresholds']['watch']
+
+        profile_risk = profile_cfg.get('risk', {}) if isinstance(profile_cfg, dict) else {}
+        stop_loss_pct = float(profile_risk.get('hard_stop', strategy.stop_loss_pct()))
+        max_position_pct_cfg = float(profile_risk.get('max_position_pct', DIPBUYER_CONFIG['risk']['max_position_pct']))
 
         if credit_veto:
             recommendation = {
@@ -632,9 +639,8 @@ class TradingAdvisor:
                 'reason': 'Dip Buyer inactive outside correction / under-pressure regimes.',
             }
         elif total_score >= buy_threshold:
-            stop_loss_pct = DIPBUYER_CONFIG['exits']['hard_stop']
             stop_price = price * (1 - stop_loss_pct)
-            max_position_pct = DIPBUYER_CONFIG['risk']['max_position_pct'] * market.position_sizing
+            max_position_pct = max_position_pct_cfg * market.position_sizing
 
             recommendation = {
                 'action': 'BUY',
@@ -675,6 +681,9 @@ class TradingAdvisor:
             'risk_snapshot': risk_snapshot,
             'market_regime': market.regime.value,
             'position_sizing': market.position_sizing,
+            'profile': profile_name,
+            'buy_threshold': buy_threshold,
+            'watch_threshold': watch_threshold,
             'recommendation': recommendation,
         }
 
