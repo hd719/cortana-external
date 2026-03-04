@@ -7,6 +7,7 @@ type HeartbeatStatus = "healthy" | "stale" | "missed" | "unknown";
 
 type HeartbeatFile = {
   lastHeartbeat?: unknown;
+  lastChecks?: Record<string, { lastChecked?: unknown }>;
 };
 
 type RunningSubagentRow = {
@@ -20,9 +21,25 @@ type TaskSummaryRow = {
 
 const HEARTBEAT_FILE = "/Users/hd/openclaw/memory/heartbeat-state.json";
 
-function normalizeTimestamp(raw: unknown): number | null {
+export function normalizeTimestamp(raw: unknown): number | null {
   if (typeof raw !== "number" || !Number.isFinite(raw)) return null;
   return raw < 1_000_000_000_000 ? raw * 1000 : raw;
+}
+
+export function resolveLatestHeartbeat(parsed: HeartbeatFile): number | null {
+  const direct = normalizeTimestamp(parsed.lastHeartbeat);
+  let fromChecks: number | null = null;
+
+  if (parsed.lastChecks && typeof parsed.lastChecks === "object") {
+    for (const check of Object.values(parsed.lastChecks)) {
+      const ts = normalizeTimestamp(check?.lastChecked);
+      if (ts != null && (fromChecks == null || ts > fromChecks)) fromChecks = ts;
+    }
+  }
+
+  if (direct == null) return fromChecks;
+  if (fromChecks == null) return direct;
+  return Math.max(direct, fromChecks);
 }
 
 function heartbeatStatus(ageMs: number | null): HeartbeatStatus {
@@ -48,7 +65,7 @@ export async function GET() {
       try {
         const raw = await readFile(HEARTBEAT_FILE, "utf8");
         const parsed = JSON.parse(raw) as HeartbeatFile;
-        const lastHeartbeat = normalizeTimestamp(parsed.lastHeartbeat);
+        const lastHeartbeat = resolveLatestHeartbeat(parsed);
         const ageMs =
           lastHeartbeat == null ? null : Math.max(0, Date.now() - lastHeartbeat);
 

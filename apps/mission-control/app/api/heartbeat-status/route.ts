@@ -17,9 +17,30 @@ function isQuietHours(): boolean {
 
 const HEARTBEAT_FILE = "/Users/hd/openclaw/memory/heartbeat-state.json";
 
+type HeartbeatState = {
+  lastHeartbeat?: unknown;
+  lastChecks?: Record<string, { lastChecked?: unknown }>;
+};
+
 export function normalizeTimestamp(raw: unknown): number | null {
   if (typeof raw !== "number" || !Number.isFinite(raw)) return null;
   return raw < 1_000_000_000_000 ? raw * 1000 : raw;
+}
+
+export function resolveLatestHeartbeat(parsed: HeartbeatState): number | null {
+  const direct = normalizeTimestamp(parsed.lastHeartbeat);
+  let fromChecks: number | null = null;
+
+  if (parsed.lastChecks && typeof parsed.lastChecks === "object") {
+    for (const check of Object.values(parsed.lastChecks)) {
+      const ts = normalizeTimestamp(check?.lastChecked);
+      if (ts != null && (fromChecks == null || ts > fromChecks)) fromChecks = ts;
+    }
+  }
+
+  if (direct == null) return fromChecks;
+  if (fromChecks == null) return direct;
+  return Math.max(direct, fromChecks);
 }
 
 export function getStatus(ageMs: number | null): HeartbeatStatus {
@@ -36,18 +57,8 @@ export const revalidate = 0;
 export async function GET() {
   try {
     const raw = await readFile(HEARTBEAT_FILE, "utf8");
-    const parsed = JSON.parse(raw) as { lastHeartbeat?: unknown; lastChecks?: Record<string, { lastChecked?: unknown }> };
-
-    // Try direct lastHeartbeat first, fall back to most recent lastChecks entry (v2 format)
-    let lastHeartbeat = normalizeTimestamp(parsed.lastHeartbeat);
-    if (lastHeartbeat == null && parsed.lastChecks && typeof parsed.lastChecks === "object") {
-      let latest: number | null = null;
-      for (const check of Object.values(parsed.lastChecks)) {
-        const ts = normalizeTimestamp(check?.lastChecked);
-        if (ts != null && (latest == null || ts > latest)) latest = ts;
-      }
-      lastHeartbeat = latest;
-    }
+    const parsed = JSON.parse(raw) as HeartbeatState;
+    const lastHeartbeat = resolveLatestHeartbeat(parsed);
     const ageMs = lastHeartbeat == null ? null : Math.max(0, Date.now() - lastHeartbeat);
 
     return NextResponse.json(

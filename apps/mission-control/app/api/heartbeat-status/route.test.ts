@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { normalizeTimestamp, getStatus } from "@/app/api/heartbeat-status/route";
+import { normalizeTimestamp, getStatus, resolveLatestHeartbeat } from "@/app/api/heartbeat-status/route";
 
 describe("normalizeTimestamp", () => {
   it("converts seconds timestamps to milliseconds", () => {
@@ -14,6 +14,22 @@ describe("normalizeTimestamp", () => {
     expect(normalizeTimestamp("1700000000")).toBeNull();
     expect(normalizeTimestamp(Number.NaN)).toBeNull();
     expect(normalizeTimestamp(null)).toBeNull();
+  });
+});
+
+describe("resolveLatestHeartbeat", () => {
+  it("prefers newer lastChecks timestamp over stale lastHeartbeat", () => {
+    const stale = 1_700_000_000_000;
+    const fresh = 1_700_000_360_000;
+    expect(
+      resolveLatestHeartbeat({
+        lastHeartbeat: stale,
+        lastChecks: {
+          cron_delivery: { lastChecked: stale / 1000 },
+          subagent_watchdog: { lastChecked: fresh / 1000 },
+        },
+      })
+    ).toBe(fresh);
   });
 });
 
