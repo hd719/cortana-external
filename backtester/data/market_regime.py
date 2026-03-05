@@ -283,6 +283,11 @@ class MarketRegimeDetector:
             self.count_distribution_days()
         return len(self._distribution_days)
 
+    def get_distribution_calendar(self, lookback: int = 25) -> pd.DataFrame:
+        """Backward-compatible distribution-day table used by advisor CLI output."""
+        days = self.count_distribution_days(lookback)
+        return pd.DataFrame({"Date": pd.to_datetime(days).date})
+
 
 
 def get_market_status() -> MarketStatus:
