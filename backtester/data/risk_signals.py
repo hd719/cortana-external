@@ -44,8 +44,8 @@ class RiskSignalFetcher:
         self.vix_symbol = vix_symbol
         self.spy_symbol = spy_symbol
         self.fred_series = fred_series
-        self.fred_api_key = os.getenv(fred_api_key_env)
         self.logger = logging.getLogger(__name__)
+        self.fred_api_key = self._resolve_fred_api_key(os.getenv(fred_api_key_env))
         self.fred_retries = int(os.getenv("RISK_FRED_RETRIES", "3"))
         self.fred_timeout_seconds = float(os.getenv("RISK_FRED_TIMEOUT_SECONDS", "12"))
         self.fred_backoff_seconds = float(os.getenv("RISK_FRED_BACKOFF_SECONDS", "1.5"))
@@ -54,6 +54,27 @@ class RiskSignalFetcher:
             "fallback": False,
             "warning": "",
         }
+
+    def _resolve_fred_api_key(self, raw_value: str | None) -> str | None:
+        if raw_value is None:
+            self.logger.warning(
+                "FRED_API_KEY is missing. Proceeding with unauthenticated FRED access (stricter limits may apply)."
+            )
+            return None
+
+        value = raw_value.strip()
+        if not value:
+            self.logger.warning(
+                "FRED_API_KEY is invalid (blank). Proceeding with unauthenticated FRED access."
+            )
+            return None
+        if any(char.isspace() for char in value):
+            self.logger.warning(
+                "FRED_API_KEY is invalid (contains whitespace). Proceeding with unauthenticated FRED access."
+            )
+            return None
+        return value
+
 
     # ---------------------------------------------------------------------
     # Fetch helpers
@@ -99,8 +120,6 @@ class RiskSignalFetcher:
         }
         if self.fred_api_key:
             params["api_key"] = self.fred_api_key
-        else:
-            self.logger.info("FRED_API_KEY not set. Using unauthenticated FRED access (stricter limits may apply).")
 
         last_error = "unknown error"
         for attempt in range(1, self.fred_retries + 1):
