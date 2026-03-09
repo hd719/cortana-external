@@ -6,8 +6,10 @@ from __future__ import annotations
 import argparse
 import io
 import os
+import re
+import warnings
 from collections import Counter, defaultdict
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -18,8 +20,36 @@ from strategies.dip_buyer import DIPBUYER_CONFIG
 
 
 def _run_quiet(fn, *args, **kwargs):
-    with redirect_stdout(io.StringIO()):
+    with warnings.catch_warnings(), redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+        warnings.simplefilter("ignore")
         return fn(*args, **kwargs)
+
+
+def _market_headline(market) -> str:
+    regime = getattr(market.regime, "value", str(market.regime)).replace("_", " ")
+    if regime == "correction":
+        return "Market: correction — no new positions"
+    if regime == "uptrend under pressure":
+        return "Market: uptrend under pressure — reduced exposure"
+    return f"Market: {regime} — position sizing {market.position_sizing:.0%}"
+
+
+def _top_names(records: list[dict], limit: int = 3) -> str:
+    names = []
+    seen = set()
+    for rec in records:
+        sym = rec.get("symbol")
+        if sym and sym not in seen:
+            seen.add(sym)
+            names.append(sym)
+        if len(names) >= limit:
+            break
+    return ", ".join(names) if names else "none"
+
+
+def _dedupe_reason(reason: str) -> str:
+    reason = re.sub(r"\s+", " ", (reason or "").strip())
+    return reason.rstrip(".")
 
 
 def _fmt_value(value, decimals: int = 1) -> str:
@@ -123,25 +153,10 @@ def format_alert(limit: int = 8, min_score: int = 6, universe_size: int = 120) -
     profile_name, profile = _profile_for_market(market.regime.value)
     symbols, priority_count = _deterministic_universe(advisor, universe_size)
 
-    now_et = datetime.now(ZoneInfo("America/New_York")).strftime("%Y-%m-%d %I:%M %p ET")
     lines = [
-        "📉 Trading Advisor - Dip Buyer Scan",
-        f"Run: {now_et}",
-        f"Market: {market.regime.value} | Position Sizing: {market.position_sizing:.0%}",
-        f"Market Data Source: {getattr(market, 'data_source', 'unknown')} | staleness={float(getattr(market, 'snapshot_age_seconds', 0.0) or 0.0):.0f}s",
-        f"Run Status: {getattr(market, 'status', 'ok')}",
-        f"Status: {market.notes}",
-        _macro_gate_line(snapshot),
-        f"Dip Profile: {profile_name} | buy>={profile.get('score_thresholds', {}).get('buy', min_score)} | watch>={profile.get('score_thresholds', {}).get('watch', min_score)} | max_pos={profile.get('risk', {}).get('max_position_pct', DIPBUYER_CONFIG['risk']['max_position_pct']):.0%}",
-        f"Scanner: universe={len(symbols)} | priority_symbols={priority_count}",
-        "",
+        "Dip Buyer Scan",
+        _market_headline(market),
     ]
-    if getattr(market, "status", "ok") == "degraded":
-        lines.append(f"⚠️ Degraded Data: {getattr(market, 'degraded_reason', 'market data fallback in use')}")
-        lines.append(f"Fallback Staleness: {float(getattr(market, 'snapshot_age_seconds', 0.0) or 0.0):.0f}s")
-        lines.append(f"Next Action: {getattr(market, 'next_action', 'retry market fetch after cooldown')}")
-        lines.append("")
-
     evaluated = 0
     passed = []
     rejected = []
@@ -183,8 +198,9 @@ def format_alert(limit: int = 8, min_score: int = 6, universe_size: int = 120) -
             rejected.append({"symbol": symbol, "reason": reason})
 
     if not passed:
-        lines.append("No Dip Buyer candidates met the current scan threshold.")
-        lines.append(f"Summary: scanned {len(symbols)} | evaluated {evaluated} | threshold-passed 0 | BUY 0 | WATCH 0 | NO_BUY 0")
+        lines.append(f"Scanned {len(symbols)} | 0 passed threshold | 0 BUY | 0 WATCH")
+        lines.append(f"Top names considered: {_top_names([{'symbol': s} for s in symbols], 3)}")
+        lines.append(f"Why no buys: {_dedupe_reason(market.notes or 'market correction gate')}")
         return "\n".join(lines)
 
     ranked = sorted(passed, key=lambda x: x["score"], reverse=True)
@@ -193,40 +209,20 @@ def format_alert(limit: int = 8, min_score: int = 6, universe_size: int = 120) -
     watch_count = sum(1 for c in candidates if c["action"] == "WATCH")
     no_buy_count = sum(1 for c in candidates if c["action"] == "NO_BUY")
 
-    lines.append(f"Summary: scanned {len(symbols)} | evaluated {evaluated} | threshold-passed {len(passed)} | BUY {buy_count} | WATCH {watch_count} | NO_BUY {no_buy_count}")
-    lines.append(f"🐦 Sentiment: {sentiment_checked}/{max(buy_count + watch_count, 0)} checked | {contrarian_count} contrarian signals")
-    source_breakdown = ", ".join([f"{k}={v}" for k, v in sorted(source_counts.items())]) if source_counts else "none"
-    lines.append(f"Data Inputs: {source_breakdown} | max_staleness={max_input_staleness:.0f}s")
+    lines.append(f"Scanned {len(symbols)} | {len(passed)} passed threshold | {buy_count} BUY | {watch_count} WATCH")
+    lines.append(f"Top names considered: {_top_names(candidates, 3)}")
 
-    reason_counts = Counter(r["reason"] for r in rejected)
-    if reason_counts:
-        lines.append("Blockers: " + ", ".join([f"{k} ({v})" for k, v in reason_counts.most_common(3)]))
-        samples = defaultdict(list)
-        for r in rejected:
-            if len(samples[r["reason"]]) < 3:
-                samples[r["reason"]].append(r["symbol"])
-        sample_bits = [f"{k} => {', '.join(v)}" for k, v in list(samples.items())[:2]]
-        if sample_bits:
-            lines.append("Blocker samples: " + " | ".join(sample_bits))
+    if buy_count == 0 and watch_count == 0:
+        lines.append(f"Why no buys: {_dedupe_reason(market.notes or 'market correction gate')}")
+    elif candidates:
+        preview = []
+        for c in candidates[: min(limit, 3)]:
+            suffix = f" {c['sentiment_tag']}" if c['sentiment_tag'] else ""
+            preview.append(f"{c['symbol']} {c['action']} ({c['score']}/12){suffix}")
+        lines.append("Leaders: " + " | ".join(preview))
 
-    lines.append("")
-    for c in candidates:
-        line = f"• {c['symbol']} ({c['score']}/12) → {c['action']}"
-        if c["sentiment_tag"]:
-            line += f" | {c['sentiment_tag']}"
-        lines.append(line)
-        if c["action"] == "BUY":
-            lines.append(f"  Entry ${c['rec'].get('entry', 0):.2f} | Stop ${c['rec'].get('stop_loss', 0):.2f}")
-        else:
-            lines.append(f"  {c['reason']}")
-
-    if rejected_no_buy:
-        for r in rejected_no_buy[: max(0, limit - len(candidates)) or 1]:
-            lines.append(f"• {r['symbol']} ({r['score']}/12) → NO_BUY")
-            lines.append(f"  {r['reason']}")
-
-    lines.append("")
-    lines.append("⚠️ Signals are decision support only (not financial advice).")
+    if getattr(market, "status", "ok") == "degraded":
+        lines.append(f"Note: degraded market data ({float(getattr(market, 'snapshot_age_seconds', 0.0) or 0.0):.0f}s stale)")
     return "\n".join(lines)
 
 

@@ -127,7 +127,5 @@ def test_alert_output_includes_social_sentiment_and_tags():
     ):
         text = format_alert(limit=8, min_score=6)
 
-    assert "🐦 Sentiment: 2/2 checked | 1 contrarian signals" in text
-    assert "• MSFT (9/12) → BUY | 🐦 Contrarian ✅" in text
-    assert "• AAPL (7/12) → WATCH | 🐦 Caution ⚠️" in text
-    assert "• TSLA (5/12) → NO_BUY" in text
+    assert "Dip Buyer Scan" in text
+    assert "Leaders: MSFT BUY (9/12) 🐦 Contrarian ✅ | AAPL WATCH (7/12) 🐦 Caution ⚠️" in text

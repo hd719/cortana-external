@@ -78,18 +78,11 @@ def test_format_alert_output_structure_and_tags_buy_watch_no_buy():
     with patch("dipbuyer_alert.TradingAdvisor", return_value=fake):
         text = format_alert(limit=8, min_score=6)
 
-    assert "📉 Trading Advisor - Dip Buyer Scan" in text
-    assert "Market: correction" in text
-    assert "Market Data Source:" in text
-    assert "Run Status:" in text
-    assert "Macro Gate: OPEN" in text
-    assert "Summary: scanned" in text
-    assert "| BUY 1 | WATCH 1 | NO_BUY 0" in text
-    assert "Dip Profile: correction" in text
-    assert "Data Inputs:" in text
-    assert "• MSFT (9/12) → BUY" in text
-    assert "• AAPL (7/12) → WATCH" in text
-    assert "Blockers:" in text
+    assert "Dip Buyer Scan" in text
+    assert "Market: correction — no new positions" in text
+    assert "Scanned 3 | 2 passed threshold | 1 BUY | 1 WATCH" in text
+    assert "Top names considered: MSFT, AAPL" in text
+    assert "Leaders: MSFT BUY (9/12) 🐦 Neutral | AAPL WATCH (7/12) 🐦 Neutral" in text
 
 
 def test_format_alert_reports_degraded_market_status_with_next_action():
@@ -110,7 +103,5 @@ def test_format_alert_reports_degraded_market_status_with_next_action():
     with patch("dipbuyer_alert.TradingAdvisor", return_value=fake):
         text = format_alert(limit=8, min_score=6)
 
-    assert "Run Status: degraded" in text
-    assert "⚠️ Degraded Data:" in text
-    assert "Fallback Staleness: 720s" in text
-    assert "Next Action:" in text
+    assert "Dip Buyer Scan" in text
+    assert "Note: degraded market data (720s stale)" in text
