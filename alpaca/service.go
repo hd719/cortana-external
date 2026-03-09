@@ -2,6 +2,7 @@ package alpaca
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"database/sql"
 	"encoding/json"
@@ -193,6 +194,16 @@ func keyFingerprint(keyID string) string {
 }
 
 // LoadKeys loads API keys from file
+func (s *Service) validateKeys(keys *Keys, keysPath string) error {
+	if target := strings.ToLower(strings.TrimSpace(os.Getenv("ALPACA_TARGET_ENVIRONMENT"))); target != "" {
+		actual := configuredAlpacaEnvironment(keys.BaseURL)
+		if target != actual {
+			return fmt.Errorf("alpaca account target mismatch: target=%s actual=%s keys_path=%s", target, actual, keysPath)
+		}
+	}
+	return nil
+}
+
 func (s *Service) LoadKeys() error {
 	keysPath := s.resolvedKeysPath()
 	data, err := os.ReadFile(keysPath)
@@ -217,11 +228,8 @@ func (s *Service) LoadKeys() error {
 	}
 	keys.DataURL = strings.TrimRight(keys.DataURL, "/")
 
-	if target := strings.ToLower(strings.TrimSpace(os.Getenv("ALPACA_TARGET_ENVIRONMENT"))); target != "" {
-		actual := configuredAlpacaEnvironment(keys.BaseURL)
-		if target != actual {
-			return fmt.Errorf("alpaca account target mismatch: target=%s actual=%s keys_path=%s", target, actual, keysPath)
-		}
+	if err := s.validateKeys(&keys, keysPath); err != nil {
+		return err
 	}
 
 	s.keys = &keys
@@ -230,7 +238,7 @@ func (s *Service) LoadKeys() error {
 
 func (s *Service) ensureKeysLoaded() error {
 	if s.keys != nil {
-		return nil
+		return s.validateKeys(s.keys, s.resolvedKeysPath())
 	}
 	return s.LoadKeys()
 }
@@ -268,6 +276,10 @@ func (s *Service) ensureDB() error {
 }
 
 func (s *Service) makeJSONRequest(method, url string, payload any, okCodes ...int) ([]byte, error) {
+	return s.makeJSONRequestWithContext(context.Background(), method, url, payload, okCodes...)
+}
+
+func (s *Service) makeJSONRequestWithContext(ctx context.Context, method, url string, payload any, okCodes ...int) ([]byte, error) {
 	if err := s.ensureKeysLoaded(); err != nil {
 		return nil, err
 	}
@@ -281,7 +293,7 @@ func (s *Service) makeJSONRequest(method, url string, payload any, okCodes ...in
 		body = bytes.NewBuffer(b)
 	}
 
-	req, err := http.NewRequest(method, url, body)
+	req, err := http.NewRequestWithContext(ctx, method, url, body)
 	if err != nil {
 		return nil, err
 	}
@@ -651,7 +663,10 @@ func (s *Service) PortfolioHandler(c *gin.Context) {
 		return
 	}
 
-	accountData, err := s.makeJSONRequest("GET", s.keys.BaseURL+"/account", nil, http.StatusOK)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 8*time.Second)
+	defer cancel()
+
+	accountData, err := s.makeJSONRequestWithContext(ctx, "GET", s.keys.BaseURL+"/account", nil, http.StatusOK)
 	if err != nil {
 		c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
 		return

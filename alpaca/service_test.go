@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -194,6 +195,54 @@ func TestPortfolioHandler_ExposesEnvironmentMetadata(t *testing.T) {
 	}
 	if out["target_environment"] != "live" {
 		t.Fatalf("expected target_environment live got %#v", out["target_environment"])
+	}
+}
+
+func TestEnsureKeysLoaded_RevalidatesCachedTargetEnvironment(t *testing.T) {
+	keysPath := writeTestKeys(t, "https://paper-api.alpaca.markets", "https://data.alpaca.markets")
+	svc := newTestService(t, keysPath, &http.Client{})
+	if err := svc.LoadKeys(); err != nil {
+		t.Fatalf("LoadKeys: %v", err)
+	}
+	t.Setenv("ALPACA_TARGET_ENVIRONMENT", "live")
+	err := svc.ensureKeysLoaded()
+	if err == nil || !strings.Contains(err.Error(), "target=live actual=paper") {
+		t.Fatalf("expected cached target mismatch error, got %v", err)
+	}
+}
+
+func TestPortfolioHandler_FailsFastOnUpstreamTimeout(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/v2/account", func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(9 * time.Second)
+		_, _ = w.Write([]byte(`{"id":"acct1"}`))
+	})
+	mux.HandleFunc("/v2/positions", func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(9 * time.Second)
+		_, _ = w.Write([]byte(`[]`))
+	})
+	ts := httptest.NewServer(mux)
+	defer ts.Close()
+
+	keysPath := writeTestKeys(t, ts.URL, ts.URL)
+	svc := newTestService(t, keysPath, ts.Client())
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	req := httptest.NewRequest(http.MethodGet, "/alpaca/portfolio", nil)
+	c.Request = req
+
+	start := time.Now()
+	svc.PortfolioHandler(c)
+	dur := time.Since(start)
+	if dur >= 9*time.Second {
+		t.Fatalf("expected fast failure before upstream completed, took %v", dur)
+	}
+	if w.Code != http.StatusBadGateway {
+		t.Fatalf("expected 502 got %d body=%s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "context deadline exceeded") {
+		t.Fatalf("expected timeout body, got %s", w.Body.String())
 	}
 }
 
