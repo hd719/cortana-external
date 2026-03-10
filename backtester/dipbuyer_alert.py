@@ -28,10 +28,10 @@ def _run_quiet(fn, *args, **kwargs):
 def _market_headline(market) -> str:
     regime = getattr(market.regime, "value", str(market.regime)).replace("_", " ")
     if regime == "correction":
-        return "Market: correction — no new positions"
+        return "Market regime: correction"
     if regime == "uptrend under pressure":
-        return "Market: uptrend under pressure — reduced exposure"
-    return f"Market: {regime} — position sizing {market.position_sizing:.0%}"
+        return "Market regime: uptrend under pressure"
+    return f"Market regime: {regime} | Position sizing {market.position_sizing:.0%}"
 
 
 def _top_names(records: list[dict], limit: int = 3) -> str:
@@ -45,6 +45,21 @@ def _top_names(records: list[dict], limit: int = 3) -> str:
         if len(names) >= limit:
             break
     return ", ".join(names) if names else "none"
+
+
+def _all_names(records: list[dict], limit: int = 10) -> str:
+    names = []
+    seen = set()
+    for rec in records:
+        sym = rec.get("symbol")
+        if sym and sym not in seen:
+            seen.add(sym)
+            names.append(sym)
+    if not names:
+        return "none"
+    if len(names) <= limit:
+        return ", ".join(names)
+    return ", ".join(names[:limit]) + f" (+{len(names) - limit} more)"
 
 
 def _dedupe_reason(reason: str) -> str:
@@ -198,28 +213,37 @@ def format_alert(limit: int = 8, min_score: int = 6, universe_size: int = 120) -
             rejected.append({"symbol": symbol, "reason": reason})
 
     if not passed:
-        lines.append(f"Scanned {len(symbols)} | 0 passed threshold | 0 BUY | 0 WATCH")
-        lines.append(f"Top names considered: {_top_names([{'symbol': s} for s in symbols], 3)}")
-        lines.append(f"Why no buys: {_dedupe_reason(market.notes or 'market correction gate')}")
+        lines.append(f"Qualified setups: 0 of {len(symbols)} scanned | BUY 0 | WATCH 0")
+        lines.append(f"Top leaders: {_top_names([{'symbol': s} for s in symbols], 3)}")
+        lines.append(f"Final action: DO NOT BUY — market regime veto ({_dedupe_reason(market.notes or 'market correction gate')})")
         return "\n".join(lines)
 
     ranked = sorted(passed, key=lambda x: x["score"], reverse=True)
     candidates = ranked[:limit]
-    buy_count = sum(1 for c in candidates if c["action"] == "BUY")
-    watch_count = sum(1 for c in candidates if c["action"] == "WATCH")
-    no_buy_count = sum(1 for c in candidates if c["action"] == "NO_BUY")
+    buy_candidates = [c for c in candidates if c["action"] == "BUY"]
+    watch_candidates = [c for c in candidates if c["action"] == "WATCH"]
+    buy_count = len(buy_candidates)
+    watch_count = len(watch_candidates)
 
-    lines.append(f"Scanned {len(symbols)} | {len(passed)} passed threshold | {buy_count} BUY | {watch_count} WATCH")
-    lines.append(f"Top names considered: {_top_names(candidates, 3)}")
+    lines.append(f"Qualified setups: {len(passed)} of {len(symbols)} scanned | BUY {buy_count} | WATCH {watch_count}")
+    if buy_count > 0:
+        lines.append(f"BUY names: {_all_names(buy_candidates, 10)}")
+    else:
+        lines.append("BUY names: none")
 
-    if buy_count == 0 and watch_count == 0:
-        lines.append(f"Why no buys: {_dedupe_reason(market.notes or 'market correction gate')}")
-    elif candidates:
-        preview = []
-        for c in candidates[: min(limit, 3)]:
-            suffix = f" {c['sentiment_tag']}" if c['sentiment_tag'] else ""
-            preview.append(f"{c['symbol']} {c['action']} ({c['score']}/12){suffix}")
-        lines.append("Leaders: " + " | ".join(preview))
+    preview = []
+    for c in candidates[: min(limit, 3)]:
+        suffix = f" {c['sentiment_tag']}" if c['sentiment_tag'] else ""
+        preview.append(f"{c['symbol']} {c['action']} ({c['score']}/12){suffix}")
+    lines.append("Top leaders: " + (" | ".join(preview) if preview else "none"))
+
+    if buy_count == 0:
+        veto_reason = _dedupe_reason(market.notes or 'market correction gate')
+        lines.append(f"Final action: DO NOT BUY — market regime veto ({veto_reason})")
+    elif watch_count > 0:
+        lines.append("Final action: BUY listed names only; keep remaining qualified setups on watch")
+    else:
+        lines.append("Final action: BUY listed names only")
 
     if getattr(market, "status", "ok") == "degraded":
         lines.append(f"Note: degraded market data ({float(getattr(market, 'snapshot_age_seconds', 0.0) or 0.0):.0f}s stale)")

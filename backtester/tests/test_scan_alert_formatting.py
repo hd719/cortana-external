@@ -79,9 +79,10 @@ def test_dipbuyer_alert_is_compact_when_market_gate_blocks_buys():
 
     assert text.splitlines() == [
         "Dip Buyer Scan",
-        "Market: correction — no new positions",
-        "Scanned 4 | 3 passed threshold | 0 BUY | 0 WATCH",
-        "Top names considered: CFLT, HWM, ALUR",
-        "Why no buys: market correction gate",
+        "Market regime: correction",
+        "Qualified setups: 3 of 4 scanned | BUY 0 | WATCH 0",
+        "BUY names: none",
+        "Top leaders: CFLT NO_BUY (7/12) | HWM NO_BUY (7/12) | ALUR NO_BUY (6/12)",
+        "Final action: DO NOT BUY — market regime veto (market correction gate)",
     ]
     analyzer.analyze.assert_not_called()

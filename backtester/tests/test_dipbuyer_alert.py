@@ -79,10 +79,40 @@ def test_format_alert_output_structure_and_tags_buy_watch_no_buy():
         text = format_alert(limit=8, min_score=6)
 
     assert "Dip Buyer Scan" in text
-    assert "Market: correction — no new positions" in text
-    assert "Scanned 3 | 2 passed threshold | 1 BUY | 1 WATCH" in text
-    assert "Top names considered: MSFT, AAPL" in text
-    assert "Leaders: MSFT BUY (9/12) 🐦 Neutral | AAPL WATCH (7/12) 🐦 Neutral" in text
+    assert "Market regime: correction" in text
+    assert "Qualified setups: 2 of 3 scanned | BUY 1 | WATCH 1" in text
+    assert "BUY names: MSFT" in text
+    assert "Top leaders: MSFT BUY (9/12) 🐦 Neutral | AAPL WATCH (7/12) 🐦 Neutral" in text
+    assert "Final action: BUY listed names only; keep remaining qualified setups on watch" in text
+
+
+def test_format_alert_lists_all_buy_names_when_count_is_small():
+    fake = _FakeAdvisor()
+    fake._market = SimpleNamespace(
+        regime=MarketRegime.UPTREND_UNDER_PRESSURE,
+        position_sizing=0.5,
+        notes="Stay selective",
+        data_source="alpaca",
+        snapshot_age_seconds=0.0,
+        status="ok",
+    )
+    fake._scan = pd.DataFrame([
+        {"symbol": "MSFT", "total_score": 10},
+        {"symbol": "AAPL", "total_score": 9},
+        {"symbol": "NVDA", "total_score": 8},
+    ])
+    fake._analysis = {
+        "MSFT": {"total_score": 10, "data_source": "alpaca", "recommendation": {"action": "BUY", "reason": "Strong setup"}},
+        "AAPL": {"total_score": 9, "data_source": "alpaca", "recommendation": {"action": "BUY", "reason": "Strong setup"}},
+        "NVDA": {"total_score": 8, "data_source": "alpaca", "recommendation": {"action": "BUY", "reason": "Strong setup"}},
+    }
+
+    with patch("dipbuyer_alert.TradingAdvisor", return_value=fake):
+        text = format_alert(limit=8, min_score=6)
+
+    assert "Market regime: uptrend under pressure" in text
+    assert "BUY names: MSFT, AAPL, NVDA" in text
+    assert "Final action: BUY listed names only" in text
 
 
 def test_format_alert_reports_degraded_market_status_with_next_action():
@@ -104,4 +134,5 @@ def test_format_alert_reports_degraded_market_status_with_next_action():
         text = format_alert(limit=8, min_score=6)
 
     assert "Dip Buyer Scan" in text
+    assert "Final action: DO NOT BUY — market regime veto (Cached market fallback active)" in text
     assert "Note: degraded market data (720s stale)" in text
