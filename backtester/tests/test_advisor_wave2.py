@@ -31,11 +31,22 @@ def test_analyze_stock_attaches_wave2_scores_and_buys_supportive_setup():
     closes = [100 + i * 0.5 for i in range(50)] + [126, 127, 128, 129, 130, 131, 132, 133, 134, 135]
     volumes = [1_000_000.0] * 50 + [1_500_000.0] * 10
     history = _history(closes, volumes)
+    sector_history = _history([100 + i * 0.25 for i in range(80)], [900_000.0] * 80)
 
     advisor.market_data.get_history = MagicMock(
-        return_value=SimpleNamespace(frame=history, source="test", staleness_seconds=0.0, status="ok")
+        side_effect=[
+            SimpleNamespace(frame=history, source="test", staleness_seconds=0.0, status="ok"),
+            SimpleNamespace(frame=sector_history, source="test", staleness_seconds=0.0, status="ok"),
+        ]
     )
-    advisor.fundamentals.get_fundamentals = MagicMock(return_value={"eps_growth": 30, "revenue_growth": 25})
+    advisor.fundamentals.get_fundamentals = MagicMock(
+        return_value={
+            "eps_growth": 30,
+            "revenue_growth": 25,
+            "sector": "Technology",
+            "earnings_event_window": [{"date": "2026-03-10"}],
+        }
+    )
     advisor.fundamentals.score_canslim_fundamentals = MagicMock(return_value={"C": 2, "A": 2, "I": 1, "S": 1})
     advisor.get_market_status = MagicMock(return_value=_market())
     advisor.headline_sentiment.analyze = MagicMock(
@@ -51,8 +62,11 @@ def test_analyze_stock_attaches_wave2_scores_and_buys_supportive_setup():
     assert analysis["breakout_follow_through"]["score"] >= 4
     assert analysis["sentiment_overlay"]["score"] > 0
     assert analysis["exit_risk"]["score"] <= 1
+    assert analysis["sector_context"]["score"] > 0
+    assert analysis["catalyst_weighting"]["score"] > 0
     assert analysis["rank_score"] > analysis["total_score"]
-    assert analysis["recommendation"]["confidence"] >= 70
+    assert analysis["recommendation"]["confidence"] >= 80
+    assert analysis["recommendation"]["position_size_pct"] > 10.0
 
 
 def test_analyze_stock_watch_when_sentiment_overlay_vetoes_setup():

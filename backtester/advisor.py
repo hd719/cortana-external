@@ -47,6 +47,11 @@ from data.wave2 import (
     score_breakout_follow_through,
     score_exit_risk,
 )
+from data.wave3 import (
+    SectorStrengthAnalyzer,
+    build_position_sizing_guidance,
+    score_catalyst_weighting,
+)
 from data.x_sentiment import XSentimentAnalyzer
 from strategies.dip_buyer import DipBuyerStrategy, DIPBUYER_CONFIG
 
@@ -68,9 +73,11 @@ class TradingAdvisor:
         self.market_data = MarketDataProvider()
         self.headline_sentiment = HeadlineSentimentAnalyzer()
         self.x_sentiment = XSentimentAnalyzer()
+        self.sector_strength = SectorStrengthAnalyzer(self.market_data)
         
         # Cache
         self._market_status: Optional[MarketStatus] = None
+        self._candidate_context_by_symbol: Dict[str, Dict] = {}
     
     def get_market_status(self, refresh: bool = False) -> MarketStatus:
         """Get current market regime status."""
@@ -133,8 +140,23 @@ class TradingAdvisor:
         }
 
     @staticmethod
-    def _rank_score(total_score: int, breakout_score: int, sentiment_score: int, exit_risk_score: int) -> float:
-        return round(total_score + breakout_score * 0.75 + sentiment_score * 0.5 - exit_risk_score * 0.75, 2)
+    def _rank_score(
+        total_score: int,
+        breakout_score: int,
+        sentiment_score: int,
+        exit_risk_score: int,
+        sector_score: int = 0,
+        catalyst_score: int = 0,
+    ) -> float:
+        return round(
+            total_score
+            + breakout_score * 0.75
+            + sentiment_score * 0.5
+            + sector_score * 0.75
+            + catalyst_score * 0.5
+            - exit_risk_score * 0.75,
+            2,
+        )
 
     def analyze_stock(self, symbol: str, quiet: bool = False) -> Dict:
         """
@@ -157,6 +179,8 @@ class TradingAdvisor:
         # Get fundamentals
         fund = self.fundamentals.get_fundamentals(symbol)
         fund_scores = self.fundamentals.score_canslim_fundamentals(fund)
+        candidate_context = self._candidate_context_by_symbol.get(symbol, {})
+        sector_name = candidate_context.get("sector") or fund.get("sector")
         
         # Get technicals
         tech = self._calculate_technical_score_from_history(symbol, hist)
@@ -173,6 +197,12 @@ class TradingAdvisor:
             x_analyzer=self.x_sentiment,
         )
         exit_risk = score_exit_risk(hist, breakout)
+        sector_context = self.sector_strength.analyze(hist, sector_name)
+        catalyst_weighting = score_catalyst_weighting(
+            fund.get("earnings_event_window"),
+            sentiment_overlay=sentiment_overlay,
+            breakout=breakout,
+        )
         
         # Calculate total score
         total_score = (
@@ -183,11 +213,35 @@ class TradingAdvisor:
             tech.get('N_score', 0) +
             tech.get('L_score', 0)
         )
+        base_confidence = int(
+            max(
+                5,
+                min(
+                    95,
+                    28 + total_score * 5 + breakout.get('score', 0) * 6 +
+                    int(sentiment_overlay.get('confidence_delta', 0)) -
+                    exit_risk.get('score', 0) * 7,
+                ),
+            )
+        )
+        confidence = int(
+            max(
+                5,
+                min(
+                    95,
+                    base_confidence
+                    + int(sector_context.get("confidence_delta", 0))
+                    + int(catalyst_weighting.get("confidence_delta", 0)),
+                ),
+            )
+        )
         rank_score = self._rank_score(
             total_score,
             breakout.get('score', 0),
             sentiment_overlay.get('score', 0),
             exit_risk.get('score', 0),
+            sector_context.get('score', 0),
+            catalyst_weighting.get('score', 0),
         )
         
         # Generate recommendation
@@ -200,6 +254,9 @@ class TradingAdvisor:
             breakout=breakout,
             sentiment_overlay=sentiment_overlay,
             exit_risk=exit_risk,
+            sector_context=sector_context,
+            catalyst_weighting=catalyst_weighting,
+            confidence=confidence,
             rank_score=rank_score,
         )
         
@@ -216,6 +273,9 @@ class TradingAdvisor:
             'breakout_follow_through': breakout,
             'sentiment_overlay': sentiment_overlay,
             'exit_risk': exit_risk,
+            'sector_context': sector_context,
+            'catalyst_weighting': catalyst_weighting,
+            'confidence': confidence,
             'data_source': history_result.source,
             'data_staleness_seconds': history_result.staleness_seconds,
             'data_status': history_result.status,
@@ -363,6 +423,9 @@ class TradingAdvisor:
         breakout: Dict,
         sentiment_overlay: Dict,
         exit_risk: Dict,
+        sector_context: Dict,
+        catalyst_weighting: Dict,
+        confidence: int,
         rank_score: float,
     ) -> Dict:
         """
@@ -376,16 +439,15 @@ class TradingAdvisor:
         breakout_score = int(breakout.get('score', 0))
         sentiment_score = int(sentiment_overlay.get('score', 0))
         exit_risk_score = int(exit_risk.get('score', 0))
-        confidence = int(
-            max(
-                5,
-                min(
-                    95,
-                    28 + total_score * 5 + breakout_score * 6 +
-                    int(sentiment_overlay.get('confidence_delta', 0)) -
-                    exit_risk_score * 7,
-                ),
-            )
+        sector_score = int(sector_context.get('score', 0))
+        catalyst_score = int(catalyst_weighting.get('score', 0))
+        sizing = build_position_sizing_guidance(
+            market=market,
+            confidence=confidence,
+            breakout=breakout,
+            exit_risk=exit_risk,
+            sector_context=sector_context,
+            catalyst=catalyst_weighting,
         )
 
         base_fields = {
@@ -395,7 +457,10 @@ class TradingAdvisor:
             'breakout_score': breakout_score,
             'sentiment_score': sentiment_score,
             'exit_risk_score': exit_risk_score,
+            'sector_score': sector_score,
+            'catalyst_score': catalyst_score,
             'market_note': market.notes,
+            'sizing': sizing,
         }
         
         # Check if we should buy
@@ -435,6 +500,14 @@ class TradingAdvisor:
                 **base_fields,
             }
 
+        if confidence < 55:
+            confidence_drags = [reason for reason in [sector_context.get('reason'), catalyst_weighting.get('reason')] if reason]
+            return {
+                'action': 'WATCH',
+                'reason': f"Composite confidence fell to {confidence}%: {' | '.join(confidence_drags[:2])}",
+                **base_fields,
+            }
+
         if pct_from_high < 85:
             return {
                 'action': 'WATCH',
@@ -449,22 +522,6 @@ class TradingAdvisor:
         elif exit_risk_score >= 3:
             stop_loss_pct = 0.06
         stop_price = price * (1 - stop_loss_pct)
-        
-        # Position sizing based on market regime
-        base_size = 0.10  # 10% of portfolio per position
-        size_multiplier = 1.0
-        if breakout_score <= 2:
-            size_multiplier *= 0.85
-        if sentiment_score < 0:
-            size_multiplier *= 0.85
-        elif sentiment_score > 0:
-            size_multiplier *= 1.05
-        if exit_risk_score >= 3:
-            size_multiplier *= 0.65
-        elif exit_risk_score == 2:
-            size_multiplier *= 0.80
-
-        adjusted_size = base_size * market.position_sizing * size_multiplier
         
         # Build reasoning
         reasons = []
@@ -481,15 +538,24 @@ class TradingAdvisor:
             reasons.append(f"✅ Breakout follow-through {breakout_score}/5 ({breakout.get('status', 'mixed')})")
         if sentiment_score > 0:
             reasons.append(f"✅ Sentiment tailwind: {sentiment_overlay.get('reason')}")
+        if sector_score > 0:
+            reasons.append(f"✅ Sector context: {sector_context.get('reason')}")
+        elif sector_score < 0:
+            reasons.append(f"⚠️ Sector drag: {sector_context.get('reason')}")
+        if catalyst_score > 0:
+            reasons.append(f"✅ Catalyst support: {catalyst_weighting.get('reason')}")
+        elif catalyst_score < 0:
+            reasons.append(f"⚠️ Catalyst caution: {catalyst_weighting.get('reason')}")
         if exit_risk_score <= 1:
             reasons.append("✅ Exit risk remains contained")
+        reasons.append(f"📏 Size as {sizing.get('label', 'STANDARD').lower()} position ({sizing.get('reason')})")
         
         return {
             'action': 'BUY',
             'entry': price,
             'stop_loss': stop_price,
             'stop_loss_pct': stop_loss_pct * 100,
-            'position_size_pct': adjusted_size * 100,
+            'position_size_pct': sizing.get('recommended_position_pct', 0.0),
             'reasons': reasons,
             **base_fields,
         }
@@ -536,33 +602,45 @@ class TradingAdvisor:
         print("\n📊 Enriching top candidates with fundamental data...")
         
         enriched = []
-        for _, row in results.head(15).iterrows():
-            symbol = row['symbol']
-            
-            try:
-                analysis = self.analyze_stock(symbol, quiet=True)
-                if 'error' in analysis:
+        previous_context = dict(self._candidate_context_by_symbol)
+        self._candidate_context_by_symbol = {
+            row['symbol']: row.to_dict()
+            for _, row in results.head(15).iterrows()
+        }
+
+        try:
+            for _, row in results.head(15).iterrows():
+                symbol = row['symbol']
+
+                try:
+                    analysis = self.analyze_stock(symbol, quiet=True)
+                    if 'error' in analysis:
+                        continue
+
+                    row_dict = row.to_dict()
+                    scores = analysis.get('fundamental_scores', {})
+                    rec = analysis.get('recommendation', {})
+                    row_dict['C_score'] = scores.get('C', 0)
+                    row_dict['A_score'] = scores.get('A', 0)
+                    row_dict['I_score'] = scores.get('I', 0)
+                    row_dict['S_fund_score'] = scores.get('S', 0)
+                    row_dict['total_score'] = analysis.get('total_score', 0)
+                    row_dict['breakout_score'] = analysis.get('breakout_follow_through', {}).get('score', 0)
+                    row_dict['sentiment_score'] = analysis.get('sentiment_overlay', {}).get('score', 0)
+                    row_dict['exit_risk_score'] = analysis.get('exit_risk', {}).get('score', 0)
+                    row_dict['sector_score'] = analysis.get('sector_context', {}).get('score', 0)
+                    row_dict['catalyst_score'] = analysis.get('catalyst_weighting', {}).get('score', 0)
+                    row_dict['rank_score'] = analysis.get('rank_score', analysis.get('total_score', 0))
+                    row_dict['confidence'] = rec.get('confidence', analysis.get('confidence', 0))
+                    row_dict['position_size_pct'] = rec.get('position_size_pct', 0.0)
+                    row_dict['action'] = rec.get('action', 'NO_BUY')
+                    enriched.append(row_dict)
+
+                except Exception as e:
+                    print(f"   ⚠️ Error enriching {symbol}: {e}")
                     continue
-                
-                row_dict = row.to_dict()
-                scores = analysis.get('fundamental_scores', {})
-                rec = analysis.get('recommendation', {})
-                row_dict['C_score'] = scores.get('C', 0)
-                row_dict['A_score'] = scores.get('A', 0)
-                row_dict['I_score'] = scores.get('I', 0)
-                row_dict['S_fund_score'] = scores.get('S', 0)
-                row_dict['total_score'] = analysis.get('total_score', 0)
-                row_dict['breakout_score'] = analysis.get('breakout_follow_through', {}).get('score', 0)
-                row_dict['sentiment_score'] = analysis.get('sentiment_overlay', {}).get('score', 0)
-                row_dict['exit_risk_score'] = analysis.get('exit_risk', {}).get('score', 0)
-                row_dict['rank_score'] = analysis.get('rank_score', analysis.get('total_score', 0))
-                row_dict['confidence'] = rec.get('confidence', 0)
-                row_dict['action'] = rec.get('action', 'NO_BUY')
-                enriched.append(row_dict)
-                
-            except Exception as e:
-                print(f"   ⚠️ Error enriching {symbol}: {e}")
-                continue
+        finally:
+            self._candidate_context_by_symbol = previous_context
         
         if not enriched:
             return results
@@ -940,6 +1018,14 @@ def main():
             f"Sentiment={sentiment.get('label','NEUTRAL')} "
             f"ExitRisk={exit_risk.get('score',0)}/5"
         )
+        sector_context = analysis.get('sector_context', {})
+        catalyst = analysis.get('catalyst_weighting', {})
+        print(
+            f"   Wave 3:      Sector={sector_context.get('score',0):+d} "
+            f"({sector_context.get('status','neutral')}) "
+            f"Catalyst={catalyst.get('score',0):+d} "
+            f"({catalyst.get('label','NEUTRAL')})"
+        )
         
         rec = analysis.get('recommendation', {})
         print(f"\n   Recommendation: {rec.get('action', 'N/A')}")
@@ -947,6 +1033,7 @@ def main():
             print(f"   Entry: ${rec.get('entry', 0):.2f}")
             print(f"   Stop:  ${rec.get('stop_loss', 0):.2f}")
             print(f"   Confidence: {rec.get('confidence', 0)}%")
+            print(f"   Size:  {rec.get('position_size_pct', 0):.1f}%")
         else:
             print(f"   Reason: {rec.get('reason', 'N/A')}")
         

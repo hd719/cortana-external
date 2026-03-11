@@ -194,6 +194,41 @@ class FundamentalsFetcher:
         except Exception as e:
             print(f"   ❌ Error fetching earnings: {e}")
             return pd.DataFrame()
+
+    def get_earnings_event_window(self, symbol: str) -> pd.DataFrame:
+        """Get recent and upcoming earnings dates for catalyst scoring."""
+        cached = self.cache.get(symbol, "earnings_calendar")
+        if cached is not None:
+            return pd.DataFrame(cached)
+
+        ticker = self.get_ticker(symbol)
+
+        try:
+            earnings_dates = ticker.earnings_dates
+            if earnings_dates is None or earnings_dates.empty:
+                return pd.DataFrame(columns=["date", "eps_estimate", "eps_actual", "surprise_pct"])
+
+            df = earnings_dates.reset_index()
+            rename_map = {}
+            if len(df.columns) >= 1:
+                rename_map[df.columns[0]] = "date"
+            if len(df.columns) >= 2:
+                rename_map[df.columns[1]] = "eps_estimate"
+            if len(df.columns) >= 3:
+                rename_map[df.columns[2]] = "eps_actual"
+            if len(df.columns) >= 4:
+                rename_map[df.columns[3]] = "surprise_pct"
+
+            df = df.rename(columns=rename_map)
+            keep_cols = [col for col in ["date", "eps_estimate", "eps_actual", "surprise_pct"] if col in df.columns]
+            df = df[keep_cols]
+            df["date"] = pd.to_datetime(df["date"], errors="coerce").dt.tz_localize(None)
+            df = df.dropna(subset=["date"]).sort_values("date").reset_index(drop=True)
+
+            self.cache.set(symbol, "earnings_calendar", df.to_dict("records"))
+            return df
+        except Exception:
+            return pd.DataFrame(columns=["date", "eps_estimate", "eps_actual", "surprise_pct"])
     
     def get_eps_growth(self, symbol: str, as_of_date: str = None) -> Optional[float]:
         """
@@ -443,6 +478,8 @@ class FundamentalsFetcher:
                 'float_shares': info.get('floatShares'),
                 'short_ratio': info.get('shortRatio'),
                 'short_pct_of_float': info.get('shortPercentOfFloat'),
+                'sector': info.get('sector'),
+                'industry': info.get('industry'),
             }
         except Exception as e:
             print(f"Error getting shares info: {e}")
@@ -493,6 +530,19 @@ class FundamentalsFetcher:
             # Shares (S factor)
             **self.get_shares_info(symbol),
         }
+
+        events = self.get_earnings_event_window(symbol)
+        result['earnings_event_window'] = events.to_dict('records') if not events.empty else []
+        result['last_earnings_date'] = (
+            events[events['date'] <= pd.Timestamp.now()].iloc[-1]['date'].strftime('%Y-%m-%d')
+            if not events.empty and not events[events['date'] <= pd.Timestamp.now()].empty
+            else None
+        )
+        result['next_earnings_date'] = (
+            events[events['date'] > pd.Timestamp.now()].iloc[0]['date'].strftime('%Y-%m-%d')
+            if not events.empty and not events[events['date'] > pd.Timestamp.now()].empty
+            else None
+        )
         
         return result
     
