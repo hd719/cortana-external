@@ -10,7 +10,6 @@ import { TaskBoardTask } from "@/lib/data";
 import { cn } from "@/lib/utils";
 
 type StatusFilter =
-  | "all"
   | "backlog"
   | "scheduled"
   | "ready"
@@ -28,23 +27,24 @@ type CompletedPagination = {
 };
 
 const FILTER_LABELS: Record<StatusFilter, string> = {
-  all: "All",
   backlog: "Backlog",
   scheduled: "Scheduled",
   ready: "Ready",
   pending: "Pending (legacy)",
   in_progress: "In progress",
-  auto_ready: "Auto-ready",
+  auto_ready: "Ready now",
   done: "Done",
 };
 
-const FILTER_EMPTY: Record<Exclude<StatusFilter, "all">, string> = {
+const PRIMARY_FILTERS = ["backlog", "ready", "in_progress", "done"] as const;
+
+const FILTER_EMPTY: Record<StatusFilter, string> = {
   backlog: "No backlog tasks right now.",
   scheduled: "No scheduled tasks right now.",
   ready: "No ready tasks right now.",
   pending: "No pending legacy tasks right now.",
   in_progress: "No tasks currently in progress.",
-  auto_ready: "No auto-ready tasks available right now.",
+  auto_ready: "No ready-now tasks available right now.",
   done: "No completed tasks yet.",
 };
 
@@ -121,13 +121,11 @@ export function TaskStatusFilters({
   initialCompletedTasks: TaskBoardTask[];
   initialCompletedPagination: CompletedPagination;
 }) {
-  const [activeFilter, setActiveFilter] = useState<StatusFilter>("all");
+  const [activeFilter, setActiveFilter] = useState<StatusFilter>("ready");
   const [completedTasks, setCompletedTasks] = useState<TaskBoardTask[]>(initialCompletedTasks);
   const [pagination, setPagination] = useState<CompletedPagination>(initialCompletedPagination);
   const [loadingMore, setLoadingMore] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
-
-  const allTasks = useMemo(() => [...activeTasks, ...completedTasks], [activeTasks, completedTasks]);
 
   const counts = useMemo(() => {
     const backlog = activeTasks.filter((task) => task.status === "backlog").length;
@@ -143,7 +141,6 @@ export function TaskStatusFilters({
     ).length;
 
     return {
-      all: activeTasks.length + pagination.total,
       backlog,
       scheduled,
       ready,
@@ -173,8 +170,10 @@ export function TaskStatusFilters({
     if (activeFilter === "done") {
       return completedTasks;
     }
-    return allTasks;
-  }, [activeFilter, activeTasks, allTasks, completedTasks]);
+    return activeTasks;
+  }, [activeFilter, activeTasks, completedTasks]);
+
+  const visibleFilters = PRIMARY_FILTERS;
 
   const canLoadMoreCompleted = pagination.hasMore && !loadingMore;
 
@@ -220,9 +219,7 @@ export function TaskStatusFilters({
       <CardHeader className="space-y-3">
         <CardTitle className="text-base">Status filters</CardTitle>
         <div className="flex flex-wrap gap-2">
-          {(
-            ["backlog", "scheduled", "ready", "pending", "in_progress", "auto_ready", "done"] as const
-          ).map((filter) => (
+          {visibleFilters.map((filter) => (
             <Button
               key={filter}
               type="button"
@@ -235,30 +232,16 @@ export function TaskStatusFilters({
               {FILTER_LABELS[filter]}: {counts[filter]}
             </Button>
           ))}
-          <Button
-            type="button"
-            size="sm"
-            variant={activeFilter === "all" ? "secondary" : "ghost"}
-            onClick={() => setActiveFilter("all")}
-            aria-pressed={activeFilter === "all"}
-            className="h-8"
-          >
-            {FILTER_LABELS.all}: {counts.all}
-          </Button>
         </div>
       </CardHeader>
       <CardContent className="space-y-3">
         {filteredTasks.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            {activeFilter === "all"
-              ? "No tasks found."
-              : FILTER_EMPTY[activeFilter as Exclude<StatusFilter, "all">]}
-          </p>
+          <p className="text-sm text-muted-foreground">{FILTER_EMPTY[activeFilter]}</p>
         ) : (
           filteredTasks.map((task: (typeof filteredTasks)[number]) => <TaskItem key={task.id} task={task} />)
         )}
 
-        {(activeFilter === "done" || activeFilter === "all") && pagination.total > completedTasks.length && (
+        {activeFilter === "done" && pagination.total > completedTasks.length && (
           <div className="space-y-2 pt-2">
             <Button type="button" size="sm" variant="outline" onClick={loadMoreCompleted} disabled={!canLoadMoreCompleted}>
               {loadingMore ? "Loading…" : "Show older completed"}
