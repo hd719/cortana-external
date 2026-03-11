@@ -1,6 +1,12 @@
 # Backtester — CANSLIM Trading Advisor
 
-A Python-based backtesting engine and trading advisor implementing the CANSLIM strategy.
+A Python-based backtesting engine and trading advisor for:
+- **CANSLIM-style growth breakout analysis**
+- **Buy-the-Dip scanning**
+- **market-regime-aware decision support**
+- **incremental wave-based scoring upgrades**
+
+This repo now includes a practical multi-wave market-intelligence stack layered on top of the original backtester.
 
 ## Quick Start
 
@@ -24,30 +30,49 @@ python canslim_alert.py --limit 8 --min-score 6
 python main.py --symbol AAPL --years 2 --compare
 ```
 
+## What was added in the recent buildout
+
+The recent wave-based buildout added:
+- **Wave 1:** better outcome labeling, richer market regime context, dip recovery / falling-knife filter
+- **Wave 2:** breakout follow-through scoring, sentiment overlay, exit risk scoring
+- **Wave 3:** confidence/regime-aware sizing, sector-relative strength context, catalyst/event weighting
+- **Wave 4:** model/scoring comparison harness to evaluate whether simpler approaches are already enough
+
+See:
+- `docs-wave-overview.md`
+
 ## Project Structure
 
 ```
 backtester/
-├── advisor.py          # Main trading advisor (recommendations)
-├── canslim_alert.py    # Daily CANSLIM alert formatter (Telegram-ready)
-├── main.py             # Backtest runner
-├── backtest.py         # Core backtesting engine
-├── metrics.py          # Performance calculations (Sharpe, Sortino, etc.)
-├── indicators.py       # Technical indicators (SMA, RSI, MACD, etc.)
-├── config.py           # Alpaca API configuration
-├── requirements.txt    # Python dependencies
+├── advisor.py           # Main trading advisor (recommendations + wave scoring integration)
+├── canslim_alert.py     # Daily CANSLIM alert formatter (Telegram-ready)
+├── dipbuyer_alert.py    # Dip Buyer alert formatter
+├── main.py              # Backtest runner
+├── backtest.py          # Core backtesting engine
+├── metrics.py           # Performance calculations (Sharpe, Sortino, etc.)
+├── indicators.py        # Technical indicators (SMA, RSI, MACD, etc.)
+├── outcomes.py          # Outcome labeling utilities (Wave 1)
+├── requirements.txt     # Python dependencies
+├── docs-wave-overview.md # Plain-English map of the Wave 1-4 buildout
 │
 ├── data/
-│   ├── fetcher.py      # Alpaca price data
-│   ├── fundamentals.py # Yahoo Finance fundamentals (yfinance)
-│   ├── universe.py     # Stock screening/filtering
-│   ├── market_regime.py # M factor (distribution days, trend)
-│   └── cache/          # Cached data
+│   ├── fetcher.py       # Alpaca price data
+│   ├── fundamentals.py  # Yahoo Finance fundamentals + context support
+│   ├── universe.py      # Stock screening/filtering
+│   ├── market_regime.py # Market regime logic / scorecards
+│   ├── wave2.py         # Breakout, sentiment, and exit-risk scoring (Wave 2)
+│   ├── wave3.py         # Sizing, sector, and catalyst scoring (Wave 3)
+│   └── cache/           # Cached data
+│
+├── evaluation/
+│   └── comparison.py    # Model/scoring comparison harness (Wave 4)
 │
 └── strategies/
-    ├── base.py         # Abstract Strategy class
-    ├── momentum.py     # Momentum strategies
-    └── canslim.py      # CANSLIM implementation
+    ├── base.py          # Abstract Strategy class
+    ├── momentum.py      # Momentum strategies
+    ├── canslim.py       # CANSLIM implementation
+    └── dip_buyer.py     # Dip Buyer strategy logic
 ```
 
 ## CANSLIM Factors
@@ -78,6 +103,13 @@ backtester/
 | Rally Attempt | 50% | Cautious buying |
 | Correction | 0% | No new buys |
 
+Regime handling is now part of a broader scoring stack rather than only a blunt gate.
+It feeds:
+- dip recovery / falling-knife filtering
+- breakout follow-through confidence
+- confidence/regime-based sizing
+- comparison/evaluation runs
+
 ## Example Output
 
 ```
@@ -92,7 +124,7 @@ backtester/
    Reason: Score too low (5/12). Need >= 7.
 ```
 
-## Strategies
+## Strategies and scoring layers
 
 ### MomentumStrategy
 - Uses MA crossovers + RSI
@@ -102,12 +134,33 @@ backtester/
 ### CANSLIMStrategy
 - Full CANSLIM with fundamentals
 - Requires `set_symbol()` before running
-- Uses market regime gate
+- Uses market regime gate and now benefits from downstream wave scoring in advisor flow
 
 ### CANSLIMLite
 - Technical factors only (N, L, S, M)
 - No fundamental data needed
 - Faster backtesting
+
+### Dip Buyer
+- Separate dip-quality / recovery logic
+- now uses richer Wave 1 context to distinguish:
+  - healthy pullback
+  - oversold bounce candidate
+  - falling knife / structural damage risk
+
+### Wave 2 overlays
+- breakout follow-through score
+- sentiment overlay
+- exit risk score
+
+### Wave 3 overlays
+- confidence/regime-aware sizing
+- sector-relative strength context
+- catalyst/event weighting
+
+### Wave 4 evaluation layer
+- compare baseline vs enhanced scoring/model families
+- use this before adding more modeling complexity
 
 ## API Keys
 
