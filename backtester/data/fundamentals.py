@@ -532,15 +532,23 @@ class FundamentalsFetcher:
         }
 
         events = self.get_earnings_event_window(symbol)
+        if not events.empty and 'date' in events.columns:
+            events = events.copy()
+            events['date'] = pd.to_datetime(events['date'], errors='coerce').dt.tz_localize(None)
+            events = events.dropna(subset=['date']).sort_values('date').reset_index(drop=True)
+
         result['earnings_event_window'] = events.to_dict('records') if not events.empty else []
+        now_ts = pd.Timestamp.now().tz_localize(None)
+        past_events = events[events['date'] <= now_ts] if not events.empty and 'date' in events.columns else pd.DataFrame()
+        future_events = events[events['date'] > now_ts] if not events.empty and 'date' in events.columns else pd.DataFrame()
         result['last_earnings_date'] = (
-            events[events['date'] <= pd.Timestamp.now()].iloc[-1]['date'].strftime('%Y-%m-%d')
-            if not events.empty and not events[events['date'] <= pd.Timestamp.now()].empty
+            past_events.iloc[-1]['date'].strftime('%Y-%m-%d')
+            if not past_events.empty
             else None
         )
         result['next_earnings_date'] = (
-            events[events['date'] > pd.Timestamp.now()].iloc[0]['date'].strftime('%Y-%m-%d')
-            if not events.empty and not events[events['date'] > pd.Timestamp.now()].empty
+            future_events.iloc[0]['date'].strftime('%Y-%m-%d')
+            if not future_events.empty
             else None
         )
         
