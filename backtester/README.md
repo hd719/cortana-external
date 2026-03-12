@@ -162,7 +162,7 @@ It feeds:
 ### Wave 4 evaluation layer
 - compare baseline vs enhanced scoring/model families
 - comparison summaries now surface trade quality, effective confidence, uncertainty, downside/churn proxies, restraint counts, restrained-return splits, and adverse-regime stress where those fields exist
-- rendered reports keep `BUY`/`WATCH`/`NO_BUY` and abstain states visible, and now call out avoided baseline bad outcomes plus veto-preserved bad-outcome proxies when current data can measure them
+- rendered reports keep `BUY`/`WATCH`/`NO_BUY` and abstain states visible, call out avoided baseline bad outcomes plus veto-preserved bad-outcome proxies when current data can measure them, and add bounded review slices for regime splits plus early/late time splits when those columns exist
 - tune the bounded weights/bands for trade quality, downside/churn, adverse-regime stress, and Wave 4 comparison ranking in [`docs/scoring-calibration.md`](docs/scoring-calibration.md)
 - use this before adding more modeling complexity
 

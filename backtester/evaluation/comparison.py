@@ -305,6 +305,184 @@ def _rate(frame: pd.DataFrame, series: pd.Series) -> float:
     return round(float(series.mean() * 100.0), 1)
 
 
+def _safe_datetime_series(frame: pd.DataFrame, column: str) -> pd.Series:
+    if frame.empty or column not in frame.columns:
+        return pd.Series(pd.NaT, index=frame.index, dtype="datetime64[ns]")
+    return pd.to_datetime(frame[column], errors="coerce")
+
+
+def _format_date_label(timestamp: pd.Timestamp) -> str:
+    if pd.isna(timestamp):
+        return "n/a"
+    return timestamp.strftime("%Y-%m-%d")
+
+
+def _summarize_review_slice_model(
+    selected: pd.DataFrame,
+    *,
+    model_name: str,
+    row_ids: set[int],
+    future_return_column: str,
+    outcome_bucket_column: str,
+) -> Dict[str, object]:
+    if selected.empty or "__comparison_row_id" not in selected.columns:
+        filtered = selected.iloc[0:0].copy()
+    else:
+        filtered = selected[selected["__comparison_row_id"].isin(row_ids)].reset_index(drop=True)
+
+    record: Dict[str, object] = {
+        "model": model_name,
+        "selected_count": int(len(filtered)),
+        "symbols": _symbol_list(filtered)[:3],
+        "avg_future_return_pct": round(_safe_mean(filtered, future_return_column), 2),
+        "hit_rate_pct": 0.0,
+        "win_rate_pct": 0.0,
+    }
+    if future_return_column in filtered.columns and not filtered.empty:
+        future_returns = pd.to_numeric(filtered[future_return_column], errors="coerce").dropna()
+        if not future_returns.empty:
+            record["hit_rate_pct"] = _rate(filtered, future_returns > 0)
+    if outcome_bucket_column in filtered.columns and not filtered.empty:
+        buckets = filtered[outcome_bucket_column].fillna("").astype(str).str.lower()
+        record["win_rate_pct"] = _rate(filtered, buckets == "win")
+    return record
+
+
+def _build_regime_review_section(
+    frame: pd.DataFrame,
+    selections: Dict[str, pd.DataFrame],
+    families: Sequence[ModelFamily],
+    *,
+    future_return_column: str,
+    outcome_bucket_column: str,
+) -> Optional[Dict[str, object]]:
+    for column in ("market_regime", "adverse_regime_label"):
+        if column not in frame.columns:
+            continue
+        labels = frame[column].fillna("").astype(str).str.strip()
+        labels = labels[labels != ""]
+        if labels.empty:
+            continue
+        counts = Counter(labels)
+        if len(counts) < 2:
+            continue
+
+        slices = []
+        for value, count in sorted(counts.items(), key=lambda item: (-item[1], item[0]))[:3]:
+            row_ids = set(
+                pd.to_numeric(
+                    frame.loc[frame[column].fillna("").astype(str).str.strip() == value, "__comparison_row_id"],
+                    errors="coerce",
+                ).dropna().astype(int)
+            )
+            slices.append(
+                {
+                    "label": value,
+                    "candidate_count": int(count),
+                    "models": [
+                        _summarize_review_slice_model(
+                            selections.get(family.name, frame.iloc[0:0]),
+                            model_name=family.name,
+                            row_ids=row_ids,
+                            future_return_column=future_return_column,
+                            outcome_bucket_column=outcome_bucket_column,
+                        )
+                        for family in families
+                    ],
+                }
+            )
+        return {
+            "title": f"Regime split ({column})",
+            "source_column": column,
+            "slices": slices,
+        }
+    return None
+
+
+def _build_time_review_section(
+    frame: pd.DataFrame,
+    selections: Dict[str, pd.DataFrame],
+    families: Sequence[ModelFamily],
+    *,
+    future_return_column: str,
+    outcome_bucket_column: str,
+) -> Optional[Dict[str, object]]:
+    for column in ("entry_date", "signal_date", "review_date", "date", "as_of_date", "timestamp"):
+        dates = _safe_datetime_series(frame, column)
+        valid_dates = dates.dropna()
+        if valid_dates.nunique() < 2:
+            continue
+
+        ordered_index = list(valid_dates.sort_values(kind="mergesort").index)
+        midpoint = len(ordered_index) // 2
+        if midpoint <= 0 or midpoint >= len(ordered_index):
+            continue
+
+        slices = []
+        for label, slice_index in (("early", ordered_index[:midpoint]), ("late", ordered_index[midpoint:])):
+            slice_dates = dates.loc[slice_index].dropna()
+            if slice_dates.empty:
+                continue
+            row_ids = set(
+                pd.to_numeric(frame.loc[slice_index, "__comparison_row_id"], errors="coerce").dropna().astype(int)
+            )
+            date_span = f"{_format_date_label(slice_dates.min())}..{_format_date_label(slice_dates.max())}"
+            slices.append(
+                {
+                    "label": f"{label} {date_span}",
+                    "candidate_count": int(len(slice_index)),
+                    "models": [
+                        _summarize_review_slice_model(
+                            selections.get(family.name, frame.iloc[0:0]),
+                            model_name=family.name,
+                            row_ids=row_ids,
+                            future_return_column=future_return_column,
+                            outcome_bucket_column=outcome_bucket_column,
+                        )
+                        for family in families
+                    ],
+                }
+            )
+        if len(slices) == 2:
+            return {
+                "title": f"Time split ({column})",
+                "source_column": column,
+                "slices": slices,
+            }
+    return None
+
+
+def _build_review_slices(
+    frame: pd.DataFrame,
+    selections: Dict[str, pd.DataFrame],
+    families: Sequence[ModelFamily],
+    *,
+    future_return_column: str,
+    outcome_bucket_column: str,
+) -> list[Dict[str, object]]:
+    sections = []
+    regime_section = _build_regime_review_section(
+        frame,
+        selections,
+        families,
+        future_return_column=future_return_column,
+        outcome_bucket_column=outcome_bucket_column,
+    )
+    if regime_section is not None:
+        sections.append(regime_section)
+
+    time_section = _build_time_review_section(
+        frame,
+        selections,
+        families,
+        future_return_column=future_return_column,
+        outcome_bucket_column=outcome_bucket_column,
+    )
+    if time_section is not None:
+        sections.append(time_section)
+    return sections
+
+
 def compare_model_families(
     candidates: pd.DataFrame,
     families: Sequence[ModelFamily],
@@ -316,7 +494,8 @@ def compare_model_families(
     calibration: ModelComparisonCalibration = MODEL_COMPARISON_CALIBRATION,
 ) -> tuple[pd.DataFrame, Dict[str, pd.DataFrame]]:
     """Compare how different score families rank and filter the same candidate set."""
-    frame = attach_model_family_scores(candidates, calibration=calibration)
+    frame = attach_model_family_scores(candidates, calibration=calibration).copy()
+    frame["__comparison_row_id"] = range(len(frame))
     selections = {family.name: _select_candidates(frame, family) for family in families}
 
     if baseline_name is None and families:
@@ -420,7 +599,15 @@ def compare_model_families(
 
         rows.append(row)
 
-    return pd.DataFrame(rows), selections
+    summary = pd.DataFrame(rows)
+    summary.attrs["review_slices"] = _build_review_slices(
+        frame,
+        selections,
+        families,
+        future_return_column=future_return_column,
+        outcome_bucket_column=outcome_bucket_column,
+    )
+    return summary, selections
 
 
 def render_model_comparison_report(
@@ -509,5 +696,31 @@ def render_model_comparison_report(
             pick_details = [detail for detail in pick_details if detail]
             if pick_details:
                 lines.append(f"  risk: {'; '.join(pick_details)}")
+
+    review_slices = summary.attrs.get("review_slices", [])
+    if review_slices:
+        lines.append("Review slices:")
+        for section in review_slices:
+            lines.append(f"  {section['title']}:")
+            for slice_row in section.get("slices", []):
+                model_parts = []
+                for model_row in slice_row.get("models", []):
+                    part = f"{model_row['model']} {model_row['selected_count']}"
+                    slice_symbols = model_row.get("symbols", [])
+                    if slice_symbols:
+                        part += f" [{', '.join(slice_symbols)}]"
+                    if model_row["selected_count"] > 0 and (
+                        model_row.get("avg_future_return_pct", 0.0) != 0.0
+                        or model_row.get("hit_rate_pct", 0.0) != 0.0
+                        or model_row.get("win_rate_pct", 0.0) != 0.0
+                    ):
+                        part += (
+                            f" {model_row['avg_future_return_pct']:+.2f}%/"
+                            f"{model_row['hit_rate_pct']:.1f}%"
+                        )
+                    model_parts.append(part)
+                lines.append(
+                    f"  {slice_row['label']} ({slice_row['candidate_count']} cands): {'; '.join(model_parts)}"
+                )
 
     return "\n".join(lines)
