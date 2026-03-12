@@ -56,6 +56,8 @@ PY
 - `u`: uncertainty percent. Higher means the setup is being discounted more heavily.
 - `down/churn`: bounded downside and churn penalty layers. Lower is cleaner.
 - `stress`: adverse-regime label plus score. Anything above `normal` means the market backdrop is leaning against the setup.
+- `Decision review`: compact current-run audit block for the top recent `BUY`/`WATCH`/`NO_BUY` decisions in the live alert.
+- `Tuning balance`: shows clean buys, risky-buy proxy, abstains, vetoes, and a higher-trade-quality restraint proxy so operators can tune centralized scoring defaults without changing selection logic.
 - `restraint`: how often a model kept capital out of `BUY`; use it with restrained-return splits to judge whether caution helped.
 - `Review slices`: compact regime/time spot checks to see whether performance differences are broad or concentrated in one market pocket.
 
@@ -274,3 +276,10 @@ python main.py --symbol AAPL --years 2 --strategy momentum
 ---
 
 *Built by Cortana for Hamel*
+
+
+## Decision review
+
+- Live scan alerts now include a compact **Decision review** block for recent BUY / WATCH / NO_BUY outcomes.
+- Use it to inspect restraint, vetoes, and risky-vs-clean buys before tuning scoring defaults.
+- See `docs/decision-review-loop.md` for how to read the review block.

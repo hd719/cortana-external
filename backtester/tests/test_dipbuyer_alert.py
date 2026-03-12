@@ -138,7 +138,7 @@ def test_format_alert_reports_degraded_market_status_with_next_action():
     assert "Note: degraded market data (720s stale)" in text
 
 
-def test_format_alert_includes_risk_telemetry_for_top_leaders():
+def test_format_alert_includes_decision_review_for_top_leaders():
     fake = _FakeAdvisor()
     fake.risk_fetcher = SimpleNamespace(get_snapshot=lambda: {"vix": 24.0, "put_call": 1.01, "hy_spread": 500.0, "fear_greed": 28.0})
     fake._scan = pd.DataFrame(
@@ -165,8 +165,14 @@ def test_format_alert_includes_risk_telemetry_for_top_leaders():
             "effective_confidence": 48,
             "uncertainty_pct": 31,
             "abstain": True,
+            "abstain_reasons": ["macro inputs stale", "confidence assessment abstained"],
             "data_source": "yahoo",
-            "recommendation": {"action": "WATCH", "reason": "Watch setup", "abstain": True},
+            "recommendation": {
+                "action": "WATCH",
+                "reason": "Watch setup",
+                "abstain": True,
+                "abstain_reasons": ["macro inputs stale", "confidence assessment abstained"],
+            },
         },
     }
 
@@ -174,4 +180,70 @@ def test_format_alert_includes_risk_telemetry_for_top_leaders():
         text = format_alert(limit=8, min_score=6)
 
     assert "Top leaders: MSFT BUY (9/12) 🐦 Neutral | AAPL WATCH (7/12) 🐦 Neutral" in text
-    assert "Leader telemetry: MSFT | tq 91.0 | conf 79% | u 7% | down/churn 3.0/1.0 | stress caution(18); AAPL | tq 72.0 | conf 48% | u 31% | ABSTAIN" in text
+    assert "Decision review: BUY 1 | WATCH 1 | NO_BUY 0" in text
+    assert "Tuning balance: clean BUY 0 | risky BUY proxy 1 | abstain 1 | veto 0 | higher-tq restraint proxy 0 (>= median BUY tq 91.0)" in text
+    assert "Risky buys: MSFT BUY | tq 91.0 | conf 79% u 7% | down/churn 3.0/1.0 | stress caution(18)" in text
+    assert "Abstains: AAPL WATCH | tq 72.0 | conf 48% u 31% | down/churn 0.0/0.0 | stress normal(0) | ABSTAIN | reasons macro inputs stale | confidence assessment abstained | reason Watch setup" in text
+
+
+def test_format_alert_review_surfaces_credit_veto_without_expanding_output_too_far():
+    fake = _FakeAdvisor()
+    fake._market = SimpleNamespace(
+        regime=MarketRegime.UPTREND_UNDER_PRESSURE,
+        position_sizing=0.5,
+        notes="Stay selective",
+        data_source="alpaca",
+        snapshot_age_seconds=0.0,
+        status="ok",
+    )
+    fake._scan = pd.DataFrame(
+        [
+            {"symbol": "MSFT", "total_score": 9},
+            {"symbol": "AAPL", "total_score": 8},
+            {"symbol": "TSLA", "total_score": 7},
+        ]
+    )
+    fake._analysis = {
+        "MSFT": {
+            "total_score": 9,
+            "trade_quality_score": 89.0,
+            "effective_confidence": 76,
+            "uncertainty_pct": 9,
+            "data_source": "alpaca",
+            "recommendation": {"action": "BUY", "reason": "clean", "trade_quality_score": 89.0},
+        },
+        "AAPL": {
+            "total_score": 8,
+            "trade_quality_score": 92.0,
+            "effective_confidence": 66,
+            "uncertainty_pct": 13,
+            "credit_veto": True,
+            "data_source": "alpaca",
+            "recommendation": {"action": "NO_BUY", "reason": "Credit veto active (HY spread too high).", "trade_quality_score": 92.0},
+        },
+        "TSLA": {
+            "total_score": 7,
+            "trade_quality_score": 86.0,
+            "effective_confidence": 63,
+            "uncertainty_pct": 29,
+            "abstain": True,
+            "abstain_reasons": ["macro stress elevated"],
+            "data_source": "alpaca",
+            "recommendation": {
+                "action": "WATCH",
+                "reason": "Uncertainty too high (29%): macro stress elevated",
+                "trade_quality_score": 86.0,
+                "abstain": True,
+                "abstain_reasons": ["macro stress elevated"],
+            },
+        },
+    }
+
+    with patch("dipbuyer_alert.TradingAdvisor", return_value=fake):
+        text = format_alert(limit=8, min_score=6)
+
+    lines = text.splitlines()
+    assert len(lines) <= 12
+    assert "Tuning balance: clean BUY 1 | risky BUY proxy 0 | abstain 1 | veto 1 | higher-tq restraint proxy 1 (>= median BUY tq 89.0)" in text
+    assert "Higher-tq restraint: AAPL NO_BUY | tq 92.0 | conf 66% u 13% | down/churn 0.0/0.0 | stress normal(0) | reason Credit veto active (HY spread too high)." in text
+    assert "Vetoes: AAPL NO_BUY | tq 92.0 | conf 66% u 13% | down/churn 0.0/0.0 | stress normal(0) | veto credit/reason-veto | reason Credit veto active (HY spread too high)." in text

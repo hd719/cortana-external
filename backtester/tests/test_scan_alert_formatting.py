@@ -1,10 +1,10 @@
 from types import SimpleNamespace
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 import pandas as pd
 
-from data.market_regime import MarketRegime
 from canslim_alert import format_alert as format_canslim
+from data.market_regime import MarketRegime
 from dipbuyer_alert import format_alert as format_dipbuyer
 
 
@@ -83,9 +83,13 @@ def test_dipbuyer_alert_is_compact_when_market_gate_blocks_buys():
         "Qualified setups: 3 of 4 scanned | BUY 0 | WATCH 0",
         "BUY names: none",
         "Top leaders: CFLT NO_BUY (7/12) | HWM NO_BUY (7/12) | ALUR NO_BUY (6/12)",
+        "Decision review: BUY 0 | WATCH 0 | NO_BUY 3",
+        "Tuning balance: clean BUY 0 | risky BUY proxy 0 | abstain 0 | veto 3 | higher-tq restraint proxy n/a",
+        "Vetoes: CFLT NO_BUY | tq 7.0 | conf 0% u 0% | down/churn 0.0/0.0 | stress normal(0) | veto market-gate | reason market correction gate; HWM NO_BUY | tq 7.0 | conf 0% u 0% | down/churn 0.0/0.0 | stress normal(0) | veto market-gate | reason market correction gate (+1 more)",
         "Final action: DO NOT BUY — market regime veto (market correction gate)",
     ]
     analyzer.analyze.assert_not_called()
+
 
 def test_canslim_alert_uses_trade_quality_order_for_leaders():
     fake = _FakeCanSlimAdvisor()
@@ -104,7 +108,14 @@ def test_canslim_alert_uses_trade_quality_order_for_leaders():
             "effective_confidence": 52,
             "uncertainty_pct": 31,
             "abstain": True,
-            "recommendation": {"action": "WATCH", "reason": "uncertain", "trade_quality_score": 71.0, "abstain": True},
+            "abstain_reasons": ["data coverage thin", "adverse regime elevated"],
+            "recommendation": {
+                "action": "WATCH",
+                "reason": "uncertain",
+                "trade_quality_score": 71.0,
+                "abstain": True,
+                "abstain_reasons": ["data coverage thin", "adverse regime elevated"],
+            },
         },
         "BBB": {
             "total_score": 8,
@@ -114,7 +125,16 @@ def test_canslim_alert_uses_trade_quality_order_for_leaders():
             "downside_penalty": 2.0,
             "churn_penalty": 1.0,
             "abstain": False,
-            "recommendation": {"action": "BUY", "reason": "clean", "trade_quality_score": 94.0, "effective_confidence": 80, "uncertainty_pct": 8, "downside_penalty": 2.0, "churn_penalty": 1.0, "abstain": False},
+            "recommendation": {
+                "action": "BUY",
+                "reason": "clean",
+                "trade_quality_score": 94.0,
+                "effective_confidence": 80,
+                "uncertainty_pct": 8,
+                "downside_penalty": 2.0,
+                "churn_penalty": 1.0,
+                "abstain": False,
+            },
         },
     }
 
@@ -123,5 +143,57 @@ def test_canslim_alert_uses_trade_quality_order_for_leaders():
 
     assert "Top names considered: BBB, AAA" in text
     assert "Leaders: BBB BUY (8/12) | AAA WATCH (9/12)" in text
-    assert "Leader telemetry: BBB | tq 94.0 | conf 80% | u 8% | down/churn 2.0/1.0; AAA | tq 71.0 | conf 52% | u 31% | ABSTAIN" in text
+    assert "Decision review: BUY 1 | WATCH 1 | NO_BUY 0" in text
+    assert "Tuning balance: clean BUY 1 | risky BUY proxy 0 | abstain 1 | veto 0 | higher-tq restraint proxy 0 (>= median BUY tq 94.0)" in text
+    assert "Good buys: BBB BUY | tq 94.0 | conf 80% u 8% | down/churn 2.0/1.0 | stress normal(0)" in text
+    assert "Abstains: AAA WATCH | tq 71.0 | conf 52% u 31% | down/churn 0.0/0.0 | stress normal(0) | ABSTAIN | reasons data coverage thin | adverse regime elevated | reason uncertain" in text
 
+
+def test_canslim_alert_review_surfaces_veto_and_restraint_proxies_compactly():
+    fake = _FakeCanSlimAdvisor()
+    fake._market = SimpleNamespace(
+        regime=MarketRegime.CONFIRMED_UPTREND,
+        position_sizing=1.0,
+        notes="trend intact",
+        snapshot_age_seconds=0.0,
+        status="ok",
+    )
+    fake.screener = SimpleNamespace(get_universe=lambda: ["AAA", "BBB", "CCC"])
+    fake._analysis = {
+        "AAA": {
+            "total_score": 8,
+            "trade_quality_score": 88.0,
+            "effective_confidence": 77,
+            "uncertainty_pct": 9,
+            "downside_penalty": 2.0,
+            "churn_penalty": 1.0,
+            "recommendation": {"action": "BUY", "reason": "clean", "trade_quality_score": 88.0},
+        },
+        "BBB": {
+            "total_score": 9,
+            "trade_quality_score": 90.0,
+            "effective_confidence": 59,
+            "uncertainty_pct": 12,
+            "downside_penalty": 3.0,
+            "churn_penalty": 2.0,
+            "exit_risk": {"veto": True},
+            "recommendation": {"action": "WATCH", "reason": "Exit risk too high", "trade_quality_score": 90.0},
+        },
+        "CCC": {
+            "total_score": 8,
+            "trade_quality_score": 83.0,
+            "effective_confidence": 70,
+            "uncertainty_pct": 8,
+            "sentiment_overlay": {"veto": True},
+            "recommendation": {"action": "WATCH", "reason": "Sentiment overlay veto: bearish", "trade_quality_score": 83.0},
+        },
+    }
+
+    with patch("canslim_alert.TradingAdvisor", return_value=fake), patch.dict("os.environ", {"TRADING_INCLUDE_WATCHLIST_PRIORITY": "0"}):
+        text = format_canslim(limit=5, min_score=6, universe_size=3)
+
+    lines = text.splitlines()
+    assert len(lines) <= 9
+    assert "Tuning balance: clean BUY 1 | risky BUY proxy 0 | abstain 0 | veto 2 | higher-tq restraint proxy 1 (>= median BUY tq 88.0)" in text
+    assert "Higher-tq restraint: BBB WATCH | tq 90.0 | conf 59% u 12% | down/churn 3.0/2.0 | stress normal(0) | reason Exit risk too high" in text
+    assert "Vetoes: BBB WATCH | tq 90.0 | conf 59% u 12% | down/churn 3.0/2.0 | stress normal(0) | veto exit-risk | reason Exit risk too high; CCC WATCH | tq 83.0 | conf 70% u 8% | down/churn 0.0/0.0 | stress normal(0) | veto sentiment/reason-veto | reason Sentiment overlay veto: bearish" in text

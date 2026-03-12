@@ -17,6 +17,7 @@ from advisor import TradingAdvisor
 from data.adverse_regime import build_adverse_regime_indicator
 from data.universe import GROWTH_WATCHLIST
 from data.x_sentiment import XSentimentAnalyzer
+from evaluation.decision_review import render_decision_review
 from strategies.dip_buyer import DIPBUYER_CONFIG
 
 
@@ -275,11 +276,16 @@ def format_alert(limit: int = 8, min_score: int = 6, universe_size: int = 120) -
                 "trade_quality_score": rec.get("trade_quality_score", analysis.get("trade_quality_score", score)),
                 "effective_confidence": rec.get("effective_confidence", analysis.get("effective_confidence", analysis.get("confidence", 0))),
                 "uncertainty_pct": rec.get("uncertainty_pct", analysis.get("uncertainty_pct", 0)),
-                "downside_penalty": rec.get("downside_penalty", analysis.get("downside_penalty")),
-                "churn_penalty": rec.get("churn_penalty", analysis.get("churn_penalty")),
+                "downside_penalty": rec.get("downside_penalty", analysis.get("downside_penalty", 0.0)),
+                "churn_penalty": rec.get("churn_penalty", analysis.get("churn_penalty", 0.0)),
                 "adverse_regime_score": rec.get("adverse_regime_score", analysis.get("adverse_regime_score", analysis.get("adverse_regime", {}).get("score", 0.0))),
                 "adverse_regime_label": rec.get("adverse_regime_label", analysis.get("adverse_regime_label", analysis.get("adverse_regime", {}).get("label", "normal"))),
                 "abstain": rec.get("abstain", analysis.get("abstain", False)),
+                "abstain_reasons": rec.get("abstain_reasons", analysis.get("abstain_reasons", [])),
+                "abstain_reason_codes": rec.get("abstain_reason_codes", analysis.get("abstain_reason_codes", [])),
+                "credit_veto": bool(rec.get("credit_veto", analysis.get("credit_veto", False))),
+                "falling_knife": bool(analysis.get("falling_knife", False)),
+                "market_inactive": not bool(analysis.get("market_active", True)),
                 "has_risk_telemetry": has_risk_telemetry,
             })
         else:
@@ -315,10 +321,13 @@ def format_alert(limit: int = 8, min_score: int = 6, universe_size: int = 120) -
         preview.append(f"{c['symbol']} {c['action']} ({c['score']}/12){suffix}")
     leaders_line = " | ".join(preview) if preview else "none"
     lines.append("Top leaders: " + leaders_line)
-    risk_line = _leader_risk_line(candidates, limit=min(limit, 3))
-    if risk_line:
-        lines.append(risk_line)
-    if sentiment_checked > 0:
+    review_lines = render_decision_review(candidates[: min(limit, 5)], detail_limit=2)
+    lines.extend(review_lines)
+    review_has_restraint_or_veto = any(
+        line.startswith(("Higher-tq restraint:", "Abstains:", "Vetoes:"))
+        for line in review_lines
+    )
+    if sentiment_checked > 0 and not review_has_restraint_or_veto:
         lines.append("Leaders: " + leaders_line)
 
     if buy_count == 0:

@@ -17,6 +17,7 @@ from zoneinfo import ZoneInfo
 from advisor import TradingAdvisor
 from data.adverse_regime import build_adverse_regime_indicator
 from data.universe import GROWTH_WATCHLIST
+from evaluation.decision_review import render_decision_review
 
 
 def _trade_quality_sort_key(record: dict) -> tuple:
@@ -189,11 +190,16 @@ def format_alert(limit: int = 8, min_score: int = 6, universe_size: int = 120) -
             "trade_quality_score": rec.get("trade_quality_score", analysis.get("trade_quality_score", score)),
             "effective_confidence": rec.get("effective_confidence", analysis.get("effective_confidence", analysis.get("confidence", 0))),
             "uncertainty_pct": rec.get("uncertainty_pct", analysis.get("uncertainty_pct", 0)),
-            "downside_penalty": rec.get("downside_penalty", analysis.get("downside_penalty")),
-            "churn_penalty": rec.get("churn_penalty", analysis.get("churn_penalty")),
+            "downside_penalty": rec.get("downside_penalty", analysis.get("downside_penalty", 0.0)),
+            "churn_penalty": rec.get("churn_penalty", analysis.get("churn_penalty", 0.0)),
             "adverse_regime_score": rec.get("adverse_regime_score", analysis.get("adverse_regime_score", analysis.get("adverse_regime", {}).get("score", 0.0))),
             "adverse_regime_label": rec.get("adverse_regime_label", analysis.get("adverse_regime_label", analysis.get("adverse_regime", {}).get("label", "normal"))),
             "abstain": rec.get("abstain", analysis.get("abstain", False)),
+            "abstain_reasons": rec.get("abstain_reasons", analysis.get("abstain_reasons", [])),
+            "abstain_reason_codes": rec.get("abstain_reason_codes", analysis.get("abstain_reason_codes", [])),
+            "sentiment_veto": bool(analysis.get("sentiment_overlay", {}).get("veto", False)),
+            "exit_risk_veto": bool(analysis.get("exit_risk", {}).get("veto", False)),
+            "market_regime_blocked": action == "NO_BUY" and "market in correction" in reason.lower(),
             "has_risk_telemetry": has_risk_telemetry,
         }
         if score >= min_score:
@@ -229,9 +235,7 @@ def format_alert(limit: int = 8, min_score: int = 6, universe_size: int = 120) -
         for c in candidates[: min(limit, 3)]:
             preview.append(f"{c['symbol']} {c['action']} ({c['score']}/12)")
         lines.append("Leaders: " + " | ".join(preview))
-        risk_line = _leader_risk_line(candidates, limit=min(limit, 3))
-        if risk_line:
-            lines.append(risk_line)
+        lines.extend(render_decision_review(candidates[: min(limit, 5)], detail_limit=2))
 
     if getattr(market, "status", "ok") == "degraded":
         lines.append(f"Note: degraded market data ({float(getattr(market, 'snapshot_age_seconds', 0.0) or 0.0):.0f}s stale)")
