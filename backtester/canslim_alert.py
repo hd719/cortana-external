@@ -15,6 +15,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from advisor import TradingAdvisor
+from data.adverse_regime import build_adverse_regime_indicator
 from data.universe import GROWTH_WATCHLIST
 
 
@@ -108,12 +109,15 @@ def _deterministic_universe(advisor: TradingAdvisor, universe_size: int) -> tupl
 def format_alert(limit: int = 8, min_score: int = 6, universe_size: int = 120) -> str:
     advisor = TradingAdvisor()
     market = _run_quiet(advisor.get_market_status, True)
+    stress = build_adverse_regime_indicator(market=market)
     symbols, priority_count = _deterministic_universe(advisor, universe_size)
 
     lines = [
         "CANSLIM Scan",
         _market_headline(market),
     ]
+    if stress.get("label") != "normal" and getattr(getattr(market, 'regime', None), 'value', '') != 'correction':
+        lines.append(f"Adverse regime: {stress['label']} ({float(stress['score']):.0f}) -- {stress['reason']}")
     evaluated = 0
     passed = []
     rejected = []

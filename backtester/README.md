@@ -157,6 +157,7 @@ It feeds:
 - confidence/regime-aware sizing
 - sector-relative strength context
 - catalyst/event weighting
+- adverse-regime ensemble that combines regime posture, distribution/drawdown stress, and existing macro stress inputs into one bounded warning layer
 
 ### Wave 4 evaluation layer
 - compare baseline vs enhanced scoring/model families

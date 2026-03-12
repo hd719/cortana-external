@@ -46,6 +46,7 @@ def test_build_confidence_assessment_returns_shared_contract_for_clean_setup():
     assert assessment["uncertainty_pct"] == 0
     assert assessment["abstain"] is False
     assert assessment["confidence_bucket"] == "high"
+    assert assessment["adverse_regime"]["label"] == "normal"
 
 
 def test_build_confidence_assessment_abstains_when_inputs_are_degraded_and_conflicted():
@@ -175,3 +176,68 @@ def test_trade_quality_score_penalizes_downside_and_churn_layers():
     assert fragile['score'] < stable['score']
     assert fragile['downside_penalty_reason'] == '63d_drawdown_tail_loss'
     assert fragile['churn_penalty_reason'] == 'falling_knife'
+
+
+def test_adverse_regime_demotes_close_setups_when_market_stress_is_elevated():
+    calm_assessment = build_confidence_assessment(
+        market=_market(MarketRegime.CONFIRMED_UPTREND),
+        total_score=8,
+        breakout={"score": 4},
+        sentiment_overlay={"score": 1, "confidence_delta": 6, "source": "news+x", "reason": "confirmed sentiment"},
+        exit_risk={"score": 1},
+        sector_context={"score": 1, "confidence_delta": 4, "status": "supportive"},
+        catalyst_weighting={"score": 0, "confidence_delta": 0, "label": "NEUTRAL"},
+        data_status="ok",
+        data_staleness_seconds=0.0,
+        history_bars=252,
+        symbol="MSFT",
+    )
+    stressed_assessment = build_confidence_assessment(
+        market=SimpleNamespace(
+            regime=MarketRegime.UPTREND_UNDER_PRESSURE,
+            position_sizing=0.5,
+            status="ok",
+            snapshot_age_seconds=0.0,
+            distribution_days=5,
+            drawdown_pct=-7.2,
+            trend_direction="down",
+            price_vs_21d_pct=-1.8,
+            price_vs_50d_pct=-3.1,
+        ),
+        total_score=8,
+        breakout={"score": 4},
+        sentiment_overlay={"score": 1, "confidence_delta": 6, "source": "news+x", "reason": "confirmed sentiment"},
+        exit_risk={"score": 1},
+        sector_context={"score": 1, "confidence_delta": 4, "status": "supportive"},
+        catalyst_weighting={"score": 0, "confidence_delta": 0, "label": "NEUTRAL"},
+        data_status="ok",
+        data_staleness_seconds=0.0,
+        history_bars=252,
+        symbol="AMD",
+    )
+
+    calm_quality = build_trade_quality_score(
+        raw_setup_score=10.5,
+        setup_scale=16,
+        confidence_pct=calm_assessment["raw_confidence_pct"],
+        uncertainty_pct=calm_assessment["uncertainty_pct"],
+        regime_modifier=regime_quality_modifier(market=_market(MarketRegime.CONFIRMED_UPTREND)),
+        adverse_regime_penalty=calm_assessment["adverse_regime"]["trade_quality_penalty"],
+        adverse_regime_reason=calm_assessment["adverse_regime"]["reason"],
+    )
+    stressed_quality = build_trade_quality_score(
+        raw_setup_score=11.0,
+        setup_scale=16,
+        confidence_pct=stressed_assessment["raw_confidence_pct"],
+        uncertainty_pct=stressed_assessment["uncertainty_pct"],
+        regime_modifier=regime_quality_modifier(
+            regime=MarketRegime.UPTREND_UNDER_PRESSURE,
+            position_sizing=0.5,
+        ),
+        adverse_regime_penalty=stressed_assessment["adverse_regime"]["trade_quality_penalty"],
+        adverse_regime_reason=stressed_assessment["adverse_regime"]["reason"],
+    )
+
+    assert stressed_assessment["adverse_regime"]["label"] in {"elevated", "severe"}
+    assert stressed_assessment["effective_confidence_pct"] < calm_assessment["effective_confidence_pct"]
+    assert stressed_quality["score"] < calm_quality["score"]

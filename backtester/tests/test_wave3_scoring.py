@@ -92,3 +92,57 @@ def test_position_sizing_guidance_respects_uncertainty_assessment():
     assert report["label"] == "PROBE"
     assert report["uncertainty_multiplier"] < 1.0
     assert report["recommended_position_pct"] < 7.0
+
+
+def test_position_sizing_guidance_shrinks_for_adverse_regime_stress():
+    market = SimpleNamespace(
+        regime=MarketRegime.UPTREND_UNDER_PRESSURE,
+        position_sizing=0.75,
+        distribution_days=4,
+        drawdown_pct=-6.4,
+        trend_direction="down",
+        price_vs_21d_pct=-1.5,
+        price_vs_50d_pct=-2.4,
+    )
+
+    calm = build_position_sizing_guidance(
+        market=SimpleNamespace(regime=MarketRegime.CONFIRMED_UPTREND, position_sizing=1.0),
+        confidence=82,
+        confidence_assessment={
+            "effective_confidence_pct": 82,
+            "uncertainty_pct": 8,
+            "abstain": False,
+            "adverse_regime": {
+                "score": 8.0,
+                "label": "normal",
+                "reason": "market backdrop is not showing elevated stress",
+                "size_multiplier": 1.0,
+            },
+        },
+        breakout={"score": 4},
+        exit_risk={"score": 1},
+        sector_context={"score": 1},
+        catalyst={"score": 0},
+    )
+    stressed = build_position_sizing_guidance(
+        market=market,
+        confidence=82,
+        confidence_assessment={
+            "effective_confidence_pct": 68,
+            "uncertainty_pct": 18,
+            "abstain": False,
+            "adverse_regime": {
+                "score": 42.0,
+                "label": "elevated",
+                "reason": "market regime: uptrend under pressure; 4 recent distribution days",
+                "size_multiplier": 0.65,
+            },
+        },
+        breakout={"score": 4},
+        exit_risk={"score": 1},
+        sector_context={"score": 1},
+        catalyst={"score": 0},
+    )
+
+    assert stressed["adverse_regime_multiplier"] < calm["adverse_regime_multiplier"]
+    assert stressed["recommended_position_pct"] < calm["recommended_position_pct"]

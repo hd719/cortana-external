@@ -14,6 +14,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from advisor import TradingAdvisor
+from data.adverse_regime import build_adverse_regime_indicator
 from data.universe import GROWTH_WATCHLIST
 from data.x_sentiment import XSentimentAnalyzer
 from strategies.dip_buyer import DIPBUYER_CONFIG
@@ -177,6 +178,7 @@ def format_alert(limit: int = 8, min_score: int = 6, universe_size: int = 120) -
 
     market = _run_quiet(advisor.get_market_status, True)
     snapshot = _run_quiet(advisor.risk_fetcher.get_snapshot)
+    stress = build_adverse_regime_indicator(market=market, risk_inputs=snapshot)
     profile_name, profile = _profile_for_market(market.regime.value)
     symbols, priority_count = _deterministic_universe(advisor, universe_size)
 
@@ -184,6 +186,8 @@ def format_alert(limit: int = 8, min_score: int = 6, universe_size: int = 120) -
         "Dip Buyer Scan",
         _market_headline(market),
     ]
+    if stress.get("label") != "normal" and getattr(getattr(market, 'regime', None), 'value', '') != 'correction':
+        lines.append(f"Adverse regime: {stress['label']} ({float(stress['score']):.0f}) -- {stress['reason']}")
     evaluated = 0
     passed = []
     rejected = []

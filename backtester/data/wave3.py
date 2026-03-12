@@ -280,6 +280,8 @@ def build_position_sizing_guidance(
     effective_confidence = int((confidence_assessment or {}).get("effective_confidence_pct", confidence))
     uncertainty_pct = int((confidence_assessment or {}).get("uncertainty_pct", 0))
     abstain = bool((confidence_assessment or {}).get("abstain", False))
+    adverse_regime = dict((confidence_assessment or {}).get("adverse_regime", {}) or {})
+    adverse_regime_multiplier = float(adverse_regime.get("size_multiplier", 1.0))
 
     if market.regime == MarketRegime.CORRECTION or market.position_sizing <= 0:
         return {
@@ -289,10 +291,12 @@ def build_position_sizing_guidance(
             "confidence_multiplier": 0.0,
             "uncertainty_multiplier": 0.0,
             "setup_multiplier": 0.0,
+            "adverse_regime_multiplier": 0.0,
             "effective_confidence_pct": effective_confidence,
             "uncertainty_pct": uncertainty_pct,
             "abstain": abstain,
             "reason": "Market regime does not allow new positions.",
+            "adverse_regime": adverse_regime,
         }
 
     if effective_confidence >= 85:
@@ -347,7 +351,7 @@ def build_position_sizing_guidance(
         setup_multiplier *= 0.8
 
     base_pct = base_position_pct * market.position_sizing
-    raw_pct = base_pct * confidence_multiplier * uncertainty_multiplier * setup_multiplier
+    raw_pct = base_pct * confidence_multiplier * uncertainty_multiplier * setup_multiplier * adverse_regime_multiplier
     max_pct = base_pct * 1.15
     min_pct = 1.0 if abstain else 2.5
     recommended_position_pct = round(_clamp(raw_pct, min_pct, max_pct), 2)
@@ -367,6 +371,10 @@ def build_position_sizing_guidance(
         f"uncertainty x{uncertainty_multiplier:.2f}",
         f"setup x{setup_multiplier:.2f}",
     ]
+    if adverse_regime_multiplier < 0.99:
+        reason_parts.append(
+            f"stress x{adverse_regime_multiplier:.2f} ({adverse_regime.get('label', 'caution')} {float(adverse_regime.get('score', 0.0)):.0f})"
+        )
     if abstain:
         reason_parts.append("assessment marked as abstain")
 
@@ -377,8 +385,10 @@ def build_position_sizing_guidance(
         "confidence_multiplier": round(confidence_multiplier, 2),
         "uncertainty_multiplier": round(uncertainty_multiplier, 2),
         "setup_multiplier": round(setup_multiplier, 2),
+        "adverse_regime_multiplier": round(adverse_regime_multiplier, 2),
         "effective_confidence_pct": effective_confidence,
         "uncertainty_pct": uncertainty_pct,
         "abstain": abstain,
         "reason": ", ".join(reason_parts),
+        "adverse_regime": adverse_regime,
     }

@@ -181,6 +181,7 @@ class TradingAdvisor:
     ) -> Dict:
         churn_proxy = churn_penalty_proxy(exit_risk_score=(exit_risk or {}).get('score', 0))
         downside_proxy = downside_risk_proxy(price_history)
+        adverse_regime = dict((confidence_assessment or {}).get('adverse_regime', {}) or {})
         return build_trade_quality_score(
             raw_setup_score=rank_score,
             setup_scale=16,
@@ -193,6 +194,8 @@ class TradingAdvisor:
             downside_penalty_reason=downside_proxy['source'],
             churn_penalty=round(churn_proxy['penalty'] * 0.5, 2),
             churn_penalty_reason=churn_proxy['reason'],
+            adverse_regime_penalty=adverse_regime.get('trade_quality_penalty', 0.0),
+            adverse_regime_reason=adverse_regime.get('reason', ''),
         )
 
     @staticmethod
@@ -207,6 +210,7 @@ class TradingAdvisor:
     ) -> Dict:
         churn_proxy = churn_penalty_proxy(recovery_ready=recovery_ready, falling_knife=falling_knife)
         downside_proxy = downside_risk_proxy(price_history)
+        adverse_regime = dict((confidence_assessment or {}).get('adverse_regime', {}) or {})
         return build_trade_quality_score(
             raw_setup_score=total_score,
             setup_scale=12,
@@ -219,6 +223,8 @@ class TradingAdvisor:
             downside_penalty_reason=downside_proxy['source'],
             churn_penalty=round(churn_proxy['penalty'] * 0.5, 2),
             churn_penalty_reason=churn_proxy['reason'],
+            adverse_regime_penalty=adverse_regime.get('trade_quality_penalty', 0.0),
+            adverse_regime_reason=adverse_regime.get('reason', ''),
         )
 
     @staticmethod
@@ -400,6 +406,7 @@ class TradingAdvisor:
             'trade_quality': trade_quality,
             'downside_penalty': trade_quality.get('downside_penalty', 0.0),
             'churn_penalty': trade_quality.get('churn_penalty', 0.0),
+            'adverse_regime': confidence_assessment.get('adverse_regime', {}),
             'data_source': history_result.source,
             'data_staleness_seconds': history_result.staleness_seconds,
             'data_status': history_result.status,
@@ -475,6 +482,7 @@ class TradingAdvisor:
             'trade_quality': setup.get('trade_quality', setup.get('recommendation', {}).get('trade_quality', {})),
             'downside_penalty': setup.get('trade_quality', setup.get('recommendation', {}).get('trade_quality', {})).get('downside_penalty', 0.0),
             'churn_penalty': setup.get('trade_quality', setup.get('recommendation', {}).get('trade_quality', {})).get('churn_penalty', 0.0),
+            'adverse_regime': setup.get('adverse_regime', setup.get('confidence_assessment', {}).get('adverse_regime', {})),
             'recommendation': setup.get('recommendation', {}),
         }
 
@@ -562,6 +570,8 @@ class TradingAdvisor:
                 'trade_quality_score': analysis.get('trade_quality_score', analysis.get('effective_confidence', analysis.get('confidence', 0))),
                 'downside_penalty': analysis.get('downside_penalty', analysis.get('trade_quality', {}).get('downside_penalty', 0.0)),
                 'churn_penalty': analysis.get('churn_penalty', analysis.get('trade_quality', {}).get('churn_penalty', 0.0)),
+                'adverse_regime_score': analysis.get('adverse_regime', {}).get('score', 0.0),
+                'adverse_regime_label': analysis.get('adverse_regime', {}).get('label', 'normal'),
             })
 
         if not candidates:
@@ -604,6 +614,7 @@ class TradingAdvisor:
         confidence = int(confidence_assessment.get('effective_confidence_pct', 0))
         uncertainty_pct = int(confidence_assessment.get('uncertainty_pct', 0))
         abstain = bool(confidence_assessment.get('abstain', False))
+        adverse_regime = dict(confidence_assessment.get('adverse_regime', {}) or {})
         sizing = build_position_sizing_guidance(
             market=market,
             confidence=confidence,
@@ -651,6 +662,7 @@ class TradingAdvisor:
             'abstain': abstain,
             'abstain_reason_codes': confidence_assessment.get('abstain_reason_codes', []),
             'abstain_reasons': confidence_assessment.get('abstain_reasons', []),
+            'adverse_regime': adverse_regime,
             'breakout_score': breakout_score,
             'sentiment_score': sentiment_score,
             'exit_risk_score': exit_risk_score,
@@ -708,6 +720,10 @@ class TradingAdvisor:
 
         if confidence < 55:
             confidence_drags = [reason for reason in [sector_context.get('reason'), catalyst_weighting.get('reason')] if reason]
+            if adverse_regime.get('label') != 'normal':
+                confidence_drags.append(
+                    f"market stress {adverse_regime.get('label')} ({float(adverse_regime.get('score', 0.0)):.0f})"
+                )
             return {
                 'action': 'WATCH',
                 'reason': f"Composite confidence fell to {confidence}%: {' | '.join(confidence_drags[:2])}",
@@ -754,6 +770,10 @@ class TradingAdvisor:
             reasons.append(f"⚠️ Catalyst caution: {catalyst_weighting.get('reason')}")
         if exit_risk_score <= 1:
             reasons.append("✅ Exit risk remains contained")
+        if adverse_regime.get('label') != 'normal':
+            reasons.append(
+                f"⚠️ Adverse regime {adverse_regime.get('label')} ({float(adverse_regime.get('score', 0.0)):.0f}): {adverse_regime.get('reason')}"
+            )
         reasons.append(f"📏 Size as {sizing.get('label', 'STANDARD').lower()} position ({sizing.get('reason')})")
         
         return {
@@ -847,6 +867,8 @@ class TradingAdvisor:
                     row_dict['size_label'] = rec.get('size_label', rec.get('sizing', {}).get('label', 'STANDARD'))
                     row_dict['action'] = rec.get('action', 'NO_BUY')
                     row_dict['trade_quality_score'] = analysis.get('trade_quality_score', rec.get('trade_quality_score', row_dict['rank_score']))
+                    row_dict['adverse_regime_score'] = analysis.get('adverse_regime', {}).get('score', 0.0)
+                    row_dict['adverse_regime_label'] = analysis.get('adverse_regime', {}).get('label', 'normal')
                     enriched.append(row_dict)
 
                 except Exception as e:

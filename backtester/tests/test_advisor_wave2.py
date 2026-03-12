@@ -122,6 +122,56 @@ def test_analyze_stock_uses_uncertainty_abstain_without_breaking_output_shape():
     assert analysis["recommendation"]["abstain"] is True
     assert "Uncertainty too high" in analysis["recommendation"]["reason"]
 
+
+def test_analyze_stock_preserves_market_correction_gate_with_adverse_regime_layer():
+    advisor = TradingAdvisor()
+    closes = [100 + i * 0.6 for i in range(50)] + [132, 133, 134, 135, 136, 137, 138, 139, 140, 141]
+    volumes = [1_000_000.0] * 50 + [1_400_000.0] * 10
+    history = _history(closes, volumes)
+    sector_history = _history([100 + i * 0.2 for i in range(80)], [900_000.0] * 80)
+
+    advisor.market_data.get_history = MagicMock(
+        side_effect=[
+            SimpleNamespace(frame=history, source="test", staleness_seconds=0.0, status="ok"),
+            SimpleNamespace(frame=sector_history, source="test", staleness_seconds=0.0, status="ok"),
+        ]
+    )
+    advisor.fundamentals.get_fundamentals = MagicMock(
+        return_value={
+            "eps_growth": 30,
+            "revenue_growth": 25,
+            "sector": "Technology",
+            "earnings_event_window": [{"date": "2026-03-20"}],
+        }
+    )
+    advisor.fundamentals.score_canslim_fundamentals = MagicMock(return_value={"C": 2, "A": 2, "I": 1, "S": 1})
+    advisor.get_market_status = MagicMock(
+        return_value=SimpleNamespace(
+            regime=MarketRegime.CORRECTION,
+            position_sizing=0.0,
+            notes="stay defensive",
+            status="ok",
+            snapshot_age_seconds=0.0,
+            distribution_days=6,
+            drawdown_pct=-10.5,
+            trend_direction="down",
+            price_vs_21d_pct=-3.0,
+            price_vs_50d_pct=-6.0,
+        )
+    )
+    advisor.headline_sentiment.analyze = MagicMock(
+        return_value={"sentiment": "BULLISH", "article_count": 3, "bullish_pct": 66.7, "bearish_pct": 0.0}
+    )
+    advisor.x_sentiment.analyze = MagicMock(
+        return_value={"sentiment": "BULLISH", "tweet_count": 8, "bullish_pct": 62.5, "bearish_pct": 12.5}
+    )
+
+    analysis = advisor.analyze_stock("NVDA", quiet=True)
+
+    assert analysis["recommendation"]["action"] == "NO_BUY"
+    assert analysis["recommendation"]["reason"] == "Market in correction. No new positions."
+    assert analysis["adverse_regime"]["label"] == "severe"
+
 def test_scan_for_opportunities_sorts_by_wave2_rank_score():
     advisor = TradingAdvisor()
     advisor.get_market_status = MagicMock(return_value=_market())

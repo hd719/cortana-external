@@ -483,6 +483,7 @@ class DipBuyerStrategy(Strategy):
         uncertainty_pct = int(confidence_assessment["uncertainty_pct"])
         abstain = bool(confidence_assessment["abstain"])
         size_multiplier = float(confidence_assessment["size_multiplier"])
+        adverse_regime = dict(confidence_assessment.get("adverse_regime", {}) or {})
         base_position_pct = max_position_pct_cfg * market.position_sizing * 100
         position_size_pct = round(max(1.0, base_position_pct * size_multiplier), 2)
         size_label = (
@@ -507,6 +508,8 @@ class DipBuyerStrategy(Strategy):
             downside_penalty_reason=downside_proxy['source'],
             churn_penalty=round(churn_proxy['penalty'] * 0.5, 2),
             churn_penalty_reason=churn_proxy['reason'],
+            adverse_regime_penalty=adverse_regime.get('trade_quality_penalty', 0.0),
+            adverse_regime_reason=adverse_regime.get('reason', ''),
         )
         risk_size_multiplier = risk_adjusted_size_multiplier(
             downside_penalty=trade_quality.get('downside_penalty', 0.0),
@@ -535,6 +538,7 @@ class DipBuyerStrategy(Strategy):
             'abstain': abstain,
             'abstain_reason_codes': confidence_assessment.get('abstain_reason_codes', []),
             'abstain_reasons': confidence_assessment.get('abstain_reasons', []),
+            'adverse_regime': adverse_regime,
             'size_label': size_label,
             'market_note': getattr(market, 'notes', ''),
         }
@@ -577,6 +581,12 @@ class DipBuyerStrategy(Strategy):
                     f"Credit score {int(latest['C'])}/4",
                     f"Recovered {latest['Rebound_Pct'] * 100:.1f}% off the recent low",
                     f"Size as {size_label.lower()} entry ({confidence}% confidence, {uncertainty_pct}% uncertainty)",
+                    (
+                        f"Adverse regime {adverse_regime.get('label')} ({float(adverse_regime.get('score', 0.0)):.0f}): "
+                        f"{adverse_regime.get('reason')}"
+                    )
+                    if adverse_regime.get('label') != 'normal'
+                    else "Adverse regime: normal",
                 ],
                 **recommendation_base,
             }
@@ -628,6 +638,7 @@ class DipBuyerStrategy(Strategy):
             'confidence_assessment': confidence_assessment,
             'trade_quality_score': trade_quality['score'],
             'trade_quality': trade_quality,
+            'adverse_regime': adverse_regime,
             'recommendation': recommendation,
             'score_frame': scores,
         }

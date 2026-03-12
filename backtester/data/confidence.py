@@ -6,6 +6,7 @@ from typing import Dict, Iterable, Optional
 
 import pandas as pd
 
+from data.adverse_regime import build_adverse_regime_indicator
 from data.market_regime import MarketRegime, MarketStatus
 
 
@@ -22,6 +23,7 @@ REASON_MESSAGES = {
     "credit_veto": "Credit veto is active.",
     "falling_knife": "Falling-knife filter is active.",
     "risk_data_incomplete": "Risk inputs are incomplete.",
+    "adverse_regime_stress": "Adverse market-stress ensemble is elevated.",
 }
 
 
@@ -40,9 +42,14 @@ def confidence_bucket(value: float) -> str:
     return "very_low"
 
 
-def _size_multiplier(effective_confidence_pct: float, uncertainty_pct: float, abstain: bool) -> float:
+def _size_multiplier(
+    effective_confidence_pct: float,
+    uncertainty_pct: float,
+    abstain: bool,
+    adverse_regime_multiplier: float = 1.0,
+) -> float:
     if abstain:
-        return 0.5
+        return round(_clamp(0.5 * adverse_regime_multiplier, 0.3, 0.75), 2)
 
     if effective_confidence_pct >= 85:
         confidence_multiplier = 1.1
@@ -64,7 +71,7 @@ def _size_multiplier(effective_confidence_pct: float, uncertainty_pct: float, ab
     else:
         uncertainty_multiplier = 1.0
 
-    return round(_clamp(confidence_multiplier * uncertainty_multiplier, 0.4, 1.1), 2)
+    return round(_clamp(confidence_multiplier * uncertainty_multiplier * adverse_regime_multiplier, 0.35, 1.1), 2)
 
 
 def _safe_float(value: object, default: float = 0.0) -> float:
@@ -189,6 +196,8 @@ def build_trade_quality_score(
     downside_penalty_reason: str = "",
     churn_penalty: object = 0.0,
     churn_penalty_reason: str = "",
+    adverse_regime_penalty: object = 0.0,
+    adverse_regime_reason: str = "",
 ) -> Dict:
     """
     Build an explicit runtime trade-quality score from existing decision inputs.
@@ -205,8 +214,13 @@ def build_trade_quality_score(
     cost_value = _clamp(_safe_float(cost_penalty, 0.0), 0.0, 40.0)
     downside_value = _clamp(_safe_float(downside_penalty, 0.0), 0.0, 30.0)
     churn_value = _clamp(_safe_float(churn_penalty, 0.0), 0.0, 25.0)
+    adverse_regime_value = _clamp(_safe_float(adverse_regime_penalty, 0.0), 0.0, 20.0)
 
-    score = round((setup_component + confidence_value - uncertainty_value - cost_value - downside_value - churn_value) * regime_value, 2)
+    score = round(
+        (setup_component + confidence_value - uncertainty_value - cost_value - downside_value - churn_value - adverse_regime_value)
+        * regime_value,
+        2,
+    )
 
     return {
         "score": score,
@@ -222,6 +236,8 @@ def build_trade_quality_score(
         "downside_penalty_reason": downside_penalty_reason,
         "churn_penalty": round(churn_value, 2),
         "churn_penalty_reason": churn_penalty_reason,
+        "adverse_regime_penalty": round(adverse_regime_value, 2),
+        "adverse_regime_reason": adverse_regime_reason,
     }
 
 
@@ -244,6 +260,7 @@ def _finalize_assessment(
     component_uncertainty: Dict[str, int],
     data_quality: Dict[str, object],
     reason_codes: Iterable[str],
+    adverse_regime: Optional[Dict[str, object]] = None,
 ) -> Dict:
     uncertainty_pct = int(
         _clamp(sum(max(0, int(value)) for value in component_uncertainty.values()), 0, 95)
@@ -253,6 +270,8 @@ def _finalize_assessment(
     abstain = uncertainty_pct >= 35 or effective_confidence_pct < 35
     if abstain and not codes:
         codes = ["signal_conflict"]
+    adverse_regime = adverse_regime or build_adverse_regime_indicator(market=None)
+    adverse_regime_multiplier = _clamp(_safe_float(adverse_regime.get("size_multiplier"), 1.0), 0.55, 1.0)
 
     return {
         "version": 1,
@@ -261,13 +280,19 @@ def _finalize_assessment(
         "uncertainty_pct": uncertainty_pct,
         "effective_confidence_pct": effective_confidence_pct,
         "confidence_bucket": confidence_bucket(effective_confidence_pct),
-        "size_multiplier": _size_multiplier(effective_confidence_pct, uncertainty_pct, abstain),
+        "size_multiplier": _size_multiplier(
+            effective_confidence_pct,
+            uncertainty_pct,
+            abstain,
+            adverse_regime_multiplier=adverse_regime_multiplier,
+        ),
         "abstain": abstain,
         "abstain_reason_codes": codes if abstain else [],
         "abstain_reasons": [REASON_MESSAGES.get(code, code.replace("_", " ")) for code in codes] if abstain else [],
         "component_signal": component_signal,
         "component_uncertainty": component_uncertainty,
         "data_quality": data_quality,
+        "adverse_regime": adverse_regime,
     }
 
 
@@ -377,6 +402,10 @@ def build_confidence_assessment(
 
     if getattr(market, "regime", None) == MarketRegime.CORRECTION:
         reason_codes.append("market_correction")
+    adverse_regime = build_adverse_regime_indicator(market=market)
+    adverse_regime_penalty = int(adverse_regime["confidence_penalty"])
+    if adverse_regime_penalty:
+        reason_codes.append("adverse_regime_stress")
 
     component_signal = {
         "total_score": int(total_score),
@@ -395,6 +424,7 @@ def build_confidence_assessment(
         "sector_unavailable": sector_penalty,
         "event_risk": event_penalty,
         "signal_conflict": signal_conflict_penalty,
+        "adverse_regime": adverse_regime_penalty,
     }
     data_quality = {
         "history_status": data_status,
@@ -410,6 +440,7 @@ def build_confidence_assessment(
         component_uncertainty=component_uncertainty,
         data_quality=data_quality,
         reason_codes=reason_codes,
+        adverse_regime=adverse_regime,
     )
 
 
@@ -484,6 +515,10 @@ def build_dip_confidence_assessment(
         reason_codes.append("falling_knife")
     if not market_active and getattr(market, "regime", None) == MarketRegime.CORRECTION:
         reason_codes.append("market_correction")
+    adverse_regime = build_adverse_regime_indicator(market=market, risk_inputs=risk_inputs)
+    adverse_regime_penalty = int(adverse_regime["confidence_penalty"])
+    if adverse_regime_penalty:
+        reason_codes.append("adverse_regime_stress")
 
     component_signal = {
         "total_score": int(total_score),
@@ -499,6 +534,7 @@ def build_dip_confidence_assessment(
         "insufficient_history": history_penalty,
         "risk_data_incomplete": risk_penalty,
         "signal_conflict": structure_penalty,
+        "adverse_regime": adverse_regime_penalty,
     }
     data_quality = {
         "history_status": data_status,
@@ -514,4 +550,5 @@ def build_dip_confidence_assessment(
         component_uncertainty=component_uncertainty,
         data_quality=data_quality,
         reason_codes=reason_codes,
+        adverse_regime=adverse_regime,
     )
