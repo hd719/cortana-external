@@ -562,6 +562,7 @@ class TradingAdvisor:
                 'raw_confidence': analysis.get('raw_confidence', analysis.get('confidence', 0)),
                 'effective_confidence': analysis.get('effective_confidence', analysis.get('confidence', 0)),
                 'uncertainty_pct': analysis.get('uncertainty_pct', 0),
+                'market_regime': analysis.get('market_regime', market.regime.value),
                 'abstain': analysis.get('abstain', False),
                 'abstain_reason_codes': analysis.get('abstain_reason_codes', []),
                 'action': analysis.get('recommendation', {}).get('action', 'NO_BUY'),
@@ -861,6 +862,7 @@ class TradingAdvisor:
                     row_dict['raw_confidence'] = analysis.get('raw_confidence', row_dict['confidence'])
                     row_dict['effective_confidence'] = analysis.get('effective_confidence', row_dict['confidence'])
                     row_dict['uncertainty_pct'] = analysis.get('uncertainty_pct', 0)
+                    row_dict['market_regime'] = analysis.get('market_regime', row_dict.get('market_regime'))
                     row_dict['abstain'] = analysis.get('abstain', False)
                     row_dict['abstain_reason_codes'] = analysis.get('abstain_reason_codes', [])
                     row_dict['position_size_pct'] = rec.get('position_size_pct', 0.0)
@@ -904,6 +906,7 @@ class TradingAdvisor:
                 "candidates": candidates,
                 "summary": pd.DataFrame(),
                 "selections": {},
+                "review_slices": [],
                 "report": report,
             }
 
@@ -925,6 +928,7 @@ class TradingAdvisor:
             "candidates": candidates,
             "summary": summary,
             "selections": selections,
+            "review_slices": list(summary.attrs.get("review_slices", [])),
             "report": report,
         }
     

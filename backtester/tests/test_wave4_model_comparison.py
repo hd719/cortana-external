@@ -257,6 +257,84 @@ def test_render_model_comparison_report_lists_unique_picks_and_discipline_lines(
     assert "discipline: buy avg return +5.00% | restrained avg return +8.00%" in report
     assert "picks: AAA, CCC" in report
     assert "risk: AAA | BUY | tq 88.0 | conf 68% u 12% | down 4.0 churn 2.0 | stress normal/16" in report
+    assert "Review slices:" in report
+    assert "Regime split (adverse_regime_label):" in report
+    assert "normal (2 cands): baseline_total 1 [AAA] +5.00%/100.0%; tactical_overlay 1 [AAA] +5.00%/100.0%; enhanced_rank 2 [AAA, CCC] +6.50%/100.0%" in report
+
+
+def test_render_model_comparison_report_adds_time_review_slices_when_dates_exist():
+    candidates = pd.DataFrame(
+        [
+            {
+                "symbol": "AAA",
+                "total_score": 9,
+                "breakout_score": 1,
+                "sentiment_score": 0,
+                "exit_risk_score": 0,
+                "sector_score": 0,
+                "catalyst_score": 0,
+                "market_regime": "confirmed_uptrend",
+                "entry_date": "2025-01-02",
+                "future_return_pct": 2.0,
+                "outcome_bucket": "win",
+                "action": "BUY",
+            },
+            {
+                "symbol": "BBB",
+                "total_score": 8,
+                "breakout_score": 1,
+                "sentiment_score": 0,
+                "exit_risk_score": 0,
+                "sector_score": 0,
+                "catalyst_score": 0,
+                "market_regime": "correction",
+                "entry_date": "2025-01-03",
+                "future_return_pct": -3.0,
+                "outcome_bucket": "loss",
+                "action": "BUY",
+            },
+            {
+                "symbol": "CCC",
+                "total_score": 7,
+                "breakout_score": 4,
+                "sentiment_score": 0,
+                "exit_risk_score": 0,
+                "sector_score": 0,
+                "catalyst_score": 0,
+                "market_regime": "confirmed_uptrend",
+                "entry_date": "2025-02-10",
+                "future_return_pct": 6.0,
+                "outcome_bucket": "win",
+                "action": "BUY",
+            },
+            {
+                "symbol": "DDD",
+                "total_score": 6,
+                "breakout_score": 5,
+                "sentiment_score": 0,
+                "exit_risk_score": 0,
+                "sector_score": 0,
+                "catalyst_score": 0,
+                "market_regime": "correction",
+                "entry_date": "2025-02-11",
+                "future_return_pct": 8.0,
+                "outcome_bucket": "win",
+                "action": "BUY",
+            },
+        ]
+    )
+
+    families = build_default_model_families(top_n=2, baseline_min_score=6)
+    summary, selections = compare_model_families(candidates, families, baseline_name="baseline_total")
+    report = render_model_comparison_report(summary, selections, baseline_name="baseline_total")
+
+    assert [section["title"] for section in summary.attrs["review_slices"]] == [
+        "Regime split (market_regime)",
+        "Time split (entry_date)",
+    ]
+    assert "Time split (entry_date):" in report
+    assert "early 2025-01-02..2025-01-03 (2 cands):" in report
+    assert "late 2025-02-10..2025-02-11 (2 cands):" in report
 
 
 def test_render_model_comparison_report_keeps_no_buy_and_abstain_visible():
@@ -397,6 +475,44 @@ def test_compare_model_families_keeps_score_based_selection_unchanged():
     assert list(selections["enhanced_rank"]["symbol"]) == ["CCC", "BBB"]
 
 
+def test_compare_model_families_skips_review_slices_without_context_columns():
+    candidates = pd.DataFrame(
+        [
+            {
+                "symbol": "AAA",
+                "total_score": 8,
+                "breakout_score": 3,
+                "sentiment_score": 1,
+                "exit_risk_score": 0,
+                "sector_score": 0,
+                "catalyst_score": 0,
+                "future_return_pct": 4.0,
+                "outcome_bucket": "win",
+                "action": "BUY",
+            },
+            {
+                "symbol": "BBB",
+                "total_score": 7,
+                "breakout_score": 2,
+                "sentiment_score": 0,
+                "exit_risk_score": 0,
+                "sector_score": 0,
+                "catalyst_score": 0,
+                "future_return_pct": -1.0,
+                "outcome_bucket": "loss",
+                "action": "BUY",
+            },
+        ]
+    )
+
+    families = build_default_model_families(top_n=2, baseline_min_score=6)
+    summary, selections = compare_model_families(candidates, families, baseline_name="baseline_total")
+    report = render_model_comparison_report(summary, selections, baseline_name="baseline_total")
+
+    assert summary.attrs["review_slices"] == []
+    assert "Review slices:" not in report
+
+
 def test_advisor_compare_model_families_reuses_scan_output():
     advisor = TradingAdvisor()
     advisor.scan_for_opportunities = MagicMock(
@@ -413,6 +529,7 @@ def test_advisor_compare_model_families_reuses_scan_output():
                     "rank_score": 10.0,
                     "confidence": 78,
                     "action": "BUY",
+                    "adverse_regime_label": "normal",
                 },
                 {
                     "symbol": "BBB",
@@ -425,6 +542,7 @@ def test_advisor_compare_model_families_reuses_scan_output():
                     "rank_score": 12.0,
                     "confidence": 83,
                     "action": "WATCH",
+                    "adverse_regime_label": "caution",
                 },
             ]
         )
@@ -433,7 +551,9 @@ def test_advisor_compare_model_families_reuses_scan_output():
     result = advisor.compare_model_families(quick=True, min_score=6, top_n=2)
 
     assert list(result["summary"]["model"]) == ["baseline_total", "tactical_overlay", "enhanced_rank"]
+    assert result["review_slices"][0]["title"] == "Regime split (adverse_regime_label)"
     assert "enhanced_rank" in result["report"]
+    assert "Review slices:" in result["report"]
     assert "BBB" in result["report"]
 
 
