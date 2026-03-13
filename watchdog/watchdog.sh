@@ -18,6 +18,8 @@ STATE_FILE="$SCRIPT_DIR/watchdog-state.json"
 FITNESS_BASE_URL="${FITNESS_BASE_URL:-http://localhost:3033}"
 GATEWAY_PORT="${OPENCLAW_GATEWAY_PORT:-18789}"
 GATEWAY_LABEL="${OPENCLAW_LAUNCHD_LABEL:-ai.openclaw.gateway}"
+CORTANA_SOURCE_REPO="${CORTANA_SOURCE_REPO:-/Users/hd/Developer/cortana}"
+TELEGRAM_USAGE_HANDLER_PATH="${TELEGRAM_USAGE_HANDLER_PATH:-$CORTANA_SOURCE_REPO/skills/telegram-usage/handler.ts}"
 
 # ── State Management ──
 load_state() {
@@ -451,7 +453,7 @@ check_degraded_agents() {
 # ── D) Budget Guard ──
 check_budget() {
   local output
-  output=$(npx tsx ~/openclaw/skills/telegram-usage/handler.ts json 2>/dev/null) || { log "warning" "Budget check failed to run"; return; }
+  output=$(npx tsx "$TELEGRAM_USAGE_HANDLER_PATH" json 2>/dev/null) || { log "warning" "Budget check failed to run"; return; }
 
   local day_of_month
   day_of_month=$(date +%d | sed 's/^0//')

@@ -39,9 +39,23 @@ describe("GET /api/docs", () => {
     expect(payload).toEqual({
       status: "ok",
       files: [
-        { name: "AGENTS.md", path: "/Users/hd/openclaw/docs/AGENTS.md" },
-        { name: "README.md", path: "/Users/hd/openclaw/docs/README.md" },
+        { name: "AGENTS.md", path: "/Users/hd/Developer/cortana/docs/AGENTS.md" },
+        { name: "README.md", path: "/Users/hd/Developer/cortana/docs/README.md" },
       ],
+    });
+  });
+
+  it("uses DOCS_PATH when explicitly provided", async () => {
+    process.env.DOCS_PATH = "/tmp/mission-control-docs";
+    fsMocks.readdir.mockResolvedValueOnce([{ name: "README.md", isFile: () => true }]);
+
+    const response = await GET(makeRequest());
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(payload).toEqual({
+      status: "ok",
+      files: [{ name: "README.md", path: "/tmp/mission-control-docs/README.md" }],
     });
   });
 

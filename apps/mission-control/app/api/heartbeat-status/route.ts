@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { NextResponse } from "next/server";
+import { getHeartbeatStatePath } from "@/lib/runtime-paths";
 
 export type HeartbeatStatus = "healthy" | "stale" | "missed" | "quiet" | "unknown";
 
@@ -14,11 +15,6 @@ function isQuietHours(): boolean {
   );
   return etHour >= QUIET_START || etHour < QUIET_END;
 }
-
-const HEARTBEAT_FILES = [
-  "/Users/hd/.openclaw/memory/heartbeat-state.json",
-  "/Users/hd/openclaw/memory/heartbeat-state.json",
-] as const;
 
 type HeartbeatState = {
   lastHeartbeat?: unknown;
@@ -59,14 +55,7 @@ export const revalidate = 0;
 
 export async function GET() {
   try {
-    let raw: string | null = null;
-    for (const path of HEARTBEAT_FILES) {
-      try {
-        raw = await readFile(path, "utf8");
-        break;
-      } catch {}
-    }
-    if (raw == null) throw new Error("heartbeat state not found");
+    const raw = await readFile(getHeartbeatStatePath(), "utf8");
     const parsed = JSON.parse(raw) as HeartbeatState;
     const lastHeartbeat = resolveLatestHeartbeat(parsed);
     const ageMs = lastHeartbeat == null ? null : Math.max(0, Date.now() - lastHeartbeat);

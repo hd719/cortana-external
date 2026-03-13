@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import { getTelegramUsageHandlerPath } from "@/lib/runtime-paths";
 import { getTaskPrisma } from "@/lib/task-prisma";
 
 type ActionKey = "chaos-test" | "reflection-sweep" | "check-budget" | "force-heartbeat";
@@ -167,7 +168,7 @@ const runBudgetCheck = () => {
     };
   }
 
-  const output = execSync("npx tsx /Users/hd/openclaw/skills/telegram-usage/handler.ts json", {
+  const output = execSync(`npx tsx ${JSON.stringify(getTelegramUsageHandlerPath())} json`, {
     encoding: "utf8",
     timeout: 10000,
     stdio: ["ignore", "pipe", "pipe"],
