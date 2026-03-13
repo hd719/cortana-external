@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { normalizeTimestamp, getStatus, resolveLatestHeartbeat } from "@/app/api/heartbeat-status/route";
 
 describe("normalizeTimestamp", () => {
@@ -34,6 +34,16 @@ describe("resolveLatestHeartbeat", () => {
 });
 
 describe("getStatus", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    // 2026-03-13 12:00:00 UTC = 08:00 ET, outside quiet hours
+    vi.setSystemTime(new Date("2026-03-13T12:00:00Z"));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("returns healthy when younger than 90 minutes", () => {
     expect(getStatus(89 * 60 * 1000)).toBe("healthy");
   });
@@ -43,8 +53,14 @@ describe("getStatus", () => {
     expect(getStatus(3 * 60 * 60 * 1000)).toBe("stale");
   });
 
-  it("returns missed after 3 hours", () => {
+  it("returns missed after 3 hours outside quiet hours", () => {
     expect(getStatus(3 * 60 * 60 * 1000 + 1)).toBe("missed");
+  });
+
+  it("returns quiet after 3 hours during quiet hours", () => {
+    // 2026-03-13 08:00:00 UTC = 04:00 ET, inside quiet hours
+    vi.setSystemTime(new Date("2026-03-13T08:00:00Z"));
+    expect(getStatus(3 * 60 * 60 * 1000 + 1)).toBe("quiet");
   });
 
   it("returns unknown for null age", () => {
