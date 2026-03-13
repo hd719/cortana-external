@@ -20,6 +20,12 @@ cp .env.example .env.local
 # e.g., createdb mission_control
 # Required for governance/task reads: CORTANA_DATABASE_URL
 # Required for approval notifications: TELEGRAM_BOT_TOKEN
+# Optional source/runtime overrides:
+#   CORTANA_SOURCE_REPO=/Users/hd/Developer/cortana
+#   DOCS_PATH=/Users/hd/Developer/cortana/docs
+#   AGENT_MODELS_PATH=/Users/hd/Developer/cortana/config/agent-models.json
+#   HEARTBEAT_STATE_PATH=/Users/hd/.openclaw/memory/heartbeat-state.json
+#   TELEGRAM_USAGE_HANDLER_PATH=/Users/hd/Developer/cortana/skills/telegram-usage/handler.ts
 ```
 3) Apply schema + seed data (creates agents Huragok, Oracle, Researcher, Librarian, Monitor)
 ```bash
@@ -143,4 +149,3 @@ Rules:
 - `remediationStatus` is required and must be one of: `open`, `in_progress`, `resolved`, `wont_fix`
 - Returns `404` when the feedback item id does not exist
 - When set to `resolved`, `resolved_at` is stamped automatically
-

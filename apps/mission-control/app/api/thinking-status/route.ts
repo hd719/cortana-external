@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import { getHeartbeatStatePath } from "@/lib/runtime-paths";
 import { getTaskPrisma } from "@/lib/task-prisma";
 
 type HeartbeatStatus = "healthy" | "stale" | "missed" | "unknown";
@@ -18,11 +19,6 @@ type TaskSummaryRow = {
   in_progress_count: bigint | number;
   completed_recent_count: bigint | number;
 };
-
-const HEARTBEAT_FILES = [
-  "/Users/hd/.openclaw/memory/heartbeat-state.json",
-  "/Users/hd/openclaw/memory/heartbeat-state.json",
-] as const;
 
 export function normalizeTimestamp(raw: unknown): number | null {
   if (typeof raw !== "number" || !Number.isFinite(raw)) return null;
@@ -66,14 +62,7 @@ export async function GET() {
   const [heartbeat, runningSubagents, taskSummary] = await Promise.all([
     (async () => {
       try {
-        let raw: string | null = null;
-        for (const path of HEARTBEAT_FILES) {
-          try {
-            raw = await readFile(path, "utf8");
-            break;
-          } catch {}
-        }
-        if (raw == null) throw new Error("heartbeat state not found");
+        const raw = await readFile(getHeartbeatStatePath(), "utf8");
         const parsed = JSON.parse(raw) as HeartbeatFile;
         const lastHeartbeat = resolveLatestHeartbeat(parsed);
         const ageMs =

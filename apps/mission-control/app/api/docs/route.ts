@@ -1,11 +1,10 @@
 import fs from "fs/promises";
 import path from "path";
 import { NextResponse } from "next/server";
+import { getDocsPath } from "@/lib/runtime-paths";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
-
-const DEFAULT_DOCS_PATH = "/Users/hd/openclaw/docs";
 
 type DocEntry = { name: string; path: string };
 
@@ -16,11 +15,6 @@ type DocsListResponse =
 type DocContentResponse =
   | { status: "ok"; name: string; content: string }
   | { status: "error"; message: string };
-
-const getDocsRoot = () => {
-  const envPath = process.env.DOCS_PATH?.trim();
-  return envPath && envPath.length > 0 ? envPath : DEFAULT_DOCS_PATH;
-};
 
 const isValidDocName = (value: string) => {
   if (!value.endsWith(".md")) return false;
@@ -41,7 +35,7 @@ async function listDocs(docsRoot: string): Promise<DocEntry[]> {
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const file = searchParams.get("file");
-  const docsRoot = getDocsRoot();
+  const docsRoot = getDocsPath();
 
   if (!file) {
     try {

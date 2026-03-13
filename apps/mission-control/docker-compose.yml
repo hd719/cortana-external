@@ -26,8 +26,12 @@ services:
       - DATABASE_URL=postgresql://hd@host.docker.internal:5432/mission_control
       - CORTANA_DATABASE_URL=postgresql://hd@host.docker.internal:5432/cortana
       - NODE_ENV=production
+      - CORTANA_SOURCE_REPO=/app/cortana-source
+      - HEARTBEAT_STATE_PATH=/app/memory/heartbeat-state.json
+      - TELEGRAM_USAGE_HANDLER_PATH=/app/cortana-source/skills/telegram-usage/handler.ts
     volumes:
-      - /Users/hd/openclaw/memory:/app/memory:ro
+      - ${CORTANA_SOURCE_REPO_HOST:-/Users/hd/Developer/cortana}:/app/cortana-source:ro
+      - ${HEARTBEAT_MEMORY_DIR:-/Users/hd/.openclaw/memory}:/app/memory:ro
     restart: unless-stopped
 
 volumes:

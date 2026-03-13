@@ -1,8 +1,6 @@
 import { execSync } from "node:child_process";
 import { readFileSync, existsSync } from "node:fs";
-
-const AGENT_MODELS_PATH =
-  process.env.AGENT_MODELS_PATH || "/Users/hd/openclaw/config/agent-models.json";
+import { getAgentModelsPath } from "@/lib/runtime-paths";
 
 type OpenClawModel = {
   key: string;
@@ -31,8 +29,9 @@ function getOpenClawModels(): OpenClawModel[] {
 
 export function getAgentModelMap(): Record<string, string> {
   try {
-    if (!existsSync(AGENT_MODELS_PATH)) return {};
-    return JSON.parse(readFileSync(AGENT_MODELS_PATH, "utf8"));
+    const agentModelsPath = getAgentModelsPath();
+    if (!existsSync(agentModelsPath)) return {};
+    return JSON.parse(readFileSync(agentModelsPath, "utf8"));
   } catch {
     return {};
   }
