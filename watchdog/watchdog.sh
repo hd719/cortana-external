@@ -9,13 +9,15 @@ export PATH="/opt/homebrew/bin:/opt/homebrew/opt/postgresql@17/bin:/usr/local/bi
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/heartbeat_classifier.sh"
 
-BOT_TOKEN="$(cat /Users/hd/.openclaw/openclaw.json | jq -r '.channels.telegram.botToken')"
+BOT_TOKEN="$(jq -r '.channels.telegram.botToken // .channels.telegram.accounts.default.botToken // empty' /Users/hd/.openclaw/openclaw.json 2>/dev/null)"
 CHAT_ID="8171372724"
 SLACK_WEBHOOK_URL="${WATCHDOG_SLACK_WEBHOOK_URL:-}"
 ALERTS=""
 LOGS=""
 STATE_FILE="$SCRIPT_DIR/watchdog-state.json"
 FITNESS_BASE_URL="${FITNESS_BASE_URL:-http://localhost:3033}"
+GATEWAY_PORT="${OPENCLAW_GATEWAY_PORT:-18789}"
+GATEWAY_LABEL="${OPENCLAW_LAUNCHD_LABEL:-ai.openclaw.gateway}"
 
 # ── State Management ──
 load_state() {
@@ -252,7 +254,7 @@ check_cron_health() {
 check_heartbeat_health() {
   local check_name="heartbeat_health"
   local count
-  count=$(pgrep -f "openclaw.*heartbeat" 2>/dev/null | wc -l | tr -d ' ')
+  count=$( (pgrep -f "openclaw.*heartbeat" 2>/dev/null || true) | wc -l | tr -d ' ' )
   local current_time
   current_time=$(get_current_timestamp)
 
@@ -310,7 +312,34 @@ check_heartbeat_health() {
   fi
 }
 
-# ── C) Tool Smoke Tests ──
+# ── C) Gateway Health ──
+check_gateway_health() {
+  local check_name="openclaw_gateway"
+  local uid
+  uid=$(id -u)
+  local target="gui/${uid}/${GATEWAY_LABEL}"
+
+  if nc -z 127.0.0.1 "$GATEWAY_PORT" 2>/dev/null; then
+    recovery_alert "$check_name" "OpenClaw gateway recovered and is listening on ${GATEWAY_PORT}"
+    log "info" "OpenClaw gateway: OK (${GATEWAY_PORT})"
+    return
+  fi
+
+  log "warning" "OpenClaw gateway appears down on port ${GATEWAY_PORT}; attempting launchctl kickstart"
+  launchctl kickstart -k "$target" >/dev/null 2>&1 || true
+  sleep 8
+
+  if nc -z 127.0.0.1 "$GATEWAY_PORT" 2>/dev/null; then
+    ALERTS="${ALERTS}⚠️ OpenClaw gateway was down and watchdog restarted it successfully\n"
+    log "warning" "OpenClaw gateway restarted successfully by watchdog"
+    update_check_state "$check_name" "recovered"
+    return
+  fi
+
+  alert "OpenClaw gateway is DOWN and automatic restart failed (label=${GATEWAY_LABEL}, port=${GATEWAY_PORT})" "$check_name" "critical"
+}
+
+# ── D) Tool Smoke Tests ──
 check_tools() {
   log "info" "Fitness endpoint base: ${FITNESS_BASE_URL}"
 
@@ -456,6 +485,7 @@ echo "=== Watchdog run: $(date) ==="
 check_cron_quarantine
 check_cron_health
 check_heartbeat_health
+check_gateway_health
 check_tools
 check_degraded_agents
 check_budget

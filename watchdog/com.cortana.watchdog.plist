@@ -10,7 +10,7 @@
         <string>/Users/hd/Developer/cortana-external/watchdog/watchdog.sh</string>
     </array>
     <key>StartInterval</key>
-    <integer>900</integer>
+    <integer>300</integer>
     <key>StandardOutPath</key>
     <string>/Users/hd/Developer/cortana-external/watchdog/logs/watchdog.log</string>
     <key>StandardErrorPath</key>
