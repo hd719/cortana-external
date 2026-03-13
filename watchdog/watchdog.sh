@@ -527,7 +527,7 @@ check_tools
 check_degraded_agents
 check_budget
 
-# ── Send alerts / confirmations ──
+# ── Send alerts if any ──
 if [[ -n "$ALERTS" ]]; then
   MSG="🐕 *Watchdog Alert*
 
@@ -535,13 +535,6 @@ ${ALERTS}
 _$(date '+%H:%M %b %d')_"
   send_alert_notifications "$(echo -e "$MSG")"
   log "info" "Alerts sent to notification channels"
-else
-  MSG="🐕 *Watchdog Alert*
-
-✅ Watchdog clean — heartbeat, gateway, cron, tools, and budget checks passed
-_$(date '+%H:%M %b %d')_"
-  send_alert_notifications "$(echo -e "$MSG")"
-  log "info" "Clean watchdog confirmation sent to notification channels"
 fi
 
 echo "=== Watchdog complete ==="
