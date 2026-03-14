@@ -34,6 +34,9 @@ python main.py --symbol AAPL --years 2 --compare
 
 The Python alert pipeline now consumes a read-only Polymarket intelligence layer from the TypeScript workspace package at [`packages/market-intel`](/Users/hd/Developer/cortana-external/packages/market-intel).
 
+Quick diagram:
+- [`docs/polymarket-backtester-flow.md`](/Users/hd/Developer/cortana-external/backtester/docs/polymarket-backtester-flow.md)
+
 Run the bridge before CANSLIM or Dip Buyer alerts:
 
 ```bash
