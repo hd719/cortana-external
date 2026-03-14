@@ -19,6 +19,7 @@ from advisor import TradingAdvisor
 from data.adverse_regime import build_adverse_regime_indicator
 from data.polymarket_context import build_alert_context_lines
 from data.universe import GROWTH_WATCHLIST
+from data.universe_selection import RankedUniverseSelector, UniverseSelectionResult
 from evaluation.decision_review import render_decision_review
 
 
@@ -124,20 +125,41 @@ def _load_priority_symbols() -> list[str]:
     return deduped
 
 
-def _deterministic_universe(advisor: TradingAdvisor, universe_size: int) -> tuple[list[str], int]:
+def _deterministic_universe(advisor: TradingAdvisor, universe_size: int, market_regime: str = "unknown") -> tuple[list[str], int, UniverseSelectionResult | None]:
     if hasattr(advisor, "screener"):
         base = _run_quiet(advisor.screener.get_universe)
     else:
         scan_df = _run_quiet(advisor.scan_for_opportunities, True, 0)
         base = list(scan_df.get("symbol", []).tolist()) if hasattr(scan_df, "get") else []
     priority = _load_priority_symbols()
+    if hasattr(advisor, "market_data"):
+        selection = RankedUniverseSelector().select_live_universe(
+            base_symbols=base,
+            priority_symbols=priority,
+            universe_size=universe_size,
+            market_regime=market_regime,
+        )
+        return selection.symbols, len(selection.priority_symbols), selection
     ordered = []
     seen = set()
     for sym in [*priority, *base]:
         if sym not in seen:
             seen.add(sym)
             ordered.append(sym)
-    return ordered[:universe_size], len(priority)
+    return ordered[:universe_size], len(priority), None
+
+
+def _selection_line(selection: UniverseSelectionResult | None, scanned_count: int) -> str:
+    if selection is None:
+        return ""
+    ranked_count = max(scanned_count - len(selection.priority_symbols), 0)
+    line = (
+        "Universe selection: "
+        f"{len(selection.priority_symbols)} pinned | {ranked_count} ranked | source {selection.source}"
+    )
+    if selection.generated_at and selection.cache_age_hours is not None:
+        line += f" | cache age {selection.cache_age_hours:.1f}h"
+    return line
 
 
 def _analyze_for_alert(advisor: TradingAdvisor, symbol: str) -> dict:
@@ -170,7 +192,8 @@ def format_alert(limit: int = 8, min_score: int = 6, universe_size: int = 120) -
 
     start = time.perf_counter()
     stress = build_adverse_regime_indicator(market=market)
-    symbols, priority_count = _deterministic_universe(advisor, universe_size)
+    regime_value = getattr(getattr(market, "regime", None), "value", "unknown")
+    symbols, priority_count, selection = _deterministic_universe(advisor, universe_size, regime_value)
     if timing_enabled:
         phase_timings["universe"] = time.perf_counter() - start
 
@@ -179,6 +202,9 @@ def format_alert(limit: int = 8, min_score: int = 6, universe_size: int = 120) -
         _market_headline(market),
     ]
     lines.extend(_run_quiet(build_alert_context_lines, GROWTH_WATCHLIST))
+    selection_summary = _selection_line(selection, len(symbols))
+    if selection_summary:
+        lines.append(selection_summary)
     if stress.get("label") != "normal" and getattr(getattr(market, 'regime', None), 'value', '') != 'correction':
         lines.append(f"Adverse regime: {stress['label']} ({float(stress['score']):.0f}) -- {stress['reason']}")
 

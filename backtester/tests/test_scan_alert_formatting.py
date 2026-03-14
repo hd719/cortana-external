@@ -5,6 +5,7 @@ import pandas as pd
 import pytest
 
 from canslim_alert import format_alert as format_canslim
+from data.universe_selection import UniverseSelectionResult
 from data.market_regime import MarketRegime
 from dipbuyer_alert import format_alert as format_dipbuyer
 
@@ -238,3 +239,38 @@ def test_canslim_alert_review_surfaces_veto_and_restraint_proxies_compactly():
     assert "Tuning balance: clean BUY 1 | risky BUY proxy 0 | abstain 0 | veto 2 | higher-tq restraint proxy 1 (>= median BUY tq 88.0)" in text
     assert "Higher-tq restraint: BBB WATCH | tq 90.0 | conf 59% u 12% | down/churn 3.0/2.0 | stress normal(0) | reason Exit risk too high" in text
     assert "Vetoes: BBB WATCH | tq 90.0 | conf 59% u 12% | down/churn 3.0/2.0 | stress normal(0) | veto exit-risk | reason Exit risk too high; CCC WATCH | tq 83.0 | conf 70% u 8% | down/churn 0.0/0.0 | stress normal(0) | veto sentiment/reason-veto | reason Sentiment overlay veto: bearish" in text
+
+
+def test_live_alerts_surface_ranked_universe_selection_when_prefilter_is_active():
+    fake = _FakeCanSlimAdvisor()
+    fake._market = SimpleNamespace(
+        regime=MarketRegime.CONFIRMED_UPTREND,
+        position_sizing=1.0,
+        notes="trend intact",
+        snapshot_age_seconds=0.0,
+        status="ok",
+    )
+    fake.market_data = object()
+    fake.screener = SimpleNamespace(get_universe=lambda: ["AAA", "BBB", "CCC"])
+    fake._analysis = {
+        "AAA": {"total_score": 8, "recommendation": {"action": "WATCH", "reason": "watch"}},
+        "BBB": {"total_score": 9, "recommendation": {"action": "BUY", "reason": "buy"}},
+    }
+    selection = UniverseSelectionResult(
+        symbols=["AAA", "BBB"],
+        priority_symbols=["AAA"],
+        ranked_symbols=["BBB"],
+        unscored_symbols=["CCC"],
+        base_universe_size=3,
+        source="cache",
+        generated_at="2026-03-14T09:00:00+00:00",
+        cache_age_hours=1.0,
+    )
+
+    with patch("canslim_alert.TradingAdvisor", return_value=fake), patch(
+        "canslim_alert.RankedUniverseSelector.select_live_universe",
+        return_value=selection,
+    ), patch.dict("os.environ", {"TRADING_INCLUDE_WATCHLIST_PRIORITY": "0"}):
+        text = format_canslim(limit=5, min_score=6, universe_size=2)
+
+    assert "Universe selection: 1 pinned | 1 ranked | source cache | cache age 1.0h" in text

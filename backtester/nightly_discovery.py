@@ -8,9 +8,15 @@ import json
 
 from advisor import TradingAdvisor
 from data.universe import UNIVERSE_PROFILE_NIGHTLY_DISCOVERY
+from data.universe_selection import RankedUniverseSelector
 
 
-def build_report(limit: int = 20, min_technical_score: int = 3, refresh_sp500: bool = False) -> dict:
+def build_report(
+    limit: int = 20,
+    min_technical_score: int = 3,
+    refresh_sp500: bool = False,
+    refresh_live_prefilter: bool = True,
+) -> dict:
     advisor = TradingAdvisor()
     market = advisor.get_market_status(refresh=True)
     symbols = advisor.screener.get_universe_for_profile(
@@ -38,12 +44,27 @@ def build_report(limit: int = 20, min_technical_score: int = 3, refresh_sp500: b
                 }
             )
 
+    live_prefilter = None
+    if refresh_live_prefilter:
+        standard_symbols = advisor.screener.get_universe()
+        selector = RankedUniverseSelector()
+        payload = selector.refresh_cache(
+            base_symbols=standard_symbols,
+            market_regime=getattr(getattr(market, "regime", None), "value", "unknown"),
+        )
+        live_prefilter = {
+            "path": str(selector.cache_path),
+            "generated_at": payload.get("generated_at"),
+            "symbol_count": len(payload.get("symbols", [])),
+        }
+
     return {
         "profile": UNIVERSE_PROFILE_NIGHTLY_DISCOVERY,
         "market_regime": getattr(getattr(market, "regime", None), "value", "unknown"),
         "position_sizing": float(getattr(market, "position_sizing", 0.0) or 0.0),
         "universe_size": len(symbols),
         "leaders": leaders,
+        "live_prefilter": live_prefilter,
     }
 
 
@@ -55,6 +76,11 @@ def format_report(report: dict) -> str:
         f"Universe size: {report['universe_size']}",
     ]
     leaders = report.get("leaders", [])
+    prefilter = report.get("live_prefilter")
+    if prefilter:
+        lines.append(
+            f"Live prefilter cache: {prefilter['symbol_count']} symbols | {prefilter['generated_at']}"
+        )
     if not leaders:
         lines.append("Leaders: none")
         return "\n".join(lines)
@@ -74,6 +100,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--limit", type=int, default=20, help="Maximum number of leaders to show")
     parser.add_argument("--min-technical-score", type=int, default=3, help="Minimum technical score to include")
     parser.add_argument("--refresh-sp500", action="store_true", help="Refresh live S&P 500 constituents before scanning")
+    parser.add_argument(
+        "--skip-live-prefilter-refresh",
+        action="store_true",
+        help="Do not refresh the live scan prefilter cache after the nightly run",
+    )
     parser.add_argument("--json", action="store_true", help="Emit JSON instead of text")
     return parser.parse_args()
 
@@ -84,6 +115,7 @@ def main() -> None:
         limit=args.limit,
         min_technical_score=args.min_technical_score,
         refresh_sp500=args.refresh_sp500,
+        refresh_live_prefilter=not args.skip_live_prefilter_refresh,
     )
     if args.json:
         print(json.dumps(report, indent=2))

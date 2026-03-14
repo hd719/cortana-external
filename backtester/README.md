@@ -193,8 +193,14 @@ Backtest data path:
 
 Universe tiers:
 - `quick`: growth watchlist only, used for fast operator loops
-- `standard`: current curated broad universe plus dynamic additions, used by the live daytime stack
+- `standard`: curated broad universe plus dynamic additions, used by the live daytime stack
 - `nightly_discovery`: broader nightly sweep using live S&P 500 constituents when available, then layering growth and dynamic additions on top
+
+Live 120-name scan selection:
+- explicit priority symbols still get pinned first
+- the remaining live scan slots are now filled by a cheap deterministic prefilter
+- that prefilter ranks names by lightweight quality factors such as relative strength, trend quality, liquidity, distance from highs, pullback shape, and volatility sanity
+- this means the daytime stack is now much closer to "best 120 by cheap quality model" instead of "first 120 by ordering"
 
 ## Daily Flow
 
@@ -259,6 +265,7 @@ During the day:
 At night:
 - run a broader discovery pass
 - let new names surface from a wider universe
+- refresh the cached live-universe prefilter used by the daytime 120-name scan
 - review them the next morning
 
 Typical nightly command:
@@ -272,6 +279,7 @@ What it does:
 - scans a broader universe than the daytime alerts
 - tries to use fresh S&P 500 constituents
 - merges in growth names and dynamic names
+- refreshes the cached live prefilter used by the daytime alerts unless you explicitly skip it
 - returns a ranked list of leaders for review
 
 What it does not do:
@@ -377,6 +385,7 @@ What it does not do:
 Recommended use:
 - keep the live alert path on the current `standard` universe
 - schedule `python nightly_discovery.py --limit 20` after market close or overnight
+- let that nightly job refresh the live prefilter cache for the next session
 - review the nightly leaders the next morning and let only the best names graduate into the normal operator workflow
 
 ## Experimental alpha research
