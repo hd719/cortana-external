@@ -8,6 +8,56 @@ A Python-based backtesting engine and trading advisor for:
 
 This repo now includes a practical multi-wave market-intelligence stack layered on top of the original backtester.
 
+## Fresh Clone Setup
+
+If you just cloned the repo and want to run the backtester yourself, do this first:
+
+```bash
+cd /Users/hd/Developer/cortana-external/backtester
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+Then start with these commands:
+
+```bash
+# 1. Check the overall market state
+python advisor.py --market
+
+# 2. Analyze one stock
+python advisor.py --symbol NVDA
+
+# 3. Quick verdict for a stock, proxy, or coin
+python advisor.py --quick-check BTC
+
+# 4. Run the legacy backtest entrypoint
+python main.py --symbol NVDA --years 2 --compare
+```
+
+If you also want the Polymarket context layer:
+
+```bash
+cd /Users/hd/Developer/cortana-external
+pnpm install
+./tools/market-intel/run_market_intel.sh
+```
+
+Then come back to the Python side:
+
+```bash
+cd /Users/hd/Developer/cortana-external/backtester
+source .venv/bin/activate
+python canslim_alert.py --limit 8 --min-score 6
+python dipbuyer_alert.py --limit 8 --min-score 6
+```
+
+Important notes:
+- you do not need Alpaca keys for normal backtester runs anymore
+- `main.py` can run on Yahoo or cached data
+- Polymarket integration is read-only
+- if you skip the Polymarket step, the Python backtester still runs
+
 ## Start Here
 
 If you are new, the easiest mental model is:
