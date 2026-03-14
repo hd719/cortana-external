@@ -24,11 +24,13 @@ import pandas as pd
 import numpy as np
 import yfinance as yf
 from typing import List, Dict, Optional, Set
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
+from io import StringIO
 import json
 import os
 from pathlib import Path
 import time
+import requests
 
 from .polymarket_context import load_watchlist_entries
 
@@ -156,6 +158,16 @@ GROWTH_WATCHLIST = [
     "ENPH", "FSLR", "KKR", "APO", "ARES",
 ]
 
+UNIVERSE_PROFILE_QUICK = "quick"
+UNIVERSE_PROFILE_STANDARD = "standard"
+UNIVERSE_PROFILE_NIGHTLY_DISCOVERY = "nightly_discovery"
+UNIVERSE_PROFILES = {
+    UNIVERSE_PROFILE_QUICK: "Growth watchlist only",
+    UNIVERSE_PROFILE_STANDARD: "Curated broad universe used by the current live stack",
+    UNIVERSE_PROFILE_NIGHTLY_DISCOVERY: "Broader nightly discovery universe using live S&P 500 constituents when available",
+}
+SP500_CONSTITUENTS_URL = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
+
 
 class UniverseScreener:
     """
@@ -175,6 +187,78 @@ class UniverseScreener:
             cache_dir = Path(__file__).parent / "cache"
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(exist_ok=True)
+
+    def _sp500_constituents_cache_path(self) -> Path:
+        return self.cache_dir / "sp500_constituents.json"
+
+    @staticmethod
+    def _normalize_symbol(symbol: str) -> str:
+        return str(symbol or "").strip().upper().replace(".", "-")
+
+    @classmethod
+    def _dedupe_symbols(cls, symbols: List[str]) -> List[str]:
+        seen: Set[str] = set()
+        ordered: List[str] = []
+        for symbol in symbols:
+            normalized = cls._normalize_symbol(symbol)
+            if normalized and normalized not in seen:
+                seen.add(normalized)
+                ordered.append(normalized)
+        return ordered
+
+    def _load_cached_sp500_constituents(self, *, max_age_hours: float = 24.0) -> Optional[List[str]]:
+        path = self._sp500_constituents_cache_path()
+        if not path.exists():
+            return None
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            generated_at = datetime.fromisoformat(str(payload.get("generated_at")))
+            age_seconds = max((datetime.now(UTC) - generated_at.replace(tzinfo=UTC)).total_seconds(), 0.0)
+            if age_seconds > max_age_hours * 3600:
+                return None
+            symbols = payload.get("symbols", [])
+            if not isinstance(symbols, list) or not symbols:
+                return None
+            return self._dedupe_symbols(symbols)
+        except Exception:
+            return None
+
+    def _write_sp500_constituents_cache(self, symbols: List[str]) -> None:
+        payload = {
+            "generated_at": datetime.now(UTC).isoformat(),
+            "symbols": self._dedupe_symbols(symbols),
+        }
+        self._sp500_constituents_cache_path().write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+    def _fetch_live_sp500_constituents(self) -> List[str]:
+        url = os.getenv("SP500_CONSTITUENTS_URL", SP500_CONSTITUENTS_URL)
+        response = requests.get(url, timeout=20)
+        response.raise_for_status()
+        tables = pd.read_html(StringIO(response.text))
+        for table in tables:
+            if "Symbol" not in table.columns:
+                continue
+            symbols = [self._normalize_symbol(value) for value in table["Symbol"].tolist()]
+            symbols = self._dedupe_symbols(symbols)
+            if symbols:
+                return symbols
+        raise ValueError("Unable to parse S&P 500 constituents from source")
+
+    def load_sp500_constituents(self, *, refresh: bool = False, max_age_hours: float = 24.0) -> List[str]:
+        if not refresh:
+            cached = self._load_cached_sp500_constituents(max_age_hours=max_age_hours)
+            if cached:
+                return cached
+
+        try:
+            symbols = self._dedupe_symbols(self._fetch_live_sp500_constituents())
+            self._write_sp500_constituents_cache(symbols)
+            return symbols
+        except Exception:
+            cached = self._load_cached_sp500_constituents(max_age_hours=24 * 365)
+            if cached:
+                return cached
+            return self._dedupe_symbols(SP500_TICKERS)
     
     def _dynamic_watchlist_path(self) -> Path:
         """Path to dynamic watchlist JSON in this module directory."""
@@ -210,11 +294,15 @@ class UniverseScreener:
             allowed_asset_classes={"stock", "etf", "crypto_proxy"},
         )
 
-    def get_dynamic_tickers(self, include_growth: bool = True) -> List[str]:
+    def get_dynamic_tickers(
+        self,
+        include_growth: bool = True,
+        static_symbols: Optional[Set[str]] = None,
+    ) -> List[str]:
         """
         Return only dynamic ticker symbols that are not already in static lists.
         """
-        static_universe: Set[str] = set(SP500_TICKERS)
+        static_universe: Set[str] = set(static_symbols or self._dedupe_symbols(SP500_TICKERS))
         if include_growth:
             static_universe.update(GROWTH_WATCHLIST)
 
@@ -259,9 +347,39 @@ class UniverseScreener:
             universe.update(GROWTH_WATCHLIST)
 
         # Merge dynamic social-discovery symbols (safe fallback to static-only).
-        universe.update(self.get_dynamic_tickers(include_growth=include_growth))
+        universe.update(self.get_dynamic_tickers(include_growth=include_growth, static_symbols=universe))
 
         return sorted(list(universe))
+
+    def get_nightly_discovery_universe(
+        self,
+        *,
+        include_growth: bool = True,
+        refresh_sp500: bool = False,
+    ) -> List[str]:
+        universe: Set[str] = set(self.load_sp500_constituents(refresh=refresh_sp500))
+        if include_growth:
+            universe.update(self._dedupe_symbols(GROWTH_WATCHLIST))
+        universe.update(self.get_dynamic_tickers(include_growth=include_growth, static_symbols=universe))
+        return sorted(list(universe))
+
+    def get_universe_for_profile(
+        self,
+        profile: str = UNIVERSE_PROFILE_STANDARD,
+        *,
+        refresh_sp500: bool = False,
+        include_growth: bool = True,
+    ) -> List[str]:
+        if profile == UNIVERSE_PROFILE_QUICK:
+            return self._dedupe_symbols(GROWTH_WATCHLIST)
+        if profile == UNIVERSE_PROFILE_STANDARD:
+            return self.get_universe(include_growth=include_growth)
+        if profile == UNIVERSE_PROFILE_NIGHTLY_DISCOVERY:
+            return self.get_nightly_discovery_universe(
+                include_growth=include_growth,
+                refresh_sp500=refresh_sp500,
+            )
+        raise ValueError(f"Unknown universe profile: {profile}")
     
     def get_stock_info(self, symbol: str) -> Optional[Dict]:
         """

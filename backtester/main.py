@@ -28,13 +28,60 @@ real money.
 
 import argparse
 import sys
-from datetime import datetime, timedelta
 
 # Our modules
-from config import ALPACA_KEY_ID, ALPACA_SECRET_KEY, ALPACA_BASE_URL
-from data.fetcher import AlpacaDataFetcher
+from data.market_data_provider import MarketDataProvider, MarketDataError
 from strategies.momentum import MomentumStrategy, AggressiveMomentum, ConservativeMomentum
 from backtest import Backtester, compare_strategies
+
+
+def normalize_market_frame(frame):
+    """Normalize provider-backed OHLCV data to the legacy backtester schema."""
+    if frame is None or frame.empty:
+        raise ValueError("No market data returned")
+
+    renamed = frame.rename(
+        columns={
+            "Open": "open",
+            "High": "high",
+            "Low": "low",
+            "Close": "close",
+            "Volume": "volume",
+        }
+    )
+    required = ["open", "high", "low", "close", "volume"]
+    missing = [column for column in required if column not in renamed.columns]
+    if missing:
+        raise ValueError(f"Market data missing required columns: {', '.join(missing)}")
+    return renamed[required].sort_index()
+
+
+def load_backtest_data(
+    *,
+    symbol: str,
+    benchmark: str | None,
+    years: int,
+    provider: MarketDataProvider | None = None,
+):
+    """Load primary and benchmark price history through the resilient provider path."""
+    provider = provider or MarketDataProvider()
+    period = f"{max(int(years), 1)}y"
+
+    data_result = provider.get_history(symbol, period=period, auto_adjust=False)
+    data = normalize_market_frame(data_result.frame)
+
+    benchmark_data = None
+    benchmark_result = None
+    if benchmark:
+        benchmark_result = provider.get_history(benchmark, period=period, auto_adjust=False)
+        benchmark_data = normalize_market_frame(benchmark_result.frame)
+
+    return {
+        "data": data,
+        "data_result": data_result,
+        "benchmark_data": benchmark_data,
+        "benchmark_result": benchmark_result,
+    }
 
 
 def main():
@@ -100,15 +147,6 @@ Examples:
     
     args = parser.parse_args()
     
-    # =========================================================================
-    # Validate API keys
-    # =========================================================================
-    if not ALPACA_KEY_ID or not ALPACA_SECRET_KEY:
-        print("❌ Error: Alpaca API keys not configured!")
-        print("   Make sure ~/Desktop/services/alpaca_keys.json exists with:")
-        print('   {"api_key": "YOUR_KEY", "secret_key": "YOUR_SECRET"}')
-        sys.exit(1)
-    
     print("="*60)
     print("🚀 BACKTESTER")
     print("="*60)
@@ -122,45 +160,33 @@ Examples:
     # Fetch historical data
     # =========================================================================
     print(f"\n📊 Fetching historical data for {args.symbol}...")
-    
-    fetcher = AlpacaDataFetcher(
-        api_key=ALPACA_KEY_ID,
-        secret_key=ALPACA_SECRET_KEY,
-    )
-    
-    # Calculate date range
-    end_date = datetime.now()
-    start_date = end_date - timedelta(days=args.years * 365)
-    
+
     try:
-        data = fetcher.get_bars(
+        loaded = load_backtest_data(
             symbol=args.symbol,
-            start=start_date.strftime('%Y-%m-%d'),
-            end=end_date.strftime('%Y-%m-%d'),
-            timeframe='1Day',
+            benchmark=args.benchmark,
+            years=args.years,
         )
+        data = loaded["data"]
+        data_result = loaded["data_result"]
+        benchmark_data = loaded["benchmark_data"]
+        benchmark_result = loaded["benchmark_result"]
         print(f"   ✅ Loaded {len(data)} days of data")
         print(f"   📅 {data.index[0].strftime('%Y-%m-%d')} to {data.index[-1].strftime('%Y-%m-%d')}")
         print(f"   💰 Price range: ${data['close'].min():.2f} - ${data['close'].max():.2f}")
-    except Exception as e:
+        print(f"   📡 Source: {data_result.source} ({data_result.status})")
+        if data_result.degraded_reason:
+            print(f"   ⚠️  {data_result.degraded_reason}")
+    except (MarketDataError, ValueError) as e:
         print(f"   ❌ Error fetching data: {e}")
         sys.exit(1)
-    
-    # Fetch benchmark data for comparison
-    benchmark_data = None
-    if args.benchmark:
+
+    if args.benchmark and benchmark_data is not None and benchmark_result is not None:
         print(f"\n📊 Fetching benchmark data ({args.benchmark})...")
-        try:
-            benchmark_data = fetcher.get_bars(
-                symbol=args.benchmark,
-                start=start_date.strftime('%Y-%m-%d'),
-                end=end_date.strftime('%Y-%m-%d'),
-                timeframe='1Day',
-            )
-            print(f"   ✅ Loaded {len(benchmark_data)} days")
-        except Exception as e:
-            print(f"   ⚠️  Could not fetch benchmark: {e}")
-            benchmark_data = None
+        print(f"   ✅ Loaded {len(benchmark_data)} days")
+        print(f"   📡 Source: {benchmark_result.source} ({benchmark_result.status})")
+        if benchmark_result.degraded_reason:
+            print(f"   ⚠️  {benchmark_result.degraded_reason}")
     
     # =========================================================================
     # Run backtest(s)

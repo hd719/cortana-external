@@ -44,7 +44,13 @@ from data.confidence import (
     risk_adjusted_size_multiplier,
 )
 from data.polymarket_context import load_symbol_context
-from data.universe import UniverseScreener, GROWTH_WATCHLIST
+from data.universe import (
+    UniverseScreener,
+    GROWTH_WATCHLIST,
+    UNIVERSE_PROFILE_QUICK,
+    UNIVERSE_PROFILE_STANDARD,
+    UNIVERSE_PROFILE_NIGHTLY_DISCOVERY,
+)
 from data.market_data_provider import MarketDataProvider
 from data.market_regime import MarketRegimeDetector, MarketRegime, MarketStatus
 from data.fundamentals import FundamentalsFetcher
@@ -725,6 +731,9 @@ class TradingAdvisor:
         self,
         quick: bool = False,
         min_score: int = 6,
+        universe_profile: str = UNIVERSE_PROFILE_STANDARD,
+        enforce_market_gate: bool = True,
+        refresh_sp500: bool = False,
     ) -> pd.DataFrame:
         """
         Scan the universe for Dip Buyer opportunities.
@@ -743,16 +752,14 @@ class TradingAdvisor:
         market = self.get_market_status(refresh=True)
         print(market)
 
-        if market.regime not in [MarketRegime.CORRECTION, MarketRegime.UPTREND_UNDER_PRESSURE]:
+        if enforce_market_gate and market.regime not in [MarketRegime.CORRECTION, MarketRegime.UPTREND_UNDER_PRESSURE]:
             print("⚠️  Dip Buyer active only in corrections or pressured uptrends.")
             return pd.DataFrame()
 
         risk_snapshot = self.risk_fetcher.get_snapshot()
 
-        if quick:
-            symbols = GROWTH_WATCHLIST
-        else:
-            symbols = self.screener.get_universe()
+        profile = UNIVERSE_PROFILE_QUICK if quick else universe_profile
+        symbols = self.screener.get_universe_for_profile(profile, refresh_sp500=refresh_sp500)
 
         candidates = []
         for i, symbol in enumerate(symbols):
@@ -1015,6 +1022,9 @@ class TradingAdvisor:
         self,
         quick: bool = False,
         min_score: int = 6,
+        universe_profile: str = UNIVERSE_PROFILE_STANDARD,
+        enforce_market_gate: bool = True,
+        refresh_sp500: bool = False,
     ) -> pd.DataFrame:
         """
         Scan the universe for trading opportunities.
@@ -1034,16 +1044,14 @@ class TradingAdvisor:
         market = self.get_market_status(refresh=True)
         print(market)
         
-        if market.regime == MarketRegime.CORRECTION:
+        if enforce_market_gate and market.regime == MarketRegime.CORRECTION:
             print("⚠️  Market in correction. Skipping scan.")
             return pd.DataFrame()
         
         # Run screen
-        if quick:
-            symbols = GROWTH_WATCHLIST
-            results = self.screener.screen(symbols, min_technical_score=min_score - 2)
-        else:
-            results = self.screener.screen(min_technical_score=min_score - 2)
+        profile = UNIVERSE_PROFILE_QUICK if quick else universe_profile
+        symbols = self.screener.get_universe_for_profile(profile, refresh_sp500=refresh_sp500)
+        results = self.screener.screen(symbols, min_technical_score=min_score - 2)
         
         if results.empty:
             print("No candidates found.")
@@ -1102,10 +1110,10 @@ class TradingAdvisor:
                     continue
         finally:
             self._candidate_context_by_symbol = previous_context
-        
+
         if not enriched:
             return results
-        
+
         enriched_df = pd.DataFrame(enriched)
         enriched_df = self._sort_runtime_candidates(
             enriched_df,
@@ -1115,6 +1123,61 @@ class TradingAdvisor:
         # Filter by minimum total score
         enriched_df = enriched_df[enriched_df['total_score'] >= min_score]
         return attach_model_family_scores(enriched_df)
+
+    def run_nightly_discovery(
+        self,
+        *,
+        limit: int = 25,
+        min_technical_score: int = 3,
+        refresh_sp500: bool = False,
+    ) -> pd.DataFrame:
+        """Run a broader nightly discovery pass without the live market gate."""
+        symbols = self.screener.get_universe_for_profile(
+            UNIVERSE_PROFILE_NIGHTLY_DISCOVERY,
+            refresh_sp500=refresh_sp500,
+        )
+        results = self.screener.screen(symbols, min_technical_score=min_technical_score, verbose=True)
+        if results.empty:
+            return results
+
+        market = self.get_market_status(refresh=True)
+        enriched = []
+        previous_context = dict(self._candidate_context_by_symbol)
+        self._candidate_context_by_symbol = {
+            row['symbol']: row.to_dict()
+            for _, row in results.head(limit).iterrows()
+        }
+
+        try:
+            for _, row in results.head(limit).iterrows():
+                symbol = row['symbol']
+                analysis = self.analyze_stock(symbol, quiet=True)
+                if 'error' in analysis:
+                    continue
+
+                rec = analysis.get('recommendation', {})
+                row_dict = row.to_dict()
+                row_dict['market_regime'] = getattr(getattr(market, 'regime', None), 'value', 'unknown')
+                row_dict['total_score'] = analysis.get('total_score', 0)
+                row_dict['rank_score'] = analysis.get('rank_score', analysis.get('total_score', 0))
+                row_dict['action'] = rec.get('action', 'NO_BUY')
+                row_dict['reason'] = rec.get('reason', '')
+                row_dict['confidence'] = rec.get('confidence', analysis.get('confidence', 0))
+                row_dict['trade_quality_score'] = rec.get(
+                    'trade_quality_score',
+                    analysis.get('trade_quality_score', analysis.get('total_score', 0)),
+                )
+                enriched.append(row_dict)
+        finally:
+            self._candidate_context_by_symbol = previous_context
+
+        if not enriched:
+            return pd.DataFrame()
+
+        return pd.DataFrame(enriched).sort_values(
+            ['rank_score', 'technical_score', 'confidence', 'symbol'],
+            ascending=[False, False, False, True],
+        ).reset_index(drop=True)
 
     def compare_model_families(
         self,

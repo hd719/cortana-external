@@ -5,7 +5,7 @@ This is the production integration bridge between the TypeScript Polymarket inte
 ## What it does
 
 `run_market_intel.sh`:
-- refreshes the Python market-regime snapshot first via `backtester/data/market_regime.py`
+- recalculates the Python market-regime snapshot first via `backtester/data/market_regime.py`
 - runs the live smoke check
 - builds the Polymarket report
 - persists history
@@ -35,6 +35,13 @@ This is the single production health path. It verifies, in order:
 3. overlay is populated when regime data is available
 4. Python can read the compact context and watchlist artifacts
 5. only then should CANSLIM / Dip Buyer alerts run
+
+Plain-English meaning of "SPY regime snapshot":
+- `SPY` is the S&P 500 ETF
+- the backtester uses it as the main proxy for the overall U.S. stock market
+- the snapshot is just a saved answer to the question:
+  - "Is the market healthy, under pressure, or in correction right now?"
+- later steps read that saved answer instead of recalculating it over and over
 
 The exported watchlist is intentionally split by asset class:
 - stock / ETF / crypto-proxy names can feed the Python stock universe

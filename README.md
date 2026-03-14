@@ -57,6 +57,7 @@ Backtester/Polymarket operator surfaces now include:
 - `python experimental_alpha.py --persist`
 - `python experimental_alpha.py --settle`
 - `python experimental_alpha.py --calibrate --minimum-samples 20`
+- `python nightly_discovery.py --limit 20`
 - `./tools/market-intel/run_market_intel.sh`
 
 Research-only surface:
@@ -64,6 +65,18 @@ Research-only surface:
 - it now supports snapshot persistence, forward-settlement, calibration, and promotion-gate reporting for research validation
 - it is not wired into cron, alerts, or execution
 - promotion into a permanent production role is only allowed after the calibration gate clears on settled forward samples, and even then it should first land as a bounded annotation or small modifier inside the existing Python regime/technical engine
+
+Backtester universe tiers now separate:
+- fast operator review (`quick`)
+- standard daytime scanning (`standard`)
+- broader overnight discovery (`nightly_discovery`)
+
+Plain-English backtester model:
+- Python backtester = main decision engine
+- TypeScript Polymarket layer = macro/event context only
+- daytime alerts = compact operator view
+- nightly discovery = broader overnight scan
+- experimental alpha = research only, not live trade authority
 
 ---
 
