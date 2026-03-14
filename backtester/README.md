@@ -107,12 +107,49 @@ Run it manually:
 cd /Users/hd/Developer/cortana-external/backtester
 python experimental_alpha.py --symbols NVDA,BTC,COIN
 python experimental_alpha.py --json
+python experimental_alpha.py --persist
+python experimental_alpha.py --settle
+python experimental_alpha.py --calibrate --minimum-samples 20
 ```
 
 Guardrails:
 - treat the formulas as research heuristics, not truth
 - keep it paper-only until forward-tested
 - do not route this into the production buy/no-buy path without separate validation
+
+Execution-readiness research workflow:
+1. `python experimental_alpha.py --persist`
+   This snapshots the current paper candidates under `.cache/experimental_alpha/snapshots/`.
+2. `python experimental_alpha.py --settle`
+   This settles prior snapshots against later market data and writes forward returns under `.cache/experimental_alpha/settled/`.
+3. `python experimental_alpha.py --calibrate --minimum-samples 20`
+   This builds the calibration and promotion-gate report from the settled sample set.
+
+Promotion gate intent:
+- `ready` means the current `paper_long` bucket cleared the present research thresholds for sample count, 5d hit rate, average 5d return, and Brier score.
+- `blocked` means the sample is still too small or too weak to justify promoting any part of the heuristic into the live production decision path.
+
+When experimental alpha can be promoted:
+- It stays paper-only by default. No production promotion happens just because the report looks good for a few days.
+- The first eligible promotion target is a bounded annotation layer, not direct trade authority. In practice that means watchlist priority, quick-check commentary, or a small conviction modifier inside the existing Python regime/technical engine.
+- Promotion is only allowed when all of the following are true:
+  1. `python experimental_alpha.py --calibrate --minimum-samples 20` returns `Promotion gate: ready`
+  2. the settled sample includes at least `20` `paper_long` candidates
+  3. `paper_long` 5d hit rate is at least `55%`
+  4. `paper_long` average 5d return is at least `+1.0%`
+  5. `paper_long` 5d Brier score is at most `0.23`
+  6. the broader backtester test suite still passes after the integration change
+  7. the promoted logic remains bounded so Polymarket stays contextual and does not replace the Python regime/technical engine
+- Even after the gate clears, promotion should happen in stages:
+  1. research report only
+  2. watchlist / quick-check annotation
+  3. small bounded decision modifier
+  4. anything larger only after another forward-test cycle
+- This research path should not become a permanent live input if:
+  - the gate falls back to `blocked`
+  - calibration degrades after rollout
+  - results are concentrated in one short regime pocket instead of holding across multiple conditions
+  - the logic starts overriding base regime/technical discipline instead of supplementing it
 
 Example report command:
 

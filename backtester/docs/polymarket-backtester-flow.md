@@ -14,11 +14,14 @@ flowchart LR
     H --> I["CANSLIM alert"]
     H --> J["Dip Buyer alert"]
     H --> L["Quick check command"]
-    H --> N["Experimental alpha report (paper only)"]
+    H --> N["Experimental alpha research (paper only)"]
+    N --> P["Persist snapshots"]
+    P --> Q["Settle forward returns"]
+    Q --> R["Calibration + promotion gate"]
     I --> K["Operator reads final stock-market summary"]
     J --> K["Operator reads final stock-market summary"]
     L --> M["Operator gets fast stock or coin verdict"]
-    N --> O["Operator reviews research-only alpha output"]
+    R --> O["Operator reviews research-only alpha output"]
 ```
 
 ## Plain-English version
@@ -27,12 +30,12 @@ flowchart LR
 - The `run_market_intel.sh` bridge runs the TypeScript Polymarket intelligence layer first.
 - That layer fetches public Polymarket markets, keeps only high-signal macro/event context, and writes artifact files.
 - The Python backtester then reads those artifacts together with its own market-regime and stock-scoring logic.
-- The final thing the user sees is either a CANSLIM/Dip Buyer stock-analysis alert, a fast quick-check verdict, or a separate paper-only alpha research report.
+- The final thing the user sees is either a CANSLIM/Dip Buyer stock-analysis alert, a fast quick-check verdict, or a separate paper-only alpha research workflow with persistence, settlement, and calibration.
 
 ## Mental model
 
 - OpenClaw: scheduler / runner
 - TypeScript layer: external macro and event intelligence
 - Python layer: stock analysis and alert generation
-- Experimental alpha report: paper-only research surface
+- Experimental alpha research: paper-only validation surface with persistence, settlement, and promotion gates
 - Final output: better-informed alerts, quick checks, and research views, not automatic trades
