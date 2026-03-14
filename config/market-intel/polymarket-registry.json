@@ -1,0 +1,142 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-03-13T00:00:00Z",
+  "entries": [
+    {
+      "id": "fed-easing",
+      "title": "Fed easing odds",
+      "category": "macro-rates",
+      "theme": "rates",
+      "equityRelevance": "high",
+      "sectorTags": ["tech", "growth", "small-cap"],
+      "watchTickers": ["QQQ", "IWM", "NVDA", "AMD", "MSFT"],
+      "confidenceWeight": 0.92,
+      "minLiquidity": 250000,
+      "active": true,
+      "impactModel": "fed_easing",
+      "probabilityMode": "invert",
+      "notes": "Use as macro context, not a buy trigger.",
+      "selectors": {
+        "marketSlugs": ["will-no-fed-rate-cuts-happen-in-2026"],
+        "eventSlugs": [],
+        "keywords": ["fed cut", "fomc", "rate cut", "fed rates", "cut rates"],
+        "includeKeywords": ["no fed rate cuts"],
+        "excludeKeywords": ["2025", "hikes"]
+      }
+    },
+    {
+      "id": "recession-risk",
+      "title": "US recession odds",
+      "category": "macro-growth",
+      "theme": "recession",
+      "equityRelevance": "high",
+      "sectorTags": ["defensive", "utilities", "healthcare"],
+      "watchTickers": ["XLU", "XLV", "COST", "IWM"],
+      "confidenceWeight": 0.9,
+      "minLiquidity": 150000,
+      "active": true,
+      "impactModel": "recession_risk",
+      "notes": "Use for risk framing and watchlist posture.",
+      "selectors": {
+        "marketSlugs": ["us-recession-by-end-of-2026"],
+        "eventSlugs": [],
+        "keywords": ["recession", "hard landing", "soft landing"],
+        "includeKeywords": ["us recession"],
+        "excludeKeywords": ["canada recession"]
+      }
+    },
+    {
+      "id": "inflation-upside",
+      "title": "Inflation upside risk",
+      "category": "macro-inflation",
+      "theme": "inflation",
+      "required": false,
+      "equityRelevance": "high",
+      "sectorTags": ["energy", "rates", "duration"],
+      "watchTickers": ["QQQ", "ARKK", "XLE", "XOM", "CVX"],
+      "confidenceWeight": 0.88,
+      "minLiquidity": 150000,
+      "active": true,
+      "impactModel": "inflation_upside",
+      "notes": "Prefer CPI/PCE style markets over generic sentiment contracts.",
+      "selectors": {
+        "marketSlugs": [],
+        "eventSlugs": [],
+        "keywords": ["inflation", "cpi", "pce", "core cpi"],
+        "includeKeywords": ["inflation"],
+        "excludeKeywords": ["gta vi", "world cup"]
+      }
+    },
+    {
+      "id": "tariff-risk",
+      "title": "Tariff and trade risk",
+      "category": "policy-trade",
+      "theme": "tariffs",
+      "required": false,
+      "equityRelevance": "medium",
+      "sectorTags": ["semis", "industrials", "consumer"],
+      "watchTickers": ["NVDA", "AMD", "AAPL", "NKE", "CAT"],
+      "confidenceWeight": 0.8,
+      "minLiquidity": 100000,
+      "active": true,
+      "impactModel": "tariff_risk",
+      "notes": "Use only when contract wording is specific enough to matter.",
+      "selectors": {
+        "marketSlugs": [],
+        "eventSlugs": [],
+        "keywords": ["tariff", "tariffs", "trade war"],
+        "includeKeywords": ["tariff"],
+        "excludeKeywords": ["dividend", "gta vi", "world cup"]
+      }
+    },
+    {
+      "id": "geopolitical-escalation",
+      "title": "Geopolitical escalation risk",
+      "category": "geopolitics",
+      "theme": "geopolitics",
+      "equityRelevance": "medium",
+      "sectorTags": ["energy", "defense", "airlines"],
+      "watchTickers": ["XOM", "CVX", "LMT", "NOC", "JETS"],
+      "confidenceWeight": 0.82,
+      "minLiquidity": 100000,
+      "active": true,
+      "impactModel": "geopolitical_escalation",
+      "notes": "Favor high-liquidity escalation or ceasefire contracts.",
+      "selectors": {
+        "marketSlugs": [
+          "will-china-invade-taiwan-before-2027",
+          "china-x-taiwan-military-clash-before-2027",
+          "will-china-blockade-taiwan-by-june-30"
+        ],
+        "eventSlugs": [],
+        "keywords": ["iran", "taiwan", "china", "ceasefire", "escalation", "sanctions"],
+        "includeKeywords": ["taiwan"],
+        "excludeKeywords": ["world cup", "visit taiwan", "trade deal", "gta vi", "mainland china"]
+      }
+    },
+    {
+      "id": "crypto-policy-support",
+      "title": "Crypto policy support",
+      "category": "policy-crypto",
+      "theme": "crypto-policy",
+      "equityRelevance": "medium",
+      "sectorTags": ["crypto", "fintech", "risk"],
+      "watchTickers": ["COIN", "HOOD", "MARA", "MSTR"],
+      "confidenceWeight": 0.78,
+      "minLiquidity": 100000,
+      "active": true,
+      "impactModel": "crypto_policy_support",
+      "notes": "Treat as thematic watchlist context rather than broad market direction.",
+      "selectors": {
+        "marketSlugs": [
+          "us-national-bitcoin-reserve-before-2027",
+          "trump-eliminates-capital-gains-tax-on-crypto-before-2027"
+        ],
+        "eventSlugs": [],
+        "keywords": ["crypto policy", "bitcoin reserve", "strategic reserve", "crypto bill", "market structure bill"],
+        "includeKeywords": ["bitcoin reserve", "capital gains tax on crypto"],
+        "excludeKeywords": ["2025", "gta vi"]
+      }
+    }
+  ]
+}

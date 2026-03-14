@@ -15,6 +15,7 @@ from zoneinfo import ZoneInfo
 
 from advisor import TradingAdvisor
 from data.adverse_regime import build_adverse_regime_indicator
+from data.polymarket_context import load_compact_context
 from data.universe import GROWTH_WATCHLIST
 from data.x_sentiment import XSentimentAnalyzer
 from evaluation.decision_review import render_decision_review
@@ -218,6 +219,9 @@ def format_alert(limit: int = 8, min_score: int = 6, universe_size: int = 120) -
         "Dip Buyer Scan",
         _market_headline(market),
     ]
+    polymarket_context = _run_quiet(load_compact_context)
+    if polymarket_context:
+        lines.extend(polymarket_context.splitlines())
     if stress.get("label") != "normal" and getattr(getattr(market, 'regime', None), 'value', '') != 'correction':
         lines.append(f"Adverse regime: {stress['label']} ({float(stress['score']):.0f}) -- {stress['reason']}")
     evaluated = 0

@@ -26,6 +26,7 @@ import yfinance as yf
 from typing import List, Dict, Optional, Set
 from datetime import datetime, timedelta
 import json
+import os
 from pathlib import Path
 import time
 
@@ -177,13 +178,21 @@ class UniverseScreener:
         """Path to dynamic watchlist JSON in this module directory."""
         return Path(__file__).parent / "dynamic_watchlist.json"
 
-    def _load_dynamic_watchlist(self) -> List[Dict]:
+    def _polymarket_watchlist_path(self) -> Path:
+        """Path to Polymarket-derived watchlist JSON in this module directory."""
+        return Path(
+            os.getenv(
+                "POLYMARKET_WATCHLIST_PATH",
+                str(Path(__file__).parent / "polymarket_watchlist.json"),
+            )
+        )
+
+    def _load_watchlist_payload(self, path: Path) -> List[Dict]:
         """
-        Load dynamic ticker entries from disk.
+        Load ticker entries from disk.
 
         Returns an empty list if file is missing/corrupt.
         """
-        path = self._dynamic_watchlist_path()
         if not path.exists():
             return []
 
@@ -196,6 +205,14 @@ class UniverseScreener:
         except Exception:
             return []
 
+    def _load_dynamic_watchlist(self) -> List[Dict]:
+        """Load dynamic social-discovery ticker entries from disk."""
+        return self._load_watchlist_payload(self._dynamic_watchlist_path())
+
+    def _load_polymarket_watchlist(self) -> List[Dict]:
+        """Load Polymarket-derived ticker entries from disk."""
+        return self._load_watchlist_payload(self._polymarket_watchlist_path())
+
     def get_dynamic_tickers(self, include_growth: bool = True) -> List[str]:
         """
         Return only dynamic ticker symbols that are not already in static lists.
@@ -205,7 +222,7 @@ class UniverseScreener:
             static_universe.update(GROWTH_WATCHLIST)
 
         dynamic_symbols: Set[str] = set()
-        for item in self._load_dynamic_watchlist():
+        for item in [*self._load_dynamic_watchlist(), *self._load_polymarket_watchlist()]:
             symbol = str(item.get("symbol", "")).upper().strip()
             if symbol:
                 dynamic_symbols.add(symbol)

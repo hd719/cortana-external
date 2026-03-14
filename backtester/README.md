@@ -30,9 +30,32 @@ python canslim_alert.py --limit 8 --min-score 6
 python main.py --symbol AAPL --years 2 --compare
 ```
 
+## Polymarket Context Integration
+
+The Python alert pipeline now consumes a read-only Polymarket intelligence layer from the TypeScript workspace package at [`packages/market-intel`](/Users/hd/Developer/cortana-external/packages/market-intel).
+
+Run the bridge before CANSLIM or Dip Buyer alerts:
+
+```bash
+cd /Users/hd/Developer/cortana-external
+./tools/market-intel/run_market_intel.sh
+```
+
+This writes:
+- `/Users/hd/Developer/cortana-external/var/market-intel/polymarket/latest-compact.txt`
+- `/Users/hd/Developer/cortana-external/var/market-intel/polymarket/latest-report.json`
+- `/Users/hd/Developer/cortana-external/backtester/data/polymarket_watchlist.json`
+
+Runtime effects:
+- `canslim_alert.py` and `dipbuyer_alert.py` prepend the compact Polymarket macro/context summary when the artifact is fresh.
+- `UniverseScreener.get_dynamic_tickers()` merges the Polymarket-derived watchlist with the existing dynamic watchlist.
+- The integration is read-only and does not place trades or interact with wallets/accounts.
+- The wrapper now fails fast if artifacts are stale or required registry themes lose coverage.
+
 ## Operator workflow
 
 Use the surfaces in this order when you are reviewing the stack end to end:
+- `./tools/market-intel/run_market_intel.sh` refreshes the external macro/event context and Polymarket-derived watchlist used by the Python alerts.
 - `python advisor.py --market` checks the regime gate and sizing posture before you read any single-name output.
 - `python advisor.py --symbol NVDA` is the fastest single-name diagnostic when you want factor detail plus the current recommendation.
 - `python canslim_alert.py --limit 8 --min-score 6` and `python dipbuyer_alert.py --limit 8 --min-score 6` generate the compact operator summaries used for daily review.

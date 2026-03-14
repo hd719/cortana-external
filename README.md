@@ -39,8 +39,10 @@ If `~/clawd` is strategy/memory/policy, **cortana-external is execution runtime*
 │   └── mission-control/         # Next.js ops dashboard
 ├── packages/
 │   ├── fitness-client/           # Typed TS client for Go fitness service
-│   └── fitness-types/            # Shared TypeScript types for fitness data
+│   ├── fitness-types/            # Shared TypeScript types for fitness data
+│   └── market-intel/             # Read-only Polymarket market-intelligence package
 ├── tools/
+│   ├── market-intel/             # bridge script that materializes Polymarket artifacts for Python alerts
 │   └── stock-discovery/         # stock discovery helper scripts
 └── docs/                        # runbooks + architecture notes
 ```

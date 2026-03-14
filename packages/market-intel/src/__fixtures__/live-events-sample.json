@@ -1,0 +1,103 @@
+[
+  {
+    "id": "51456",
+    "slug": "how-many-fed-rate-cuts-in-2026",
+    "title": "How many Fed rate cuts in 2026?",
+    "description": "This market will resolve according to the exact amount of cuts of 25 basis points in 2026 by the Fed.",
+    "markets": [
+      {
+        "id": "616902",
+        "question": "Will no Fed rate cuts happen in 2026?",
+        "slug": "will-no-fed-rate-cuts-happen-in-2026",
+        "description": "This market will resolve according to the exact amount of cuts of 25 basis points in 2026 by the Fed. The resolution source will be FOMC statements.",
+        "outcomePrices": "[\"0.235\", \"0.765\"]",
+        "liquidityNum": 54021.57973,
+        "volume24hr": 93325.92454200001,
+        "spread": 0.002,
+        "oneDayPriceChange": -0.001,
+        "oneHourPriceChange": -0.001,
+        "lastTradePrice": 0.235,
+        "bestBid": 0.234,
+        "bestAsk": 0.236,
+        "active": true,
+        "acceptingOrders": true,
+        "updatedAt": "2026-03-14T01:13:33.635537Z"
+      }
+    ]
+  },
+  {
+    "id": "48802",
+    "slug": "us-recession-by-end-of-2026",
+    "title": "US recession by end of 2026?",
+    "description": "This market will resolve to Yes if the US enters recession by end of 2026.",
+    "markets": [
+      {
+        "id": "609655",
+        "question": "US recession by end of 2026?",
+        "slug": "us-recession-by-end-of-2026",
+        "description": "This market will resolve to Yes if the US enters recession by end of 2026. The resolution source will be official announcements from the NBER and BEA.",
+        "outcomePrices": "[\"0.335\", \"0.665\"]",
+        "liquidityNum": 113099.9085,
+        "volume24hr": 35376.328477,
+        "spread": 0.01,
+        "oneDayPriceChange": -0.005,
+        "lastTradePrice": 0.34,
+        "bestBid": 0.33,
+        "bestAsk": 0.34,
+        "active": true,
+        "acceptingOrders": true,
+        "updatedAt": "2026-03-14T01:19:32.23107Z"
+      }
+    ]
+  },
+  {
+    "id": "34044",
+    "slug": "will-china-invade-taiwan-before-2027",
+    "title": "Will China invade Taiwan by end of 2026?",
+    "description": "This market will resolve to Yes if China commences a military offensive intended to establish control over Taiwan by December 31, 2026.",
+    "markets": [
+      {
+        "id": "567621",
+        "question": "Will China invade Taiwan by end of 2026?",
+        "slug": "will-china-invade-taiwan-before-2027",
+        "description": "This market will resolve to Yes if China commences a military offensive intended to establish control over Taiwan by December 31, 2026.",
+        "outcomePrices": "[\"0.0945\", \"0.9055\"]",
+        "liquidityNum": 518638.03205,
+        "volume24hr": 186107.68636700002,
+        "spread": 0.001,
+        "oneDayPriceChange": -0.001,
+        "lastTradePrice": 0.095,
+        "bestBid": 0.094,
+        "bestAsk": 0.095,
+        "active": true,
+        "acceptingOrders": true,
+        "updatedAt": "2026-03-14T01:19:53.721577Z"
+      }
+    ]
+  },
+  {
+    "id": "26001",
+    "slug": "us-national-bitcoin-reserve-before-2027",
+    "title": "US national Bitcoin reserve before 2027?",
+    "description": "This market will resolve to Yes if the US establishes a national Bitcoin reserve before 2027.",
+    "markets": [
+      {
+        "id": "612345",
+        "question": "US national Bitcoin reserve before 2027?",
+        "slug": "us-national-bitcoin-reserve-before-2027",
+        "description": "This market will resolve to Yes if the US establishes a national Bitcoin reserve before 2027.",
+        "outcomePrices": "[\"0.27\", \"0.73\"]",
+        "liquidityNum": 15379.931,
+        "volume24hr": 1450.12,
+        "spread": 0.01,
+        "oneDayPriceChange": 0.005,
+        "lastTradePrice": 0.27,
+        "bestBid": 0.26,
+        "bestAsk": 0.27,
+        "active": true,
+        "acceptingOrders": true,
+        "updatedAt": "2026-03-14T01:19:01.000000Z"
+      }
+    ]
+  }
+]
