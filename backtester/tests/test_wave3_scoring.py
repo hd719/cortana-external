@@ -4,6 +4,7 @@ import pandas as pd
 
 from data.market_regime import MarketRegime
 from data.wave3 import (
+    SectorStrengthAnalyzer,
     build_position_sizing_guidance,
     score_catalyst_weighting,
     score_sector_relative_strength,
@@ -146,3 +147,28 @@ def test_position_sizing_guidance_shrinks_for_adverse_regime_stress():
 
     assert stressed["adverse_regime_multiplier"] < calm["adverse_regime_multiplier"]
     assert stressed["recommended_position_pct"] < calm["recommended_position_pct"]
+
+
+def test_sector_strength_reuses_cached_benchmark_history():
+    class _FakeHistory:
+        def __init__(self, frame: pd.DataFrame):
+            self.frame = frame
+
+    class _FakeMarketData:
+        def __init__(self):
+            self.calls = []
+
+        def get_history(self, symbol: str, period: str, auto_adjust: bool = False):
+            self.calls.append((symbol, period, auto_adjust))
+            return _FakeHistory(_history([100 + i * 0.4 for i in range(80)]))
+
+    market_data = _FakeMarketData()
+    analyzer = SectorStrengthAnalyzer(market_data)
+    stock_history = _history([100 + i * 0.8 for i in range(80)])
+
+    first = analyzer.analyze(stock_history, "Technology")
+    second = analyzer.analyze(stock_history, "Technology")
+
+    assert first["benchmark_symbol"] == "XLK"
+    assert second["benchmark_symbol"] == "XLK"
+    assert market_data.calls == [("XLK", "6mo", False)]

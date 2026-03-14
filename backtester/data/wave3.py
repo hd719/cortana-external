@@ -144,6 +144,7 @@ class SectorStrengthAnalyzer:
 
     def __init__(self, market_data: MarketDataProvider):
         self.market_data = market_data
+        self._benchmark_history_cache: dict[str, pd.DataFrame] = {}
 
     def analyze(self, stock_history: pd.DataFrame, sector: Optional[str]) -> Dict:
         benchmark_symbol = sector_proxy_for_name(sector)
@@ -158,7 +159,10 @@ class SectorStrengthAnalyzer:
             }
 
         try:
-            sector_history = self.market_data.get_history(benchmark_symbol, period="6mo", auto_adjust=False).frame
+            sector_history = self._benchmark_history_cache.get(benchmark_symbol)
+            if sector_history is None:
+                sector_history = self.market_data.get_history(benchmark_symbol, period="6mo", auto_adjust=False).frame
+                self._benchmark_history_cache[benchmark_symbol] = sector_history
         except Exception as exc:
             return {
                 "sector": sector,

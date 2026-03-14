@@ -32,6 +32,8 @@ USAGE
 
 import argparse
 import io
+import os
+import time
 from contextlib import redirect_stderr, redirect_stdout
 from typing import List, Dict, Optional
 import pandas as pd
@@ -83,6 +85,8 @@ CRYPTO_ALIAS_MAP = {
 }
 
 CRYPTO_PROXY_SYMBOLS = {"COIN", "HOOD", "MSTR", "MARA", "RIOT", "CLSK", "BITO", "IBIT", "ETHA"}
+ANALYSIS_PROFILE_DEFAULT = "default"
+ANALYSIS_PROFILE_BULK_SCAN = "bulk_scan"
 
 
 class TradingAdvisor:
@@ -103,6 +107,7 @@ class TradingAdvisor:
         self.headline_sentiment = HeadlineSentimentAnalyzer()
         self.x_sentiment = XSentimentAnalyzer()
         self.sector_strength = SectorStrengthAnalyzer(self.market_data)
+        self.enable_timing = os.getenv("BACKTESTER_TIMING", "0") not in {"", "0", "false", "False"}
         
         # Cache
         self._market_status: Optional[MarketStatus] = None
@@ -294,7 +299,12 @@ class TradingAdvisor:
         ordered = ordered.sort_values(sort_columns, ascending=ascending, kind='mergesort')
         return ordered.drop(columns=['_action_priority', '_abstain_priority'])
 
-    def analyze_stock(self, symbol: str, quiet: bool = False) -> Dict:
+    def analyze_stock(
+        self,
+        symbol: str,
+        quiet: bool = False,
+        analysis_profile: str = ANALYSIS_PROFILE_DEFAULT,
+    ) -> Dict:
         """
         Full CANSLIM analysis of a single stock.
         
@@ -306,38 +316,58 @@ class TradingAdvisor:
             print(f"📊 Analyzing {symbol}")
             print(f"{'='*60}\n")
 
+        timings: Dict[str, float] = {}
+
+        def _time_block(label: str, fn):
+            start = time.perf_counter()
+            result = fn()
+            if self.enable_timing:
+                timings[label] = round(time.perf_counter() - start, 4)
+            return result
+
+        include_x_sentiment = analysis_profile != ANALYSIS_PROFILE_BULK_SCAN
+
         try:
-            history_result = self.market_data.get_history(symbol, period='1y', auto_adjust=False)
+            history_result = _time_block(
+                "history",
+                lambda: self.market_data.get_history(symbol, period='1y', auto_adjust=False),
+            )
             hist = history_result.frame
         except Exception as e:
             return {'symbol': symbol, 'error': str(e)}
         
         # Get fundamentals
-        fund = self.fundamentals.get_fundamentals(symbol)
-        fund_scores = self.fundamentals.score_canslim_fundamentals(fund)
+        fund = _time_block("fundamentals", lambda: self.fundamentals.get_fundamentals(symbol))
+        fund_scores = _time_block("fundamental_scores", lambda: self.fundamentals.score_canslim_fundamentals(fund))
         candidate_context = self._candidate_context_by_symbol.get(symbol, {})
         sector_name = candidate_context.get("sector") or fund.get("sector")
         
         # Get technicals
-        tech = self._calculate_technical_score_from_history(symbol, hist)
+        tech = _time_block("technicals", lambda: self._calculate_technical_score_from_history(symbol, hist))
         
         if 'error' in tech:
             return {'symbol': symbol, 'error': tech['error']}
         
         # Get market status
-        market = self.get_market_status()
-        breakout = score_breakout_follow_through(hist)
-        sentiment_overlay = build_sentiment_overlay(
-            symbol,
-            headline_analyzer=self.headline_sentiment,
-            x_analyzer=self.x_sentiment,
+        market = _time_block("market_status", lambda: self.get_market_status())
+        breakout = _time_block("breakout", lambda: score_breakout_follow_through(hist))
+        sentiment_overlay = _time_block(
+            "sentiment",
+            lambda: build_sentiment_overlay(
+                symbol,
+                headline_analyzer=self.headline_sentiment,
+                x_analyzer=self.x_sentiment if include_x_sentiment else None,
+            ),
         )
-        exit_risk = score_exit_risk(hist, breakout)
-        sector_context = self.sector_strength.analyze(hist, sector_name)
-        catalyst_weighting = score_catalyst_weighting(
-            fund.get("earnings_event_window"),
-            sentiment_overlay=sentiment_overlay,
-            breakout=breakout,
+        exit_risk = _time_block("exit_risk", lambda: score_exit_risk(hist, breakout))
+        sector_context = _time_block("sector", lambda: self.sector_strength.analyze(hist, sector_name))
+        catalyst_weighting = _time_block(
+            "catalyst",
+            lambda: score_catalyst_weighting(
+                fund.get("earnings_event_window"),
+                sentiment_overlay=sentiment_overlay,
+                breakout=breakout,
+            ),
         )
         
         # Calculate total score
@@ -349,18 +379,21 @@ class TradingAdvisor:
             tech.get('N_score', 0) +
             tech.get('L_score', 0)
         )
-        confidence_assessment = build_confidence_assessment(
-            market=market,
-            total_score=total_score,
-            breakout=breakout,
-            sentiment_overlay=sentiment_overlay,
-            exit_risk=exit_risk,
-            sector_context=sector_context,
-            catalyst_weighting=catalyst_weighting,
-            data_status=history_result.status,
-            data_staleness_seconds=history_result.staleness_seconds,
-            history_bars=len(hist),
-            symbol=symbol,
+        confidence_assessment = _time_block(
+            "confidence",
+            lambda: build_confidence_assessment(
+                market=market,
+                total_score=total_score,
+                breakout=breakout,
+                sentiment_overlay=sentiment_overlay,
+                exit_risk=exit_risk,
+                sector_context=sector_context,
+                catalyst_weighting=catalyst_weighting,
+                data_status=history_result.status,
+                data_staleness_seconds=history_result.staleness_seconds,
+                history_bars=len(hist),
+                symbol=symbol,
+            ),
         )
         confidence = int(confidence_assessment["effective_confidence_pct"])
         rank_score = self._rank_score(
@@ -373,27 +406,33 @@ class TradingAdvisor:
         )
         
         # Generate recommendation
-        trade_quality = self._build_canslim_trade_quality(
-            market=market,
-            rank_score=rank_score,
-            confidence_assessment=confidence_assessment,
-            exit_risk=exit_risk,
-            price_history=hist['Close'],
+        trade_quality = _time_block(
+            "trade_quality",
+            lambda: self._build_canslim_trade_quality(
+                market=market,
+                rank_score=rank_score,
+                confidence_assessment=confidence_assessment,
+                exit_risk=exit_risk,
+                price_history=hist['Close'],
+            ),
         )
 
-        recommendation = self._generate_recommendation(
-            symbol=symbol,
-            total_score=total_score,
-            fund_scores=fund_scores,
-            tech_scores=tech,
-            market=market,
-            breakout=breakout,
-            sentiment_overlay=sentiment_overlay,
-            exit_risk=exit_risk,
-            sector_context=sector_context,
-            catalyst_weighting=catalyst_weighting,
-            confidence_assessment=confidence_assessment,
-            rank_score=rank_score,
+        recommendation = _time_block(
+            "recommendation",
+            lambda: self._generate_recommendation(
+                symbol=symbol,
+                total_score=total_score,
+                fund_scores=fund_scores,
+                tech_scores=tech,
+                market=market,
+                breakout=breakout,
+                sentiment_overlay=sentiment_overlay,
+                exit_risk=exit_risk,
+                sector_context=sector_context,
+                catalyst_weighting=catalyst_weighting,
+                confidence_assessment=confidence_assessment,
+                rank_score=rank_score,
+            ),
         )
         
         return {
@@ -427,6 +466,8 @@ class TradingAdvisor:
             'data_source': history_result.source,
             'data_staleness_seconds': history_result.staleness_seconds,
             'data_status': history_result.status,
+            'analysis_profile': analysis_profile,
+            'timing': timings if self.enable_timing else {},
             'recommendation': recommendation,
         }
 

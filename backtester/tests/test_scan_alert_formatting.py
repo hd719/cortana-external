@@ -72,10 +72,43 @@ def test_canslim_alert_is_compact_when_market_gate_blocks_buys():
     assert text.splitlines() == [
         "CANSLIM Scan",
         "Market: correction — no new positions",
-        "Scanned 4 | 3 passed threshold | 0 BUY | 0 WATCH",
+        "Scanned 4 | market gate active | 0 BUY | 0 WATCH",
         "Top names considered: CFLT, HWM, ALUR",
         "Why no buys: market correction gate",
     ]
+
+
+def test_canslim_alert_timing_line_surfaces_phase_and_nested_timings():
+    fake = _FakeCanSlimAdvisor()
+    fake._market = SimpleNamespace(
+        regime=MarketRegime.CONFIRMED_UPTREND,
+        position_sizing=1.0,
+        notes="trend intact",
+        snapshot_age_seconds=0.0,
+        status="ok",
+    )
+    fake.screener = SimpleNamespace(get_universe=lambda: ["AAA"])
+    fake._analysis = {
+        "AAA": {
+            "total_score": 8,
+            "data_source": "yahoo",
+            "data_staleness_seconds": 12.0,
+            "timing": {"history": 0.8, "fundamentals": 0.2, "sector": 0.4},
+            "recommendation": {"action": "WATCH", "reason": "watch", "trade_quality_score": 80.0},
+        }
+    }
+
+    with patch("canslim_alert.TradingAdvisor", return_value=fake), patch.dict(
+        "os.environ",
+        {"TRADING_INCLUDE_WATCHLIST_PRIORITY": "0", "BACKTESTER_TIMING": "1"},
+    ):
+        text = format_canslim(limit=5, min_score=6, universe_size=1)
+
+    assert "Timing:" in text
+    assert "market" in text
+    assert "universe" in text
+    assert "analysis" in text
+    assert "slowest nested: history 0.80s" in text
 
 
 def test_dipbuyer_alert_is_compact_when_market_gate_blocks_buys():

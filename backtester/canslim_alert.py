@@ -8,6 +8,7 @@ import io
 import os
 import re
 import sys
+import time
 import warnings
 from collections import Counter, defaultdict
 from contextlib import redirect_stderr, redirect_stdout
@@ -139,11 +140,39 @@ def _deterministic_universe(advisor: TradingAdvisor, universe_size: int) -> tupl
     return ordered[:universe_size], len(priority)
 
 
+def _analyze_for_alert(advisor: TradingAdvisor, symbol: str) -> dict:
+    try:
+        return _run_quiet(advisor.analyze_stock, symbol, False, "bulk_scan")
+    except TypeError:
+        # Test doubles and older signatures may not accept analysis_profile yet.
+        return _run_quiet(advisor.analyze_stock, symbol)
+
+
+def _format_timing_line(phase_timings: dict[str, float], nested_timings: dict[str, float]) -> str:
+    phase_bits = [f"{key} {value:.2f}s" for key, value in phase_timings.items()]
+    top_nested = sorted(nested_timings.items(), key=lambda item: item[1], reverse=True)[:4]
+    if top_nested:
+        nested_bits = ", ".join(f"{key} {value:.2f}s" for key, value in top_nested)
+        return "Timing: " + " | ".join(phase_bits) + f" | slowest nested: {nested_bits}"
+    return "Timing: " + " | ".join(phase_bits)
+
+
 def format_alert(limit: int = 8, min_score: int = 6, universe_size: int = 120) -> str:
+    timing_enabled = os.getenv("BACKTESTER_TIMING", "0") not in {"", "0", "false", "False"}
+    phase_timings: dict[str, float] = {}
+    nested_timings: defaultdict[str, float] = defaultdict(float)
+
+    start = time.perf_counter()
     advisor = TradingAdvisor()
     market = _run_quiet(advisor.get_market_status, True)
+    if timing_enabled:
+        phase_timings["market"] = time.perf_counter() - start
+
+    start = time.perf_counter()
     stress = build_adverse_regime_indicator(market=market)
     symbols, priority_count = _deterministic_universe(advisor, universe_size)
+    if timing_enabled:
+        phase_timings["universe"] = time.perf_counter() - start
 
     lines = [
         "CANSLIM Scan",
@@ -152,16 +181,30 @@ def format_alert(limit: int = 8, min_score: int = 6, universe_size: int = 120) -
     lines.extend(_run_quiet(build_alert_context_lines, GROWTH_WATCHLIST))
     if stress.get("label") != "normal" and getattr(getattr(market, 'regime', None), 'value', '') != 'correction':
         lines.append(f"Adverse regime: {stress['label']} ({float(stress['score']):.0f}) -- {stress['reason']}")
+
+    if getattr(getattr(market, "regime", None), "value", "") == "correction":
+        lines.append(f"Scanned {len(symbols)} | market gate active | 0 BUY | 0 WATCH")
+        lines.append(f"Top names considered: {_top_names([{'symbol': s} for s in symbols], 3)}")
+        lines.append(f"Why no buys: {_dedupe_reason(market.notes or 'market correction gate')}")
+        if timing_enabled:
+            lines.append(_format_timing_line(phase_timings, nested_timings))
+        return "\n".join(lines)
+
     evaluated = 0
     passed = []
     rejected = []
     source_counts = Counter()
     max_input_staleness = 0.0
 
+    analyze_start = time.perf_counter()
     for symbol in symbols:
-        analysis = _run_quiet(advisor.analyze_stock, symbol)
+        analysis = _analyze_for_alert(advisor, symbol)
         if analysis.get("error"):
             continue
+
+        if timing_enabled:
+            for key, value in (analysis.get("timing") or {}).items():
+                nested_timings[key] += float(value)
 
         evaluated += 1
         source_counts[analysis.get("data_source", "unknown")] += 1
@@ -212,11 +255,15 @@ def format_alert(limit: int = 8, min_score: int = 6, universe_size: int = 120) -
 
         if action == "NO_BUY":
             rejected.append(record)
+    if timing_enabled:
+        phase_timings["analysis"] = time.perf_counter() - analyze_start
 
     if not passed:
         lines.append(f"Scanned {len(symbols)} | 0 passed threshold | 0 BUY | 0 WATCH")
         lines.append(f"Top names considered: {_top_names([{'symbol': s} for s in symbols], 3)}")
         lines.append("Why no buys: no names cleared the CANSLIM threshold")
+        if timing_enabled:
+            lines.append(_format_timing_line(phase_timings, nested_timings))
         return "\n".join(lines)
 
     ranked = sorted(passed, key=_trade_quality_sort_key)
@@ -241,6 +288,8 @@ def format_alert(limit: int = 8, min_score: int = 6, universe_size: int = 120) -
 
     if getattr(market, "status", "ok") == "degraded":
         lines.append(f"Note: degraded market data ({float(getattr(market, 'snapshot_age_seconds', 0.0) or 0.0):.0f}s stale)")
+    if timing_enabled:
+        lines.append(_format_timing_line(phase_timings, nested_timings))
     return "\n".join(lines)
 
 
