@@ -13,6 +13,7 @@ If `~/clawd` is strategy/memory/policy, **cortana-external is execution runtime*
 - Go service exposing **Whoop + Tonal + Alpaca** APIs (loopback on port `3033`)
 - Mission Control dashboard app (`apps/mission-control`, Next.js)
 - CANSLIM backtester/advisor (`backtester/`)
+- Read-only Polymarket market-intel + quick-check overlay path for the backtester
 - Watchdog reliability service (`watchdog/`, launchd)
 - `packages/` – typed client libraries (`fitness-client`, `fitness-types`)
 - Supporting docs and stock-discovery scripts
@@ -48,6 +49,11 @@ If `~/clawd` is strategy/memory/policy, **cortana-external is execution runtime*
 ```
 
 Note: there is currently **no top-level `services/` or `scripts/` directory** in this repo; service entrypoints are at repo root and in feature folders above.
+
+Backtester/Polymarket operator surfaces now include:
+- `python advisor.py --quick-check NVDA`
+- `python advisor.py --quick-check BTC`
+- `./tools/market-intel/run_market_intel.sh`
 
 ---
 

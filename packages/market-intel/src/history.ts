@@ -5,6 +5,7 @@ import type {
   HistoryPruneResult,
   HistorySnapshotRecord,
   NormalizedMarketSnapshot,
+  ThemePersistenceAssessment,
 } from "./types.js";
 
 export async function computeFourHourChanges(args: {
@@ -48,6 +49,8 @@ export async function persistHistory(args: {
     generatedAt: args.generatedAt,
     markets: args.markets.map((market) => ({
       marketId: market.marketId,
+      registryEntryId: market.registryEntryId,
+      theme: market.theme,
       slug: market.slug,
       probability: market.probability,
     })),
@@ -64,6 +67,90 @@ export async function persistHistory(args: {
     maxAgeDays: args.maxAgeDays,
     now: new Date(args.generatedAt),
   });
+}
+
+export async function computeThemePersistence(args: {
+  historyDir: string;
+  now: Date;
+  markets: Array<Pick<NormalizedMarketSnapshot, "marketId" | "registryEntryId" | "probability">>;
+}): Promise<Map<string, ThemePersistenceAssessment>> {
+  const history = (await loadHistory(args.historyDir))
+    .filter((record) => new Date(record.generatedAt).getTime() <= args.now.getTime())
+    .sort(
+      (left, right) =>
+        new Date(left.generatedAt).getTime() - new Date(right.generatedAt).getTime(),
+    );
+
+  const result = new Map<string, ThemePersistenceAssessment>();
+
+  for (const market of args.markets) {
+    const previous = history
+      .map((record) => {
+        const matched = record.markets.find(
+          (item) =>
+            item.registryEntryId === market.registryEntryId || item.marketId === market.marketId,
+        );
+        return matched ? { probability: matched.probability, generatedAt: record.generatedAt } : null;
+      })
+      .filter((item): item is { probability: number; generatedAt: string } => item != null)
+      .slice(-4);
+
+    if (previous.length === 0) {
+      result.set(market.marketId, {
+        state: "one_off",
+        score: 0.35,
+        observedRuns: 1,
+        summary: "No local run history yet.",
+        latestPriorProbability: null,
+      });
+      continue;
+    }
+
+    const probabilities = [...previous.map((item) => item.probability), market.probability];
+    const deltas = [];
+    for (let index = 1; index < probabilities.length; index += 1) {
+      deltas.push(round(probabilities[index]! - probabilities[index - 1]!, 4));
+    }
+
+    const significant = deltas.filter((delta) => Math.abs(delta) >= 0.015);
+    const latestDelta = deltas.at(-1) ?? 0;
+    const latestSign = Math.sign(latestDelta);
+    const priorSignificant = significant.slice(0, -1);
+    const sameDirectionCount = significant.filter((delta) => Math.sign(delta) === latestSign).length;
+    const oppositeBefore = priorSignificant.some((delta) => Math.sign(delta) === -latestSign);
+
+    let state: ThemePersistenceAssessment["state"] = "one_off";
+    let score = 0.4;
+    let summary = "Recent odds move looks isolated so far.";
+
+    if (oppositeBefore && Math.abs(latestDelta) >= 0.02 && latestSign !== 0) {
+      state = "reversing";
+      score = 0.62;
+      summary = "Theme direction has flipped relative to the recent run trend.";
+    } else if (
+      sameDirectionCount >= 3 &&
+      Math.abs(latestDelta) >= Math.abs(significant.at(-2) ?? 0) &&
+      Math.abs(latestDelta) >= 0.02
+    ) {
+      state = "accelerating";
+      score = 0.88;
+      summary = "Theme has kept moving in the same direction and is accelerating.";
+    } else if (sameDirectionCount >= 2 && latestSign !== 0) {
+      state = "persistent";
+      score = 0.72;
+      summary = "Theme has kept building across multiple local runs.";
+    }
+
+    result.set(market.marketId, {
+      state,
+      score,
+      observedRuns: previous.length + 1,
+      summary,
+      latestPriorProbability: previous.at(-1)?.probability ?? null,
+    });
+  }
+
+  return result;
 }
 
 export async function pruneHistory(

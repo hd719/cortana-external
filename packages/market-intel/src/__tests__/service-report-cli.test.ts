@@ -160,13 +160,16 @@ describe("service, reports, and cli helpers", () => {
     expect(report.topMarkets).toHaveLength(2);
     expect(report.watchlist).toContain("QQQ");
     expect(report.overlay.alignment).toBe("mixed");
+    expect(report.summary.divergence.state).toBe("watch");
+    expect(report.watchlistBuckets.stocks.map((entry) => entry.symbol)).toContain("NVDA");
 
     const compact = formatCompactReport(report);
     const verbose = formatVerboseReport(report);
 
     expect(compact).toContain("Polymarket:");
+    expect(compact).toContain("Posture:");
     expect(compact).toContain("Watchlist:");
-    expect(verbose).toContain("Sector Impact");
+    expect(verbose).toContain("Watchlist Buckets");
     expect(renderOutput(report, "compact")).toContain("Overlay:");
   });
 
@@ -246,16 +249,49 @@ describe("service, reports, and cli helpers", () => {
       markets: [],
       topMarkets: [],
       watchlist: ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"],
+      watchlistBuckets: {
+        stocks: [
+          { symbol: "A", assetClass: "stock", themes: [], sourceTitles: [], probability: 0.5, score: 1, severity: "major", persistence: "persistent" },
+          { symbol: "B", assetClass: "stock", themes: [], sourceTitles: [], probability: 0.5, score: 1, severity: "notable", persistence: "persistent" },
+          { symbol: "C", assetClass: "stock", themes: [], sourceTitles: [], probability: 0.5, score: 1, severity: "notable", persistence: "one_off" },
+        ],
+        crypto: [
+          { symbol: "D", assetClass: "crypto", themes: [], sourceTitles: [], probability: 0.5, score: 1, severity: "notable", persistence: "persistent" },
+          { symbol: "E", assetClass: "crypto", themes: [], sourceTitles: [], probability: 0.5, score: 1, severity: "minor", persistence: "one_off" },
+        ],
+        cryptoProxies: [
+          { symbol: "F", assetClass: "crypto_proxy", themes: [], sourceTitles: [], probability: 0.5, score: 1, severity: "minor", persistence: "one_off" },
+        ],
+        funds: [
+          { symbol: "G", assetClass: "etf", themes: [], sourceTitles: [], probability: 0.5, score: 1, severity: "minor", persistence: "one_off" },
+          { symbol: "H", assetClass: "etf", themes: [], sourceTitles: [], probability: 0.5, score: 1, severity: "minor", persistence: "one_off" },
+          { symbol: "I", assetClass: "etf", themes: [], sourceTitles: [], probability: 0.5, score: 1, severity: "minor", persistence: "one_off" },
+          { symbol: "J", assetClass: "etf", themes: [], sourceTitles: [], probability: 0.5, score: 1, severity: "minor", persistence: "one_off" },
+        ],
+      },
       overlay: {
         alignment: "insufficient_data",
         summary: "Overlay unavailable",
         reason: "No market regime context was provided.",
         dominantEffects: [],
       },
+      summary: {
+        conviction: "neutral",
+        aggressionDial: "no_change",
+        divergence: {
+          state: "none",
+          summary: "No major divergence",
+          reason: "No market regime context was provided.",
+          themes: [],
+        },
+        focusSectors: [],
+        cryptoFocus: ["D", "E"],
+        themeHighlights: [],
+      },
       warnings: [],
       suppressedMarkets: [],
     } as never);
 
-    expect(compact).toContain("Watchlist: A, B, C, D, E (+5 more)");
+    expect(compact).toContain("Watchlist: A, B, C, F, D (+5 more)");
   });
 });

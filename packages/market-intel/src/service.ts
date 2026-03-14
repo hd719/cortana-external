@@ -1,4 +1,5 @@
-import { persistHistory, computeFourHourChanges } from "./history.js";
+import { computeFourHourChanges, computeThemePersistence, persistHistory } from "./history.js";
+import { buildReportSummary, buildWatchlist, buildWatchlistBuckets, buildWatchlistEntries } from "./insights.js";
 import { normalizeCandidate } from "./normalize.js";
 import { analyzeOverlay } from "./overlay.js";
 import {
@@ -10,7 +11,7 @@ import {
 import { PolymarketClient } from "./polymarket-client.js";
 import { loadRegistry } from "./registry.js";
 import { loadRegimeContext } from "./regime.js";
-import { buildWatchlist } from "./report.js";
+import { buildMarketSignal } from "./signals.js";
 import { createConsoleLogger } from "./logger.js";
 import type {
   BuildPolymarketIntelReportOptions,
@@ -164,6 +165,31 @@ export async function buildPolymarketIntelReport(
     .filter((market) => market.quality.tier !== "ignore")
     .sort((left, right) => right.displayScore - left.displayScore);
 
+  const persistenceByMarket = await computeThemePersistence({
+    historyDir,
+    now,
+    markets: eligible.map((market) => ({
+      marketId: market.marketId,
+      registryEntryId: market.registryEntryId,
+      probability: market.probability,
+    })),
+  });
+
+  const enrichedEligible = eligible.map((market) => ({
+    ...market,
+    signal: buildMarketSignal({
+      market,
+      persistence:
+        persistenceByMarket.get(market.marketId) ?? {
+          state: "one_off",
+          score: 0.35,
+          observedRuns: 1,
+          summary: "No local run history yet.",
+          latestPriorProbability: null,
+        },
+    }),
+  }));
+
   for (const market of normalized) {
     if (market.quality.tier === "ignore") {
       suppressedMarkets.push({
@@ -176,9 +202,17 @@ export async function buildPolymarketIntelReport(
   }
 
   const maxMarkets = options.maxMarkets ?? 5;
-  const topMarkets = eligible.slice(0, maxMarkets);
+  const topMarkets = enrichedEligible.slice(0, maxMarkets);
   const overlay = analyzeOverlay(regime, topMarkets);
-  const watchlist = buildWatchlist(topMarkets);
+  const watchlistEntries = buildWatchlistEntries(topMarkets);
+  const watchlistBuckets = buildWatchlistBuckets(watchlistEntries);
+  const watchlist = buildWatchlist({ watchlistBuckets });
+  const summary = buildReportSummary({
+    regime,
+    overlay,
+    topMarkets,
+    watchlistBuckets,
+  });
 
   const report: MarketIntelReport = {
     metadata: {
@@ -190,10 +224,12 @@ export async function buildPolymarketIntelReport(
       persisted: Boolean(options.persistHistory),
     },
     regime,
-    markets: eligible,
+    markets: enrichedEligible,
     topMarkets,
     watchlist,
+    watchlistBuckets,
     overlay,
+    summary,
     warnings,
     suppressedMarkets,
   };
@@ -220,6 +256,7 @@ export async function buildPolymarketIntelReport(
     warnings: report.warnings.length,
     suppressed: report.suppressedMarkets.length,
     overlay: report.overlay.alignment,
+    conviction: report.summary.conviction,
   });
 
   return report;

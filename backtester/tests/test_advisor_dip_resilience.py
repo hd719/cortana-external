@@ -14,7 +14,7 @@ def test_analyze_dip_stock_uses_resilient_helper_path(monkeypatch):
     result = advisor.analyze_dip_stock("NVDA")
 
     assert result == expected
-    helper.assert_called_once_with("NVDA", advisor.get_market_status.return_value, {"vix": 25.0})
+    helper.assert_called_once_with("NVDA", advisor.get_market_status.return_value, {"vix": 25.0}, quiet=False)
 
 def test_scan_dip_opportunities_uses_resilient_helper_path(monkeypatch):
     advisor = TradingAdvisor()

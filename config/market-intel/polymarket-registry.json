@@ -124,7 +124,7 @@
       "theme": "crypto-policy",
       "equityRelevance": "medium",
       "sectorTags": ["crypto", "fintech", "risk"],
-      "watchTickers": ["COIN", "HOOD", "MARA", "MSTR"],
+      "watchTickers": ["BTC", "ETH", "SOL", "COIN", "HOOD", "MARA", "MSTR"],
       "confidenceWeight": 0.78,
       "minLiquidity": 100000,
       "active": true,

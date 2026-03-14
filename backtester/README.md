@@ -20,6 +20,9 @@ python advisor.py --market
 # Analyze a specific stock
 python advisor.py --symbol NVDA
 
+# Fast stock / coin / proxy verdict
+python advisor.py --quick-check BTC
+
 # Quick scan for opportunities (watchlist)
 python advisor.py --quick
 
@@ -58,8 +61,8 @@ This writes:
 - `/Users/hd/Developer/cortana-external/backtester/data/polymarket_watchlist.json`
 
 Runtime effects:
-- `canslim_alert.py` and `dipbuyer_alert.py` prepend the compact Polymarket macro/context summary when the artifact is fresh.
-- `UniverseScreener.get_dynamic_tickers()` merges the Polymarket-derived watchlist with the existing dynamic watchlist.
+- `canslim_alert.py` and `dipbuyer_alert.py` prepend the compact Polymarket macro/context summary and now also render structured posture/focus lines when the JSON artifact is fresh.
+- `UniverseScreener.get_dynamic_tickers()` merges the Polymarket-derived watchlist with the existing dynamic watchlist, but only for stock / ETF / crypto-proxy names. Direct crypto symbols remain contextual and do not enter the stock screener.
 - The integration is read-only and does not place trades or interact with wallets/accounts.
 - The wrapper now fails fast if artifacts are stale or required registry themes lose coverage.
 - overlay should be populated whenever a fresh regime snapshot is available; the health path treats missing overlay in that situation as a failure.
@@ -70,8 +73,19 @@ Use the surfaces in this order when you are reviewing the stack end to end:
 - `./tools/market-intel/run_market_intel.sh` refreshes the Python regime snapshot first, then rebuilds and verifies the external Polymarket context consumed by the Python alerts.
 - `python advisor.py --market` checks the regime gate and sizing posture before you read any single-name output.
 - `python advisor.py --symbol NVDA` is the fastest single-name diagnostic when you want factor detail plus the current recommendation.
+- `python advisor.py --quick-check BTC` is the fast verdict path for a stock, crypto proxy, or direct crypto alias when you want one bounded answer without reading the full alert.
 - `python canslim_alert.py --limit 8 --min-score 6` and `python dipbuyer_alert.py --limit 8 --min-score 6` generate the compact operator summaries used for daily review.
 - `TradingAdvisor().compare_model_families(...)["report"]` is the review surface for Wave 4 model-family deltas, restraint metrics, and review slices.
+
+When Polymarket context is available, the alert surface now gives you:
+- `Polymarket posture`: bounded `supportive | neutral | conflicting` context plus a lightweight aggression dial
+- `Polymarket focus`: overlap names already on the technical watchlist, early-runway names, and crypto/crypto-proxy names worth checking next
+- direct crypto remains context-only here; it does not override the stock regime/technical engine and it does not auto-enter the stock universe
+
+The quick-check command follows the same guardrails:
+- stocks and crypto proxies use the base stock-analysis path
+- direct crypto aliases like `BTC`, `ETH`, and `SOL` map to `BTC-USD`, `ETH-USD`, and `SOL-USD` and use the existing dip/recovery path
+- Polymarket can downgrade or annotate the verdict, but it does not create a trade by itself
 
 Example report command:
 

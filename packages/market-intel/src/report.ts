@@ -1,6 +1,5 @@
-import type { MarketIntelReport, NormalizedMarketSnapshot } from "./types.js";
+import type { MarketIntelReport } from "./types.js";
 
-const REPORT_WATCHLIST_LIMIT = 10;
 const COMPACT_WATCHLIST_LIMIT = 5;
 
 export function formatCompactReport(report: MarketIntelReport): string {
@@ -19,8 +18,9 @@ export function formatCompactReport(report: MarketIntelReport): string {
 
   lines.push(`Overlay: ${report.overlay.summary} — ${report.overlay.reason}`);
   lines.push(
-    `Watchlist: ${formatWatchlistLine(report.watchlist, COMPACT_WATCHLIST_LIMIT)}`,
+    `Posture: ${titleCase(report.summary.conviction)} | ${formatAggressionDial(report.summary.aggressionDial)} | ${report.summary.divergence.summary}`,
   );
+  lines.push(`Watchlist: ${formatCompactFocus(report)}`);
 
   if (report.warnings.length > 0) {
     lines.push(`Notes: ${report.warnings.join(" | ")}`);
@@ -46,14 +46,42 @@ export function formatVerboseReport(report: MarketIntelReport): string {
   lines.push("");
   lines.push("Interpretation");
   lines.push(`- ${report.overlay.summary}: ${report.overlay.reason}`);
+  lines.push(
+    `- Posture: ${titleCase(report.summary.conviction)} | ${formatAggressionDial(report.summary.aggressionDial)} | ${report.summary.divergence.summary}`,
+  );
+  lines.push(`- Divergence: ${report.summary.divergence.reason}`);
   for (const market of report.topMarkets.slice(0, 3)) {
-    lines.push(`- ${market.theme}: ${market.impact.sectorImplications.join("; ")}`);
+    lines.push(
+      `- ${market.theme}: ${market.impact.sectorImplications.join("; ")} [${market.signal.severity}, ${market.signal.persistence.state}]`,
+    );
   }
 
   lines.push("");
-  lines.push("Sector Impact");
+  lines.push("Focus Routing");
+  lines.push(
+    `- Sectors first: ${report.summary.focusSectors.length > 0 ? report.summary.focusSectors.join(", ") : "No sector routing surfaced."}`,
+  );
+  lines.push(
+    `- Crypto focus: ${report.summary.cryptoFocus.length > 0 ? report.summary.cryptoFocus.join(", ") : "No crypto-specific routing surfaced."}`,
+  );
+
+  lines.push("");
+  lines.push("Watchlist Buckets");
+  lines.push(
+    `- Stocks: ${formatEntries(report.watchlistBuckets.stocks)}`,
+  );
+  lines.push(
+    `- Crypto proxies: ${formatEntries(report.watchlistBuckets.cryptoProxies)}`,
+  );
+  lines.push(`- Crypto: ${formatEntries(report.watchlistBuckets.crypto)}`);
+  lines.push(`- Funds/ETFs: ${formatEntries(report.watchlistBuckets.funds)}`);
+
+  lines.push("");
+  lines.push("Why Now");
   for (const market of report.topMarkets.slice(0, 3)) {
-    lines.push(`- ${market.displayTitle}: ${market.impact.tickerWatchImplications.join("; ")}`);
+    lines.push(
+      `- ${market.displayTitle}: ${fmtPct(market.probability)}${fmtDelta(market.change1h, "1h")}${fmtDelta(market.change4h, "4h")}${fmtDelta(market.change24h, "24h")} | ${market.signal.direction} | ${market.signal.severity} | ${market.signal.persistence.state}`,
+    );
   }
 
   lines.push("");
@@ -81,22 +109,6 @@ export function toJsonReport(report: MarketIntelReport): string {
   return JSON.stringify(report, null, 2);
 }
 
-export function buildWatchlist(markets: NormalizedMarketSnapshot[]): string[] {
-  const bySymbol = new Map<string, number>();
-
-  for (const market of markets) {
-    for (const symbol of market.watchTickers.filter(Boolean)) {
-      const score = bySymbol.get(symbol) ?? 0;
-      bySymbol.set(symbol, Math.max(score, market.displayScore));
-    }
-  }
-
-  return Array.from(bySymbol.entries())
-    .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
-    .slice(0, REPORT_WATCHLIST_LIMIT)
-    .map(([symbol]) => symbol);
-}
-
 function fmtPct(value: number): string {
   return `${Math.round(value * 100)}%`;
 }
@@ -112,4 +124,37 @@ function formatWatchlistLine(symbols: string[], limit: number): string {
   if (symbols.length === 0) return "No event-sensitive names surfaced";
   if (symbols.length <= limit) return symbols.join(", ");
   return `${symbols.slice(0, limit).join(", ")} (+${symbols.length - limit} more)`;
+}
+
+function formatCompactFocus(report: MarketIntelReport): string {
+  const buckets = [
+    report.watchlistBuckets.stocks.map((entry) => entry.symbol),
+    report.watchlistBuckets.cryptoProxies.map((entry) => entry.symbol),
+    report.watchlistBuckets.crypto.map((entry) => entry.symbol),
+    report.watchlistBuckets.funds.map((entry) => entry.symbol),
+  ];
+  const flattened = buckets.flat();
+  return formatWatchlistLine(flattened, COMPACT_WATCHLIST_LIMIT);
+}
+
+function formatEntries(entries: MarketIntelReport["watchlistBuckets"]["stocks"]): string {
+  if (entries.length === 0) return "none";
+  return entries
+    .map((entry) => `${entry.symbol} (${entry.severity}, ${entry.persistence})`)
+    .join(", ");
+}
+
+function formatAggressionDial(value: MarketIntelReport["summary"]["aggressionDial"]): string {
+  switch (value) {
+    case "lean_more_aggressive":
+      return "lean more aggressive";
+    case "lean_more_selective":
+      return "lean more selective";
+    case "no_change":
+      return "no change";
+  }
+}
+
+function titleCase(value: string): string {
+  return value.charAt(0).toUpperCase() + value.slice(1).replace(/_/g, " ");
 }

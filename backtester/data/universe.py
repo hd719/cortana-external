@@ -205,7 +205,10 @@ class UniverseScreener:
     def _load_polymarket_watchlist(self) -> List[Dict]:
         """Load Polymarket-derived ticker entries from disk."""
         max_age_hours = float(os.getenv("POLYMARKET_WATCHLIST_MAX_AGE_HOURS", "8"))
-        return load_watchlist_entries(max_age_hours=max_age_hours)
+        return load_watchlist_entries(
+            max_age_hours=max_age_hours,
+            allowed_asset_classes={"stock", "etf", "crypto_proxy"},
+        )
 
     def get_dynamic_tickers(self, include_growth: bool = True) -> List[str]:
         """

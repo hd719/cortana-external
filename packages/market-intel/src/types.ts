@@ -12,6 +12,20 @@ export type OverlayAlignment =
   | "neutral"
   | "insufficient_data";
 export type RegimeEffect = "risk_on" | "risk_off" | "mixed" | "neutral";
+export type SignalDirection = "rising" | "falling" | "steady";
+export type SignalSeverity = "minor" | "notable" | "major";
+export type PersistenceState =
+  | "one_off"
+  | "persistent"
+  | "accelerating"
+  | "reversing";
+export type ConvictionState = "supportive" | "neutral" | "conflicting";
+export type AggressionDial =
+  | "lean_more_aggressive"
+  | "no_change"
+  | "lean_more_selective";
+export type DivergenceState = "none" | "watch" | "persistent";
+export type AssetClass = "stock" | "crypto" | "crypto_proxy" | "etf";
 export type ImpactModel =
   | "fed_easing"
   | "recession_risk"
@@ -128,6 +142,22 @@ export interface EquityImpact {
   caveats: string[];
 }
 
+export interface ThemePersistenceAssessment {
+  state: PersistenceState;
+  score: number;
+  observedRuns: number;
+  summary: string;
+  latestPriorProbability: number | null;
+}
+
+export interface MarketSignal {
+  direction: SignalDirection;
+  magnitude: number;
+  severity: SignalSeverity;
+  thresholdCrossings: string[];
+  persistence: ThemePersistenceAssessment;
+}
+
 export interface NormalizedMarketSnapshot {
   source: "polymarket";
   fetchedAt: string;
@@ -159,6 +189,7 @@ export interface NormalizedMarketSnapshot {
   confidenceWeight: number;
   impact: EquityImpact;
   displayScore: number;
+  signal: MarketSignal;
 }
 
 export interface RegimeContext {
@@ -178,6 +209,52 @@ export interface OverlayAssessment {
   summary: string;
   reason: string;
   dominantEffects: RegimeEffect[];
+}
+
+export interface ThemeHighlight {
+  registryEntryId: string;
+  title: string;
+  theme: string;
+  probability: number;
+  direction: SignalDirection;
+  severity: SignalSeverity;
+  persistence: PersistenceState;
+  regimeEffect: RegimeEffect;
+  watchTickers: string[];
+}
+
+export interface DivergenceSummary {
+  state: DivergenceState;
+  summary: string;
+  reason: string;
+  themes: string[];
+}
+
+export interface ReportSummary {
+  conviction: ConvictionState;
+  aggressionDial: AggressionDial;
+  divergence: DivergenceSummary;
+  focusSectors: string[];
+  cryptoFocus: string[];
+  themeHighlights: ThemeHighlight[];
+}
+
+export interface WatchlistEntry {
+  symbol: string;
+  assetClass: AssetClass;
+  themes: string[];
+  sourceTitles: string[];
+  probability: number;
+  score: number;
+  severity: SignalSeverity;
+  persistence: PersistenceState;
+}
+
+export interface WatchlistBuckets {
+  stocks: WatchlistEntry[];
+  crypto: WatchlistEntry[];
+  cryptoProxies: WatchlistEntry[];
+  funds: WatchlistEntry[];
 }
 
 export interface SuppressedMarket {
@@ -202,7 +279,9 @@ export interface MarketIntelReport {
   markets: NormalizedMarketSnapshot[];
   topMarkets: NormalizedMarketSnapshot[];
   watchlist: string[];
+  watchlistBuckets: WatchlistBuckets;
   overlay: OverlayAssessment;
+  summary: ReportSummary;
   warnings: string[];
   suppressedMarkets: SuppressedMarket[];
 }
@@ -232,6 +311,8 @@ export interface HistorySnapshotRecord {
   generatedAt: string;
   markets: Array<{
     marketId: string;
+    registryEntryId?: string;
+    theme?: string;
     slug: string;
     probability: number;
   }>;

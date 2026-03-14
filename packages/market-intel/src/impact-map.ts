@@ -100,7 +100,7 @@ export function deriveEquityImpact(args: {
           "can spill over into risk appetite if broad tape is already healthy",
         ],
         tickerWatchImplications: [
-          "Watch COIN, HOOD, MARA, MSTR and crypto beta proxies",
+          "Watch BTC, ETH, SOL plus COIN, HOOD, MARA, MSTR and crypto beta proxies",
         ],
         caveats: [
           "Crypto policy strength does not imply broad equity confirmation",

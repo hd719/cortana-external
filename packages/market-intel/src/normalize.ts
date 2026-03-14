@@ -97,6 +97,19 @@ export function normalizeCandidate(args: {
     confidenceWeight: args.registryEntry.confidenceWeight,
     impact,
     displayScore,
+    signal: {
+      direction: "steady",
+      magnitude: 0,
+      severity: "minor",
+      thresholdCrossings: [],
+      persistence: {
+        state: "one_off",
+        score: 0.35,
+        observedRuns: 1,
+        summary: "No local run history yet.",
+        latestPriorProbability: null,
+      },
+    },
   };
 }
 

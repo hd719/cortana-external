@@ -14,6 +14,7 @@ This is the production integration bridge between the TypeScript Polymarket inte
 - exports a watchlist file to `/Users/hd/Developer/cortana-external/backtester/data/polymarket_watchlist.json`
 - enforces artifact freshness, regime freshness, overlay population, and registry health thresholds
 - verifies the Python bridge can read the latest compact context and watchlist artifacts
+- carries structured posture, divergence, and cross-asset watchlist bucket data into the Python alert layer
 
 Artifacts written:
 - `latest-report.json`
@@ -34,6 +35,10 @@ This is the single production health path. It verifies, in order:
 3. overlay is populated when regime data is available
 4. Python can read the compact context and watchlist artifacts
 5. only then should CANSLIM / Dip Buyer alerts run
+
+The exported watchlist is intentionally split by asset class:
+- stock / ETF / crypto-proxy names can feed the Python stock universe
+- direct crypto symbols stay in the contextual artifact only and are surfaced in alert focus lines instead of entering the stock screener
 
 Useful direct commands:
 

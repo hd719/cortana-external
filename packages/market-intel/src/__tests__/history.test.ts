@@ -3,7 +3,12 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { computeFourHourChanges, persistHistory, pruneHistory } from "../history.js";
+import {
+  computeFourHourChanges,
+  computeThemePersistence,
+  persistHistory,
+  pruneHistory,
+} from "../history.js";
 
 const tempDirs: string[] = [];
 
@@ -113,5 +118,44 @@ describe("history", () => {
     const files = await readdir(historyDir);
     expect(files).toHaveLength(1);
     expect(files[0]).toContain("2026-03-13T12-00-00-000Z.json");
+  });
+
+  it("classifies persistent themes from local run history", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "market-intel-history-persistence-"));
+    tempDirs.push(dir);
+
+    await writeFile(
+      path.join(dir, "2026-03-13T08-00-00-000Z.json"),
+      JSON.stringify({
+        generatedAt: "2026-03-13T08:00:00.000Z",
+        markets: [{ marketId: "mkt-1", registryEntryId: "fed-easing", slug: "fed-cut-june", probability: 0.53 }],
+      }),
+      "utf8",
+    );
+    await writeFile(
+      path.join(dir, "2026-03-13T10-00-00-000Z.json"),
+      JSON.stringify({
+        generatedAt: "2026-03-13T10:00:00.000Z",
+        markets: [{ marketId: "mkt-1", registryEntryId: "fed-easing", slug: "fed-cut-june", probability: 0.58 }],
+      }),
+      "utf8",
+    );
+    await writeFile(
+      path.join(dir, "2026-03-13T11-00-00-000Z.json"),
+      JSON.stringify({
+        generatedAt: "2026-03-13T11:00:00.000Z",
+        markets: [{ marketId: "mkt-1", registryEntryId: "fed-easing", slug: "fed-cut-june", probability: 0.62 }],
+      }),
+      "utf8",
+    );
+
+    const persistence = await computeThemePersistence({
+      historyDir: dir,
+      now: new Date("2026-03-13T12:00:00.000Z"),
+      markets: [{ marketId: "mkt-1", registryEntryId: "fed-easing", probability: 0.67 }] as never,
+    });
+
+    expect(persistence.get("mkt-1")?.state).toBe("accelerating");
+    expect(persistence.get("mkt-1")?.latestPriorProbability).toBe(0.62);
   });
 });

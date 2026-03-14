@@ -8,6 +8,9 @@ It is designed as a secondary context source for Cortana/OpenClaw workflows:
 - quality scoring and suppression
 - equity impact mapping
 - support/conflict overlays versus market regime
+- divergence, severity, and persistence scoring
+- cross-asset watchlist buckets for stocks, crypto, proxies, and ETFs
+- bounded conviction/aggression summaries for downstream alerts
 - compact, verbose, and JSON report output
 
 ## What v1 includes
@@ -77,6 +80,8 @@ Options:
   - `/events?slug=...`
 - `1h` and `24h` changes come from Polymarket fields when present.
 - `4h` change is derived from local history if available.
+- local history is also used to classify themes as `one_off`, `persistent`, `accelerating`, or `reversing`.
+- compact output stays short on purpose; JSON carries the richer `summary` and `watchlistBuckets` fields for downstream consumers.
 - If Polymarket or regime data is unavailable, the package degrades safely and still returns a usable report object.
 - Compact watchlist output is intentionally capped to keep alert-sized summaries short; verbose and JSON output stay richer.
 
