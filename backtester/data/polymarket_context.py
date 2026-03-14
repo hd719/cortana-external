@@ -84,10 +84,10 @@ def load_watchlist_entries(max_age_hours: float = 8.0) -> list[dict[str, Any]]:
     if report_generated is None or watchlist_updated is None:
         return []
 
-    # Keep watchlist injection aligned with the compact report freshness gate.
-    newest_artifact = max(report_generated, watchlist_updated)
-    age_hours = (datetime.now(timezone.utc) - newest_artifact).total_seconds() / 3600.0
-    if age_hours > max_age_hours:
+    now = datetime.now(timezone.utc)
+    report_age_hours = (now - report_generated).total_seconds() / 3600.0
+    watchlist_age_hours = (now - watchlist_updated).total_seconds() / 3600.0
+    if report_age_hours > max_age_hours or watchlist_age_hours > max_age_hours:
         return []
 
     tickers = watchlist_payload.get("tickers", [])
