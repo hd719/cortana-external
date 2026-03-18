@@ -138,7 +138,7 @@ const TrendBars = ({ data, tone }: { data: TrendPoint[]; tone: string }) => {
 
 async function getFitnessData(): Promise<FitnessResponse> {
   const baseUrl = await getBaseUrl();
-  const response = await fetch(`${baseUrl}/api/fitness`, {
+  const response = await fetch(`${baseUrl}/api/mjolnir`, {
     method: "GET",
     cache: "no-store",
   });
@@ -164,7 +164,7 @@ export default async function FitnessPage() {
         <AutoRefresh />
         <Card className="border-destructive/40 bg-destructive/5">
           <CardHeader>
-            <CardTitle className="text-lg">Fitness data unavailable</CardTitle>
+            <CardTitle className="text-lg">Mjolnir data unavailable</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3 text-sm text-muted-foreground">
             <p>{response.error.message}</p>
@@ -196,9 +196,9 @@ export default async function FitnessPage() {
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <p className="text-sm font-medium uppercase tracking-widest text-muted-foreground">
-            Fitness
+            Mjolnir
           </p>
-          <h1 className="text-3xl font-semibold tracking-tight">Recovery Dashboard</h1>
+            <h1 className="text-3xl font-semibold tracking-tight">Mjolnir Dashboard</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             Daily recovery, sleep, and workout signals from Whoop.
           </p>

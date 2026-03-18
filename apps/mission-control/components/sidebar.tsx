@@ -40,7 +40,7 @@ const links = [
   { href: "/approvals", label: "Approvals", icon: ShieldCheck },
   { href: "/feedback", label: "Feedback", icon: MessageCircle },
   { href: "/council", label: "Council", icon: Users },
-  { href: "/fitness", label: "Fitness", icon: Dumbbell },
+  { href: "/mjolnir", label: "Mjolnir", icon: Dumbbell },
   { href: "/sessions", label: "Sessions", icon: Timer },
   { href: "/usage", label: "Usage", icon: LineChart },
   { href: "/logs", label: "Logs", icon: ScrollText },
