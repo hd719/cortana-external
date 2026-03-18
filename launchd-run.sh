@@ -14,5 +14,5 @@ export ALPACA_TARGET_ENVIRONMENT="${ALPACA_TARGET_ENVIRONMENT:-live}"
 # Change to the correct directory
 cd /Users/hd/Developer/cortana-external
 
-# Run the Go application
-exec go run main.go
+# Run the TypeScript external service
+exec pnpm --filter @cortana/external-service start

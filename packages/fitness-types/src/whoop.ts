@@ -14,6 +14,7 @@ export const WhoopStoredTokenSchema = z.object({
   access_token: z.string(),
   refresh_token: z.string(),
   expires_at: z.string().datetime(),
+  last_refresh_at: z.string().datetime().optional(),
 })
 export type WhoopStoredToken = z.infer<typeof WhoopStoredTokenSchema>
 

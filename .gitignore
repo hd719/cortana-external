@@ -1,6 +1,8 @@
 whoop_tokens.*
 tonal_tokens.*
 tonal_data.*
+*_tokens_ts.json
+*_data_ts.json
 alpaca_keys.*
 .env
 .DS_Store

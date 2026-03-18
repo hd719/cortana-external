@@ -26,7 +26,7 @@ export const StatusOkSchema = z.object({
 export type StatusOk = z.infer<typeof StatusOkSchema>
 
 export const HealthStatusSchema = z.object({
-  status: z.enum(['healthy', 'unhealthy', 'ok']),
+  status: z.enum(['healthy', 'unhealthy', 'ok', 'degraded']),
   user_id: z.string().optional(),
   error: z.string().optional(),
   details: z.string().optional(),
