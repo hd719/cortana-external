@@ -50,6 +50,28 @@ Token/data paths can be overridden with:
 - If refresh fails but stale cache exists, the service can return stale data with:
   - `Warning: 110 - "Serving stale Whoop cache after token refresh failure"`
 
+## Token Refresh
+
+You do not need to handle token refresh in the client. The Whoop routes automatically:
+
+1. Check whether the access token is expired or about to expire.
+2. Use the refresh token to obtain a new access token from Whoop.
+3. Persist the refreshed tokens back to `whoop_tokens.json`.
+4. Continue serving the request with the fresh token when refresh succeeds.
+
+As long as the integration is exercised periodically, the stored refresh token should keep the local auth state alive without repeated manual OAuth.
+
+## Rate Limits
+
+The upstream Whoop API limits are still relevant operationally:
+
+| Limit | Value |
+|-------|-------|
+| Per Minute | 100 requests |
+| Per Day | 10,000 requests |
+
+Each call to `/whoop/data` fans out into multiple upstream requests, so repeated polling can consume the quota faster than the single local route suggests.
+
 ## Verification
 
 ```bash
