@@ -33,7 +33,7 @@ const NAV_LABELS = [
   "Approvals",
   "Feedback",
   "Council",
-  "Fitness",
+  "Mjolnir",
   "Sessions",
   "Usage",
   "Logs",

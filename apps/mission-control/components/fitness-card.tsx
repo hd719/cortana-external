@@ -143,19 +143,19 @@ export function FitnessCard() {
       if (initial) setLoading(true);
 
       try {
-        const response = await fetch("/api/fitness", { cache: "no-store" });
+        const response = await fetch("/api/mjolnir", { cache: "no-store" });
         if (!response.ok) throw new Error(`Request failed (${response.status})`);
         const payload = (await response.json()) as FitnessResponse;
         if (!alive) return;
         if (payload.status !== "ok") {
-          throw new Error(payload.error.message || "Fitness summary unavailable");
+          throw new Error(payload.error.message || "Mjolnir summary unavailable");
         }
         setData(payload.data);
         setGeneratedAt(payload.generatedAt);
         setError(null);
       } catch (err) {
         if (!alive) return;
-        setError(err instanceof Error ? err.message : "Fitness summary unavailable.");
+        setError(err instanceof Error ? err.message : "Mjolnir summary unavailable.");
       } finally {
         if (!alive) return;
         if (initial) setLoading(false);
@@ -199,11 +199,11 @@ export function FitnessCard() {
     <Card>
       <CardHeader className="gap-2">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <CardTitle className="text-base">Fitness snapshot</CardTitle>
+          <CardTitle className="text-base">Mjolnir snapshot</CardTitle>
           <div className="flex items-center gap-2">
             <Badge variant="outline">refresh 5m</Badge>
             <Badge asChild variant="outline">
-              <Link href="/fitness">Details</Link>
+              <Link href="/mjolnir">Details</Link>
             </Badge>
           </div>
         </div>

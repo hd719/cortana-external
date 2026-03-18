@@ -32,6 +32,7 @@ If `~/clawd` is strategy/memory/policy, **cortana-external is execution runtime*
 ├── launchd-run.sh
 │
 ├── backtester/                  # CANSLIM engine + alerts
+├── Mjolnir/                     # Whoop/Tonal fitness service docs
 ├── watchdog/                    # launchd reliability monitor
 ├── packages/
 │   ├── fitness-client/           # Typed TS client for external fitness/trading service
@@ -252,7 +253,7 @@ Expected: JSON with `ok: true` and current heartbeat status.
 - Council (`/council`): deliberation sessions, weighted votes, and decision rationale timeline
 - Approvals (`/approvals`): risk-tiered approval inbox with inline Telegram actions + resume flow
 - Feedback (`/feedback`): correction/remediation dashboard with action tracking and recurrence visibility
-- Fitness (`/fitness`): recovery dashboard with Whoop recovery/sleep/strain, workout cards, 14-day trend bars, threshold alerts + alert history
+- Mjolnir (`/mjolnir`): recovery dashboard with Whoop recovery/sleep/strain, workout cards, 14-day trend bars, threshold alerts + alert history
 
 ### Council deliberation system (new)
 - Mission Control includes a multi-member Council workflow for important decisions.
@@ -469,7 +470,7 @@ launchctl list | grep -E "cortana.watchdog|cortana.fitness-service"
 
 ## 8) Recent additions (high impact)
 
-- **Fitness dashboard** in Mission Control (`/fitness`) — full recovery/sleep/strain/workout dashboard with threshold alerting
+- **Mjolnir dashboard** in Mission Control (`/mjolnir`) — full recovery/sleep/strain/workout dashboard with threshold alerting
 - **Typed fitness packages** (`packages/fitness-client`, `packages/fitness-types`) for type-safe fitness service consumption
 - **TypeScript external runtime** (`apps/external-service`) replacing Go startup on `3033` while preserving API parity
 - **Whoop OAuth fix** — redirect_uri consistency (http vs https) resolved for token exchange + refresh
