@@ -34,9 +34,12 @@ import argparse
 import importlib
 import io
 import inspect
+import json
 import os
 import time
 from contextlib import redirect_stderr, redirect_stdout
+from datetime import UTC, datetime
+from pathlib import Path
 from typing import List, Dict, Optional
 import pandas as pd
 from data.confidence import (
@@ -89,6 +92,8 @@ CRYPTO_ALIAS_MAP = {
 CRYPTO_PROXY_SYMBOLS = {"COIN", "HOOD", "MSTR", "MARA", "RIOT", "CLSK", "BITO", "IBIT", "ETHA"}
 ANALYSIS_PROFILE_DEFAULT = "default"
 ANALYSIS_PROFILE_BULK_SCAN = "bulk_scan"
+DEFAULT_OVERLAY_REGISTRY_PATH = Path(__file__).parent / "data" / "overlay_registry.json"
+DEFAULT_OVERLAY_PROMOTION_STATE_PATH = Path(__file__).parent / "data" / "cache" / "overlay-promotion-state.json"
 
 
 class TradingAdvisor:
@@ -683,6 +688,106 @@ class TradingAdvisor:
         }
 
     @staticmethod
+    def _load_json_file(path: Path) -> Optional[Dict]:
+        if not path.exists():
+            return None
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            return None
+        return payload if isinstance(payload, dict) else None
+
+    @staticmethod
+    def _lookup_overlay_entry(payload: Dict, overlay_name: str) -> Optional[Dict]:
+        overlays = payload.get("overlays")
+        if isinstance(overlays, dict):
+            entry = overlays.get(overlay_name)
+            return entry if isinstance(entry, dict) else None
+        if isinstance(overlays, list):
+            for entry in overlays:
+                if not isinstance(entry, dict):
+                    continue
+                name = str(entry.get("name") or entry.get("overlay") or "").strip().lower()
+                if name == overlay_name:
+                    return entry
+        return None
+
+    @staticmethod
+    def _age_hours(iso_timestamp: object) -> Optional[float]:
+        if not isinstance(iso_timestamp, str) or not iso_timestamp.strip():
+            return None
+        try:
+            parsed = datetime.fromisoformat(iso_timestamp)
+        except Exception:
+            return None
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=UTC)
+        return max((datetime.now(UTC) - parsed).total_seconds(), 0.0) / 3600.0
+
+    def _load_overlay_promotion_context(self) -> Dict:
+        registry_path = Path(
+            os.getenv("TRADING_OVERLAY_REGISTRY_PATH") or DEFAULT_OVERLAY_REGISTRY_PATH
+        ).expanduser()
+        state_path = Path(
+            os.getenv("TRADING_OVERLAY_PROMOTION_STATE_PATH") or DEFAULT_OVERLAY_PROMOTION_STATE_PATH
+        ).expanduser()
+        max_age_hours = float(os.getenv("TRADING_OVERLAY_PROMOTION_MAX_AGE_HOURS", "36"))
+
+        registry = self._load_json_file(registry_path)
+        state = self._load_json_file(state_path)
+        if not registry or not state:
+            return {"source": "unavailable", "overlays": {}}
+
+        age_hours = self._age_hours(state.get("generated_at"))
+        if age_hours is None or age_hours > max_age_hours:
+            return {"source": "stale", "overlays": {}}
+
+        out: Dict[str, Dict] = {}
+        for overlay_name in ("execution_quality", "liquidity_tier", "risk_budget_state"):
+            registry_entry = self._lookup_overlay_entry(registry, overlay_name) or {}
+            state_entry = self._lookup_overlay_entry(state, overlay_name) or {}
+            stage = str(
+                state_entry.get("stage")
+                or registry_entry.get("stage")
+                or "logged"
+            ).strip().lower()
+            allowlisted = bool(
+                state_entry.get("allow_rank_modifier")
+                if "allow_rank_modifier" in state_entry
+                else (
+                    state_entry.get("rank_modifier_eligible")
+                    if "rank_modifier_eligible" in state_entry
+                    else (
+                        registry_entry.get("allow_rank_modifier")
+                        if "allow_rank_modifier" in registry_entry
+                        else registry_entry.get("rank_modifier_eligible", False)
+                    )
+                )
+            )
+            cap_pct = state_entry.get("max_effect_pct")
+            if cap_pct is None:
+                cap_pct = registry_entry.get("max_effect_pct")
+            if cap_pct is None:
+                modifier_bounds = state_entry.get("modifier_bounds")
+                if isinstance(modifier_bounds, dict):
+                    cap_pct = modifier_bounds.get("max")
+            if cap_pct is None:
+                modifier_bounds = registry_entry.get("modifier_bounds")
+                if isinstance(modifier_bounds, dict):
+                    cap_pct = modifier_bounds.get("max")
+            try:
+                cap_value = float(cap_pct)
+            except (TypeError, ValueError):
+                cap_value = 0.05
+            out[overlay_name] = {
+                "stage": stage,
+                "allow_rank_modifier": allowlisted,
+                "max_effect_pct": max(0.01, min(cap_value, 0.05)),
+            }
+
+        return {"source": "promotion_state", "overlays": out}
+
+    @staticmethod
     def _format_overlay_pct(value: object) -> str:
         try:
             numeric = float(value)
@@ -766,6 +871,35 @@ class TradingAdvisor:
             bits.append(annotation[:72])
         return "Execution quality: " + " | ".join(bits)
 
+    @staticmethod
+    def _compact_overlay_promotion_line(promotion: Dict) -> str:
+        if not isinstance(promotion, dict):
+            return ""
+        overlays = promotion.get("overlays")
+        if not isinstance(overlays, dict) or not overlays:
+            return ""
+
+        segments: List[str] = []
+        for name in ("execution_quality", "liquidity_tier"):
+            entry = overlays.get(name)
+            if not isinstance(entry, dict):
+                continue
+            stage = str(entry.get("stage", "logged")).strip().lower() or "logged"
+            allowlisted = bool(entry.get("allow_rank_modifier", False))
+            cap_pct = entry.get("max_effect_pct")
+            try:
+                cap_pct_value = float(cap_pct)
+            except (TypeError, ValueError):
+                cap_pct_value = 0.05
+            if stage == "rank_modifier" and allowlisted:
+                segments.append(f"{name.replace('_', ' ')} rank active (cap {cap_pct_value * 100:.0f}%)")
+            else:
+                segments.append(f"{name.replace('_', ' ')} {stage}")
+
+        if not segments:
+            return ""
+        return "Overlay promotion: " + " | ".join(segments)
+
     def quick_check(self, symbol: str) -> Dict:
         target = self._normalize_quick_check_symbol(symbol)
         display_symbol = target["display_symbol"]
@@ -808,6 +942,7 @@ class TradingAdvisor:
             selected_symbols=[display_symbol],
             analysis=analysis if isinstance(analysis, dict) else {},
         )
+        promotion_context = self._load_overlay_promotion_context()
 
         return {
             "input_symbol": target["input_symbol"],
@@ -821,6 +956,7 @@ class TradingAdvisor:
             "polymarket": polymarket,
             "risk_budget_overlay": overlays.get("risk_budget_overlay", {}),
             "execution_quality_overlay": overlays.get("execution_quality_overlay", {}),
+            "overlay_promotion": promotion_context,
         }
 
     @staticmethod
@@ -955,6 +1091,9 @@ class TradingAdvisor:
         execution_line = TradingAdvisor._compact_execution_quality_line(result.get("execution_quality_overlay") or {})
         if execution_line:
             lines.append(execution_line)
+        promotion_line = TradingAdvisor._compact_overlay_promotion_line(result.get("overlay_promotion") or {})
+        if promotion_line:
+            lines.append(promotion_line)
 
         analysis = result.get("analysis", {})
         rec = analysis.get("recommendation", {}) if isinstance(analysis, dict) else {}

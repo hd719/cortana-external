@@ -7,10 +7,14 @@ from experimental_alpha import (
     AlphaCandidate,
     build_alpha_report,
     build_calibration_report,
+    build_overlay_attribution,
+    build_overlay_promotion_metrics,
+    build_overlay_promotion_state_from_report,
     classify_paper_action,
     default_research_symbols,
     derive_alpha_candidate,
     expected_move_bps_for_candidate,
+    format_overlay_attribution_report,
     format_alpha_report,
     load_alpha_snapshots,
     load_settled_alpha,
@@ -353,3 +357,133 @@ def test_build_calibration_report_includes_overlay_slice_metrics():
     assert ("liquidity_tier", "tier1") in buckets
     assert buckets[("risk_budget_state", "tight")].count == 2
     assert buckets[("risk_budget_state", "tight")].matured_count == 2
+
+
+def test_overlay_attribution_wrappers_emit_structured_and_compact_output():
+    records = [
+        SimpleNamespace(
+            generated_at="2026-03-01T12:00:00+00:00",
+            paper_action="paper_long",
+            risk_budget_state="tight",
+            aggression_posture="selective",
+            execution_quality="good",
+            liquidity_tier="tier1",
+            forward_returns={"1d": 0.01, "5d": 0.03, "10d": 0.04},
+        ),
+        SimpleNamespace(
+            generated_at="2026-03-02T12:00:00+00:00",
+            paper_action="paper_long",
+            risk_budget_state="tight",
+            aggression_posture="selective",
+            execution_quality="good",
+            liquidity_tier="tier1",
+            forward_returns={"1d": -0.01, "5d": 0.01, "10d": 0.02},
+        ),
+    ]
+
+    report = build_overlay_attribution(records, min_count=2, interaction_min_count=2)
+    text = format_overlay_attribution_report(report, horizon="5d", top_n=3)
+
+    assert report["records"] == 2
+    assert any(item["dimension"] == "execution_quality" for item in report["slices"])
+    assert "Overlay attribution report" in text
+    assert "Top slices (5d):" in text
+
+
+def test_build_overlay_promotion_metrics_maps_slice_report_to_gate_inputs():
+    report = {
+        "generated_at": "2026-03-19T12:00:00+00:00",
+        "records": 120,
+        "slices": [
+            {
+                "dimension": "execution_quality",
+                "bucket": "good",
+                "horizon": "5d",
+                "metrics": {"count": 80, "matured_count": 60},
+                "global_comparison": {"hit_rate_lift": 0.04, "mean_return_lift": 0.01, "worst_decile_lift": 0.0},
+                "matched_comparison": {"hit_rate_lift": 0.02, "mean_return_lift": 0.005, "worst_decile_lift": 0.0},
+                "rolling_stability": {
+                    "56d": {"matured_count": 32, "mean_return": 0.01},
+                    "84d": {"matured_count": 44, "mean_return": 0.008},
+                },
+            },
+            {
+                "dimension": "execution_quality",
+                "bucket": "fair",
+                "horizon": "5d",
+                "metrics": {"count": 40, "matured_count": 30},
+                "global_comparison": {"hit_rate_lift": 0.02, "mean_return_lift": 0.005, "worst_decile_lift": 0.0},
+                "matched_comparison": {"hit_rate_lift": 0.01, "mean_return_lift": 0.002, "worst_decile_lift": 0.0},
+                "rolling_stability": {
+                    "56d": {"matured_count": 24, "mean_return": 0.006},
+                    "84d": {"matured_count": 30, "mean_return": 0.005},
+                },
+            },
+        ],
+    }
+    metrics = build_overlay_promotion_metrics(report, overlay_name="execution_quality")
+
+    assert metrics["samples_total"] == 120
+    assert metrics["windows"]["8w"]["samples"] == 56
+    assert metrics["windows"]["12w"]["samples"] == 74
+    assert metrics["baseline_global"]["hit_rate_delta"] > 0
+    assert metrics["baseline_matched"]["mean_5d_return_delta"] > 0
+
+
+def test_build_overlay_promotion_state_from_report_writes_state_artifact(tmp_path):
+    report = {
+        "generated_at": "2026-03-19T12:00:00+00:00",
+        "records": 200,
+        "slices": [
+            {
+                "dimension": "execution_quality",
+                "bucket": "good",
+                "horizon": "5d",
+                "metrics": {"count": 200, "matured_count": 160},
+                "global_comparison": {"hit_rate_lift": 0.04, "mean_return_lift": 0.01, "worst_decile_lift": 0.0},
+                "matched_comparison": {"hit_rate_lift": 0.03, "mean_return_lift": 0.008, "worst_decile_lift": 0.0},
+                "rolling_stability": {
+                    "56d": {"matured_count": 80, "mean_return": 0.01},
+                    "84d": {"matured_count": 96, "mean_return": 0.009},
+                },
+            },
+            {
+                "dimension": "liquidity_tier",
+                "bucket": "high",
+                "horizon": "5d",
+                "metrics": {"count": 200, "matured_count": 160},
+                "global_comparison": {"hit_rate_lift": 0.03, "mean_return_lift": 0.009, "worst_decile_lift": 0.0},
+                "matched_comparison": {"hit_rate_lift": 0.02, "mean_return_lift": 0.006, "worst_decile_lift": 0.0},
+                "rolling_stability": {
+                    "56d": {"matured_count": 80, "mean_return": 0.008},
+                    "84d": {"matured_count": 96, "mean_return": 0.007},
+                },
+            },
+        ],
+    }
+    registry_path = tmp_path / "overlay_registry.json"
+    registry_path.write_text(
+        """{
+  "schema_version": 1,
+  "policy_version": "2026-03-19-v1",
+  "overlays": [
+    {"name": "execution_quality", "stage": "surfaced", "rank_modifier_eligible": true, "modifier_bounds": {"min": -0.05, "max": 0.05}},
+    {"name": "liquidity_tier", "stage": "surfaced", "rank_modifier_eligible": true, "modifier_bounds": {"min": -0.05, "max": 0.05}}
+  ]
+}
+""",
+        encoding="utf-8",
+    )
+    state_path = tmp_path / "overlay-promotion-state.json"
+    payload = build_overlay_promotion_state_from_report(
+        report,
+        registry_path=registry_path,
+        state_path=state_path,
+        manual_approvals={"execution_quality", "liquidity_tier"},
+    )
+
+    assert state_path.exists()
+    assert payload["source_report_generated_at"] == "2026-03-19T12:00:00+00:00"
+    overlays = {entry["name"]: entry for entry in payload["overlays"]}
+    assert overlays["execution_quality"]["stage"] == "rank_modifier"
+    assert overlays["execution_quality"]["allow_rank_modifier"] is True

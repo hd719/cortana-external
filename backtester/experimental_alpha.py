@@ -18,8 +18,19 @@ import pandas as pd
 
 from advisor import TradingAdvisor
 from data.market_data_provider import MarketDataProvider
+from data.overlay_promotion import (
+    DEFAULT_PROMOTION_STATE_PATH,
+    DEFAULT_REGISTRY_PATH,
+    evaluate_registry_promotions,
+    load_overlay_registry,
+    save_overlay_promotion_state,
+)
 from data.polymarket_context import load_structured_context
 from outcomes import summarize_forward_return_by_dimension
+from reports.overlay_attribution import (
+    build_overlay_attribution_report,
+    format_overlay_attribution_compact,
+)
 
 VERDICT_BASE_PROB = {
     "actionable": 0.58,
@@ -35,6 +46,7 @@ PERSISTENCE_ADJ = {"one_off": 0.0, "persistent": 0.015, "accelerating": 0.03, "r
 CONVICTION_ADJ = {"supportive": 0.02, "neutral": 0.0, "conflicting": -0.03}
 DIVERGENCE_ADJ = {"none": 0.0, "watch": -0.015, "persistent": -0.03}
 DEFAULT_HORIZONS = (1, 5, 10)
+DEFAULT_ATTRIBUTION_ARTIFACT_PATH = Path(__file__).resolve().parent / "data" / "cache" / "overlay-attribution-latest.json"
 
 
 @dataclass
@@ -796,6 +808,150 @@ def format_calibration_report(report: CalibrationReport) -> str:
     return "\n".join(lines)
 
 
+def build_overlay_attribution(
+    records: Sequence[SettledAlphaCandidate],
+    *,
+    min_count: int = 20,
+    interaction_min_count: int = 40,
+) -> dict:
+    return build_overlay_attribution_report(
+        records,
+        min_count=min_count,
+        interaction_min_count=interaction_min_count,
+    )
+
+
+def _window_from_slice(slice_row: dict, window_key: str) -> dict[str, float]:
+    stability = slice_row.get("rolling_stability")
+    if not isinstance(stability, dict):
+        return {"samples": 0, "mean_5d_return": 0.0}
+    window = stability.get(window_key)
+    if not isinstance(window, dict):
+        return {"samples": 0, "mean_5d_return": 0.0}
+    return {
+        "samples": int(window.get("matured_count", 0) or 0),
+        "mean_5d_return": float(window.get("mean_return", 0.0) or 0.0),
+    }
+
+
+def build_overlay_promotion_metrics(
+    report: dict,
+    *,
+    overlay_name: str,
+    horizon: str = "5d",
+) -> dict:
+    rows = [
+        row for row in (report.get("slices") or [])
+        if isinstance(row, dict)
+        and str(row.get("dimension", "")).strip().lower() == overlay_name
+        and str(row.get("horizon", "")).strip().lower() == horizon
+    ]
+    samples_total = sum(int((row.get("metrics") or {}).get("count", 0) or 0) for row in rows)
+    matured_total = sum(int((row.get("metrics") or {}).get("matured_count", 0) or 0) for row in rows)
+    if not rows:
+        return {
+            "samples_total": 0,
+            "baseline_global": {"hit_rate_delta": 0.0, "mean_5d_return_delta": 0.0, "downside_tail_delta": 0.0},
+            "baseline_matched": {"hit_rate_delta": 0.0, "mean_5d_return_delta": 0.0, "downside_tail_delta": 0.0},
+            "recent_windows": [{"label": "8w", "samples": 0, "mean_5d_return": 0.0}, {"label": "12w", "samples": 0, "mean_5d_return": 0.0}],
+            "windows": {"8w": {"samples": 0, "mean_5d_return": 0.0}, "12w": {"samples": 0, "mean_5d_return": 0.0}},
+            "matured_total": 0,
+        }
+
+    def _weighted_delta(delta_key: str, key: str) -> float:
+        weighted_sum = 0.0
+        weight_total = 0.0
+        for row in rows:
+            metrics = row.get("metrics") or {}
+            weight = float(metrics.get("matured_count", 0) or 0)
+            delta_map = row.get(key) or {}
+            value = float(delta_map.get(delta_key, 0.0) or 0.0)
+            if weight <= 0:
+                continue
+            weighted_sum += value * weight
+            weight_total += weight
+        return round(weighted_sum / weight_total, 6) if weight_total > 0 else 0.0
+
+    global_hit_delta = _weighted_delta("hit_rate_lift", "global_comparison")
+    global_mean_delta = _weighted_delta("mean_return_lift", "global_comparison")
+    global_downside_delta = _weighted_delta("worst_decile_lift", "global_comparison")
+    matched_hit_delta = _weighted_delta("hit_rate_lift", "matched_comparison")
+    matched_mean_delta = _weighted_delta("mean_return_lift", "matched_comparison")
+    matched_downside_delta = _weighted_delta("worst_decile_lift", "matched_comparison")
+
+    window_8_rows = [_window_from_slice(row, "56d") for row in rows]
+    window_12_rows = [_window_from_slice(row, "84d") for row in rows]
+    window_8_samples = sum(int(item["samples"]) for item in window_8_rows)
+    window_12_samples = sum(int(item["samples"]) for item in window_12_rows)
+    window_8_mean = (
+        round(sum(item["mean_5d_return"] * item["samples"] for item in window_8_rows) / window_8_samples, 6)
+        if window_8_samples > 0
+        else 0.0
+    )
+    window_12_mean = (
+        round(sum(item["mean_5d_return"] * item["samples"] for item in window_12_rows) / window_12_samples, 6)
+        if window_12_samples > 0
+        else 0.0
+    )
+
+    return {
+        "samples_total": int(samples_total),
+        "matured_total": int(matured_total),
+        "baseline_global": {
+            "hit_rate_delta": global_hit_delta,
+            "mean_5d_return_delta": global_mean_delta,
+            "downside_tail_delta": global_downside_delta,
+        },
+        "baseline_matched": {
+            "hit_rate_delta": matched_hit_delta,
+            "mean_5d_return_delta": matched_mean_delta,
+            "downside_tail_delta": matched_downside_delta,
+        },
+        "recent_windows": [
+            {"label": "8w", "samples": int(window_8_samples), "mean_5d_return": float(window_8_mean)},
+            {"label": "12w", "samples": int(window_12_samples), "mean_5d_return": float(window_12_mean)},
+        ],
+        "windows": {
+            "8w": {"samples": int(window_8_samples), "mean_5d_return": float(window_8_mean)},
+            "12w": {"samples": int(window_12_samples), "mean_5d_return": float(window_12_mean)},
+        },
+    }
+
+
+def build_overlay_promotion_state_from_report(
+    report: dict,
+    *,
+    registry_path: Optional[Path] = None,
+    state_path: Optional[Path] = None,
+    manual_approvals: Optional[set[str]] = None,
+    horizon: str = "5d",
+    now: Optional[datetime] = None,
+) -> dict:
+    registry = load_overlay_registry(registry_path or DEFAULT_REGISTRY_PATH)
+    metrics_by_overlay: dict[str, dict] = {}
+    for overlay_name in ("risk_budget_state", "aggression_posture", "execution_quality", "liquidity_tier"):
+        metrics_by_overlay[overlay_name] = build_overlay_promotion_metrics(
+            report,
+            overlay_name=overlay_name,
+            horizon=horizon,
+        )
+
+    payload = evaluate_registry_promotions(
+        registry,
+        metrics_by_overlay,
+        now=now,
+        manual_approvals=manual_approvals,
+    )
+    payload["source_report_generated_at"] = report.get("generated_at")
+    payload["source_records"] = int(report.get("records", 0) or 0)
+    save_overlay_promotion_state(payload, state_path or DEFAULT_PROMOTION_STATE_PATH)
+    return payload
+
+
+def format_overlay_attribution_report(report: dict, *, horizon: str = "5d", top_n: int = 10) -> str:
+    return format_overlay_attribution_compact(report, horizon=horizon, top_n=top_n)
+
+
 def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Paper-only experimental alpha pipeline")
     parser.add_argument("--symbols", type=str, help="Comma-separated symbols to evaluate")
@@ -806,6 +962,47 @@ def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
     parser.add_argument("--calibrate", action="store_true", help="Build calibration + promotion-gate report")
     parser.add_argument("--alpha-root", type=str, help="Override alpha research root directory")
     parser.add_argument("--minimum-samples", type=int, default=20, help="Minimum paper_long samples for promotion gate")
+    parser.add_argument("--overlay-attribution", action="store_true", help="Build overlay attribution report")
+    parser.add_argument(
+        "--evaluate-promotions",
+        action="store_true",
+        help="Evaluate promotion gates and emit overlay-promotion-state artifact",
+    )
+    parser.add_argument("--attribution-min-count", type=int, default=20, help="Minimum samples for slice reporting")
+    parser.add_argument(
+        "--attribution-interaction-min-count",
+        type=int,
+        default=40,
+        help="Minimum samples for interaction slice reporting",
+    )
+    parser.add_argument(
+        "--attribution-horizon",
+        type=str,
+        default="5d",
+        choices=["1d", "5d", "10d"],
+        help="Horizon used in compact attribution text output",
+    )
+    parser.add_argument(
+        "--attribution-artifact-path",
+        type=str,
+        help="Override path for overlay-attribution-latest.json artifact",
+    )
+    parser.add_argument(
+        "--promotion-state-path",
+        type=str,
+        help="Override path for overlay-promotion-state.json artifact",
+    )
+    parser.add_argument(
+        "--promotion-registry-path",
+        type=str,
+        help="Override path for overlay_registry.json",
+    )
+    parser.add_argument(
+        "--approve-rank-modifier",
+        type=str,
+        default="",
+        help="Comma-separated overlays manually approved for rank_modifier promotion",
+    )
     return parser.parse_args(argv)
 
 
@@ -830,6 +1027,41 @@ def main(argv: Optional[list[str]] = None) -> None:
             print(json.dumps(asdict(report), indent=2))
         else:
             print(format_calibration_report(report))
+        return
+
+    if args.overlay_attribution or args.evaluate_promotions:
+        report = build_overlay_attribution(
+            load_settled_alpha(root),
+            min_count=args.attribution_min_count,
+            interaction_min_count=args.attribution_interaction_min_count,
+        )
+        artifact_path = Path(args.attribution_artifact_path).expanduser() if args.attribution_artifact_path else DEFAULT_ATTRIBUTION_ARTIFACT_PATH
+        write_atomic_json(artifact_path, report)
+        if args.evaluate_promotions:
+            approvals = {
+                token.strip().lower()
+                for token in str(args.approve_rank_modifier or "").split(",")
+                if token.strip()
+            }
+            state_payload = build_overlay_promotion_state_from_report(
+                report,
+                registry_path=Path(args.promotion_registry_path).expanduser() if args.promotion_registry_path else None,
+                state_path=Path(args.promotion_state_path).expanduser() if args.promotion_state_path else None,
+                manual_approvals=approvals,
+                horizon=args.attribution_horizon,
+            )
+            if args.json:
+                print(json.dumps({"attribution": report, "promotion_state": state_payload}, indent=2))
+            else:
+                state_path = Path(args.promotion_state_path).expanduser() if args.promotion_state_path else DEFAULT_PROMOTION_STATE_PATH
+                print(format_overlay_attribution_report(report, horizon=args.attribution_horizon))
+                print("")
+                print(f"Promotion state written: {state_path}")
+            return
+        if args.json:
+            print(json.dumps(report, indent=2))
+        else:
+            print(format_overlay_attribution_report(report, horizon=args.attribution_horizon))
         return
 
     if args.symbols:

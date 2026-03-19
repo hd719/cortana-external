@@ -20,6 +20,8 @@ from data.liquidity_model import LiquidityOverlayModel
 LOGGER = logging.getLogger(__name__)
 
 DEFAULT_CACHE_PATH = Path(__file__).parent / "cache" / "live_universe_prefilter.json"
+DEFAULT_OVERLAY_REGISTRY_PATH = Path(__file__).parent / "overlay_registry.json"
+DEFAULT_OVERLAY_PROMOTION_STATE_PATH = Path(__file__).parent / "cache" / "overlay-promotion-state.json"
 REQUIRED_COLUMNS = ("Open", "High", "Low", "Close", "Volume")
 
 
@@ -58,6 +60,18 @@ class RankedUniverseSelector:
         )
         self.chunk_size = max(int(chunk_size), 1)
         self.liquidity_model = liquidity_model or LiquidityOverlayModel()
+        self.overlay_registry_path = Path(
+            os.getenv("TRADING_OVERLAY_REGISTRY_PATH") or DEFAULT_OVERLAY_REGISTRY_PATH
+        ).expanduser()
+        self.overlay_promotion_state_path = Path(
+            os.getenv("TRADING_OVERLAY_PROMOTION_STATE_PATH") or DEFAULT_OVERLAY_PROMOTION_STATE_PATH
+        ).expanduser()
+        self.overlay_promotion_max_age_hours = float(
+            os.getenv("TRADING_OVERLAY_PROMOTION_MAX_AGE_HOURS", "36")
+        )
+        self.rank_modifier_cap_pct_default = float(
+            os.getenv("TRADING_OVERLAY_RANK_MODIFIER_CAP_PCT", "0.05")
+        )
 
     @staticmethod
     def _dedupe(symbols: Iterable[str]) -> List[str]:
@@ -136,19 +150,19 @@ class RankedUniverseSelector:
 
         _, liquidity_records = self.liquidity_model.load_overlay_map()
 
+        promotion_policy = self._load_rank_modifier_policy()
+
         def combined_rank(record: dict, symbol: str) -> float:
             prefilter_score = float(record.get("prefilter_score", 0.0))
             liquidity = liquidity_records.get(symbol)
             if liquidity is None:
                 return prefilter_score
 
-            quality_score = float(liquidity.get("liquidity_quality_score", 50.0))
-            tier = str(liquidity.get("liquidity_tier", "")).lower()
-            modifier = (quality_score - 50.0) * 0.06
-            if tier == "illiquid":
-                modifier -= 3.0
-            elif tier == "high":
-                modifier += 0.5
+            modifier = self._liquidity_rank_modifier(
+                prefilter_score=prefilter_score,
+                liquidity=liquidity,
+                policy=promotion_policy,
+            )
             return prefilter_score + modifier
 
         records = {
@@ -454,6 +468,157 @@ class RankedUniverseSelector:
             "pullback_shape": 0.12,
             "volatility_sanity": 0.06,
         }
+
+    def _load_rank_modifier_policy(self) -> dict:
+        registry = self._read_json(self.overlay_registry_path)
+        state = self._load_fresh_promotion_state()
+        fallback_cap_pct = self._clamp(self.rank_modifier_cap_pct_default, 0.01, 0.05)
+        fallback = {
+            "enforced": False,
+            "enabled": True,
+            "cap_pct": fallback_cap_pct,
+            "source": "fallback",
+        }
+
+        if not registry or not state:
+            return fallback
+
+        execution = self._overlay_policy_entry(
+            overlay_name="execution_quality",
+            registry=registry,
+            state=state,
+            default_cap=fallback_cap_pct,
+        )
+        liquidity = self._overlay_policy_entry(
+            overlay_name="liquidity_tier",
+            registry=registry,
+            state=state,
+            default_cap=fallback_cap_pct,
+        )
+        enabled = execution["enabled"] and liquidity["enabled"]
+        cap_pct = min(execution["cap_pct"], liquidity["cap_pct"])
+        return {
+            "enforced": True,
+            "enabled": enabled,
+            "cap_pct": self._clamp(cap_pct, 0.01, 0.05),
+            "source": "promotion_state",
+            "execution_quality": execution,
+            "liquidity_tier": liquidity,
+        }
+
+    def _overlay_policy_entry(
+        self,
+        *,
+        overlay_name: str,
+        registry: dict,
+        state: dict,
+        default_cap: float,
+    ) -> dict:
+        registry_entry = self._lookup_overlay_entry(registry, overlay_name) or {}
+        state_entry = self._lookup_overlay_entry(state, overlay_name) or {}
+
+        stage = str(
+            state_entry.get("stage")
+            or registry_entry.get("stage")
+            or "logged"
+        ).strip().lower()
+        allowlisted = bool(
+            state_entry.get("allow_rank_modifier")
+            if "allow_rank_modifier" in state_entry
+            else (
+                state_entry.get("rank_modifier_eligible")
+                if "rank_modifier_eligible" in state_entry
+                else (
+                    registry_entry.get("allow_rank_modifier")
+                    if "allow_rank_modifier" in registry_entry
+                    else registry_entry.get("rank_modifier_eligible", False)
+                )
+            )
+        )
+        cap_pct = state_entry.get("max_effect_pct")
+        if cap_pct is None:
+            cap_pct = registry_entry.get("max_effect_pct")
+        if cap_pct is None:
+            modifier_bounds = state_entry.get("modifier_bounds")
+            if isinstance(modifier_bounds, dict):
+                cap_pct = modifier_bounds.get("max")
+        if cap_pct is None:
+            modifier_bounds = registry_entry.get("modifier_bounds")
+            if isinstance(modifier_bounds, dict):
+                cap_pct = modifier_bounds.get("max")
+        if cap_pct is None:
+            rank_modifier = registry_entry.get("rank_modifier")
+            if isinstance(rank_modifier, dict):
+                cap_pct = rank_modifier.get("max_effect_pct")
+        try:
+            cap_pct_value = float(cap_pct)
+        except (TypeError, ValueError):
+            cap_pct_value = default_cap
+
+        enabled = allowlisted and stage == "rank_modifier"
+        return {
+            "enabled": enabled,
+            "stage": stage,
+            "allow_rank_modifier": allowlisted,
+            "cap_pct": self._clamp(cap_pct_value, 0.01, 0.05),
+        }
+
+    @staticmethod
+    def _lookup_overlay_entry(payload: dict, overlay_name: str) -> Optional[dict]:
+        overlays = payload.get("overlays")
+        if isinstance(overlays, dict):
+            entry = overlays.get(overlay_name)
+            return entry if isinstance(entry, dict) else None
+        if isinstance(overlays, list):
+            for entry in overlays:
+                if not isinstance(entry, dict):
+                    continue
+                name = str(entry.get("name") or entry.get("overlay") or "").strip().lower()
+                if name == overlay_name:
+                    return entry
+        return None
+
+    def _load_fresh_promotion_state(self) -> Optional[dict]:
+        payload = self._read_json(self.overlay_promotion_state_path)
+        if not payload:
+            return None
+        generated_at = payload.get("generated_at")
+        age_hours = self._age_hours(generated_at)
+        if age_hours is None or age_hours > self.overlay_promotion_max_age_hours:
+            return None
+        return payload
+
+    @staticmethod
+    def _read_json(path: Path) -> Optional[dict]:
+        if not path.exists():
+            return None
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            return None
+        return payload if isinstance(payload, dict) else None
+
+    def _liquidity_rank_modifier(
+        self,
+        *,
+        prefilter_score: float,
+        liquidity: dict,
+        policy: dict,
+    ) -> float:
+        if policy.get("enforced") and not policy.get("enabled"):
+            return 0.0
+
+        quality_score = float(liquidity.get("liquidity_quality_score", 50.0))
+        tier = str(liquidity.get("liquidity_tier", "")).lower()
+        raw_modifier = (quality_score - 50.0) * 0.06
+        if tier == "illiquid":
+            raw_modifier -= 3.0
+        elif tier == "high":
+            raw_modifier += 0.5
+
+        cap_pct = self._clamp(float(policy.get("cap_pct", self.rank_modifier_cap_pct_default)), 0.01, 0.05)
+        cap_points = max(abs(prefilter_score) * cap_pct, 0.5)
+        return self._clamp(raw_modifier, -cap_points, cap_points)
 
     def _load_cache_payload(self) -> Optional[dict]:
         if not self.cache_path.exists():

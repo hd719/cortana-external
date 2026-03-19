@@ -202,6 +202,10 @@ Live 120-name scan selection:
 - that prefilter ranks names by lightweight quality factors such as relative strength, trend quality, liquidity, distance from highs, pullback shape, and volatility sanity
 - this means the daytime stack is now much closer to "best 120 by cheap quality model" instead of "first 120 by ordering"
 - live alerts do not rebuild that prefilter inline; if the cache is missing or stale, they fall back to deterministic ordering and keep going
+- bounded rank-modifier consumption is controlled by overlay promotion state:
+  - only allowlisted overlays at `rank_modifier` stage can influence rank order
+  - rank impact is tightly capped (default max `+/-5%` equivalent effect)
+  - if promotion registry/state is missing or stale, selection falls back to the existing deterministic behavior instead of failing closed
 
 ## Daily Flow
 

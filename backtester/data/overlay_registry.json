@@ -1,0 +1,63 @@
+{
+  "schema_version": 1,
+  "policy_version": "2026-03-19-v1",
+  "updated_at": "2026-03-19T00:00:00+00:00",
+  "overlays": [
+    {
+      "name": "execution_quality",
+      "stage": "surfaced",
+      "rank_modifier_eligible": true,
+      "requires_manual_approval_for_rank_modifier": true,
+      "modifier_bounds": {
+        "min": -0.05,
+        "max": 0.05
+      },
+      "failed_windows": 0,
+      "cooldown_until": null,
+      "last_evaluated_at": null,
+      "notes": "Allowlisted for rank_modifier in v1 with bounded influence."
+    },
+    {
+      "name": "liquidity_tier",
+      "stage": "surfaced",
+      "rank_modifier_eligible": true,
+      "requires_manual_approval_for_rank_modifier": true,
+      "modifier_bounds": {
+        "min": -0.05,
+        "max": 0.05
+      },
+      "failed_windows": 0,
+      "cooldown_until": null,
+      "last_evaluated_at": null,
+      "notes": "Allowlisted for rank_modifier in v1 with bounded influence."
+    },
+    {
+      "name": "risk_budget_state",
+      "stage": "surfaced",
+      "rank_modifier_eligible": false,
+      "requires_manual_approval_for_rank_modifier": true,
+      "modifier_bounds": {
+        "min": -0.05,
+        "max": 0.05
+      },
+      "failed_windows": 0,
+      "cooldown_until": null,
+      "last_evaluated_at": null,
+      "notes": "Operator-facing context only in v1."
+    },
+    {
+      "name": "aggression_posture",
+      "stage": "surfaced",
+      "rank_modifier_eligible": false,
+      "requires_manual_approval_for_rank_modifier": true,
+      "modifier_bounds": {
+        "min": -0.05,
+        "max": 0.05
+      },
+      "failed_windows": 0,
+      "cooldown_until": null,
+      "last_evaluated_at": null,
+      "notes": "Operator-facing context only in v1."
+    }
+  ]
+}
