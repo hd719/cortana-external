@@ -345,7 +345,7 @@ Use the surfaces in this order when you are reviewing the stack end to end:
 - `python advisor.py --market` checks the regime gate and sizing posture before you read any single-name output.
 - `python advisor.py --symbol NVDA` is the fastest single-name diagnostic when you want factor detail plus the current recommendation.
 - `python advisor.py --quick-check BTC` is the fast verdict path for a stock, crypto proxy, or direct crypto alias when you want one bounded answer without reading the full alert.
-- `python quick_check_batch.py --symbols NVDA,TSLA,COIN` is the bounded batch surface for cron/operator re-checks of the current `BUY/WATCH` basket.
+- `python quick_check_batch.py --symbols AAPL,MSFT,COIN` is the bounded batch surface for cron/operator re-checks of the current `BUY/WATCH` basket.
 - `python canslim_alert.py --limit 8 --min-score 6` and `python dipbuyer_alert.py --limit 8 --min-score 6` generate the compact operator summaries used for daily review.
 - `TradingAdvisor().compare_model_families(...)["report"]` is the review surface for Wave 4 model-family deltas, restraint metrics, and review slices.
 

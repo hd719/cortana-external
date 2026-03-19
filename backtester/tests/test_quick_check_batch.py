@@ -5,7 +5,7 @@ import quick_check_batch
 
 
 def test_normalize_symbols_dedupes_and_upcases():
-    assert quick_check_batch._normalize_symbols([" nvda ", "NVDA", "", "tsla"]) == ["NVDA", "TSLA"]
+    assert quick_check_batch._normalize_symbols([" aapl ", "AAPL", "", "msft"]) == ["AAPL", "MSFT"]
 
 
 def test_json_safe_converts_non_serializable_values():
@@ -26,9 +26,9 @@ def test_build_entry_extracts_compact_fields(monkeypatch):
 
     entry = quick_check_batch._build_entry(
         {
-            "input_symbol": "nvda",
-            "symbol": "NVDA",
-            "provider_symbol": "NVDA",
+            "input_symbol": "aapl",
+            "symbol": "AAPL",
+            "provider_symbol": "AAPL",
             "asset_class": "stock",
             "analysis_path": "canslim",
             "verdict": "actionable",
@@ -41,14 +41,14 @@ def test_build_entry_extracts_compact_fields(monkeypatch):
         }
     )
 
-    assert entry["symbol"] == "NVDA"
+    assert entry["symbol"] == "AAPL"
     assert entry["verdict"] == "actionable"
     assert entry["base_action"] == "BUY"
     assert entry["formatted"] == "formatted"
 
 
 def test_main_emits_json_payload(monkeypatch, capsys):
-    monkeypatch.setattr(quick_check_batch, "parse_args", lambda: type("Args", (), {"symbols": "NVDA,TSLA"})())
+    monkeypatch.setattr(quick_check_batch, "parse_args", lambda: type("Args", (), {"symbols": "AAPL,MSFT"})())
 
     class _FakeAdvisor:
         def quick_check(self, symbol: str):
@@ -79,5 +79,5 @@ def test_main_emits_json_payload(monkeypatch, capsys):
     payload = json.loads(capsys.readouterr().out)
 
     assert payload["count"] == 2
-    assert payload["symbols"] == ["NVDA", "TSLA"]
-    assert payload["results"][0]["formatted"] == "formatted NVDA"
+    assert payload["symbols"] == ["AAPL", "MSFT"]
+    assert payload["results"][0]["formatted"] == "formatted AAPL"
