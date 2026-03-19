@@ -6,6 +6,7 @@ describe("buildAggregateHealth", () => {
       whoop: { status: "healthy" },
       tonal: { status: "healthy" },
       alpaca: { status: "healthy" },
+      appleHealth: { status: "inactive" },
     });
 
     expect(result.status).toBe("ok");
@@ -17,6 +18,7 @@ describe("buildAggregateHealth", () => {
       whoop: { status: "healthy" },
       tonal: { status: "unhealthy" },
       alpaca: { status: "healthy" },
+      appleHealth: { status: "inactive" },
     });
 
     expect(result.status).toBe("degraded");
@@ -28,6 +30,7 @@ describe("buildAggregateHealth", () => {
       whoop: { status: "ok" },
       tonal: { status: "unhealthy" },
       alpaca: { status: "unhealthy" },
+      appleHealth: { status: "inactive" },
     });
 
     expect(result.status).toBe("unhealthy");

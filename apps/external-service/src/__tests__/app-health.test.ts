@@ -15,6 +15,9 @@ function createServices(overrides?: Partial<ExternalServices>): ExternalServices
     alpaca: {
       checkHealth: async () => ({ status: "healthy" }),
     } as unknown as ExternalServices["alpaca"],
+    appleHealth: {
+      getHealth: async () => ({ status: "healthy" }),
+    } as unknown as ExternalServices["appleHealth"],
     ...overrides,
   };
 }
@@ -57,6 +60,9 @@ describe("/health", () => {
         alpaca: {
           checkHealth: async () => ({ status: "unhealthy" }),
         } as unknown as ExternalServices["alpaca"],
+        appleHealth: {
+          getHealth: async () => ({ status: "unhealthy" }),
+        } as unknown as ExternalServices["appleHealth"],
       }),
     );
 
@@ -65,5 +71,59 @@ describe("/health", () => {
 
     expect(response.status).toBe(503);
     expect(body.status).toBe("unhealthy");
+  });
+
+  it("returns ok with 4 services when all healthy", async () => {
+    const app = createApp(createServices());
+    const response = await app.request("/health");
+    const body = (await response.json()) as {
+      status: string;
+      whoop: Record<string, unknown>;
+      tonal: Record<string, unknown>;
+      alpaca: Record<string, unknown>;
+      appleHealth: Record<string, unknown>;
+    };
+
+    expect(response.status).toBe(200);
+    expect(body.status).toBe("ok");
+    expect(body.whoop.status).toBe("healthy");
+    expect(body.tonal.status).toBe("healthy");
+    expect(body.alpaca.status).toBe("healthy");
+    expect(body.appleHealth.status).toBe("healthy");
+  });
+
+  it("treats inactive apple-health as not counting toward unhealthy", async () => {
+    const app = createApp(
+      createServices({
+        appleHealth: {
+          getHealth: async () => ({ status: "inactive" }),
+        } as unknown as ExternalServices["appleHealth"],
+      }),
+    );
+
+    const response = await app.request("/health");
+    const body = (await response.json()) as { status: string };
+
+    expect(response.status).toBe(200);
+    expect(body.status).toBe("ok");
+  });
+
+  it("returns degraded with one unhealthy and one inactive", async () => {
+    const app = createApp(
+      createServices({
+        tonal: {
+          getAggregateHealth: async () => ({ status: "unhealthy", error: "down" }),
+        } as unknown as ExternalServices["tonal"],
+        appleHealth: {
+          getHealth: async () => ({ status: "inactive" }),
+        } as unknown as ExternalServices["appleHealth"],
+      }),
+    );
+
+    const response = await app.request("/health");
+    const body = (await response.json()) as { status: string };
+
+    expect(response.status).toBe(200);
+    expect(body.status).toBe("degraded");
   });
 });

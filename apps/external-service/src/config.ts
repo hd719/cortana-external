@@ -20,6 +20,8 @@ const ConfigSchema = z.object({
   TONAL_DATA_PATH: z.string().default("tonal_data.json"),
   ALPACA_KEYS_PATH: z.string().default(""),
   ALPACA_TARGET_ENVIRONMENT: z.string().default("live"),
+  APPLE_HEALTH_TOKEN: z.string().default(""),
+  APPLE_HEALTH_DATA_DIR: z.string().default("apple_health_data"),
   CORTANA_DATABASE_URL: z.string().default("postgres://localhost:5432/cortana?sslmode=disable"),
 });
 

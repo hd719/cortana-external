@@ -4,6 +4,7 @@ tonal_data.*
 *_tokens_ts.json
 *_data_ts.json
 alpaca_keys.*
+apple_health_data/
 .env
 .DS_Store
 fitness-services
