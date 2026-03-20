@@ -3,6 +3,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BACKTESTER_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+REPO_ROOT="$(cd "${BACKTESTER_DIR}/.." && pwd)"
+RUN_STAMP="${RUN_STAMP:-$(date -u +%Y%m%d-%H%M%S)}"
 
 MINIMUM_SAMPLES="${MINIMUM_SAMPLES:-20}"
 ATTRIBUTION_HORIZON="${ATTRIBUTION_HORIZON:-5d}"
@@ -42,4 +44,7 @@ if [[ "${BUILD_OVERLAY_PROMOTIONS}" == "1" ]]; then
       --attribution-horizon "${ATTRIBUTION_HORIZON}"
   )
 fi
+
+source "${SCRIPT_DIR}/auto_commit_pr.sh"
+auto_commit_pr "experimental-maintenance" "${RUN_STAMP}" "${REPO_ROOT}"
 

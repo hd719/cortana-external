@@ -3,6 +3,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BACKTESTER_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+REPO_ROOT="$(cd "${BACKTESTER_DIR}/.." && pwd)"
+RUN_STAMP="${RUN_STAMP:-$(date -u +%Y%m%d-%H%M%S)}"
 
 SYMBOL="${SYMBOL:-AAPL}"
 YEARS="${YEARS:-2}"
@@ -46,6 +48,9 @@ fi
   cd "${BACKTESTER_DIR}"
   uv run "${ARGS[@]}"
 )
+
+source "${SCRIPT_DIR}/auto_commit_pr.sh"
+auto_commit_pr "backtest" "${RUN_STAMP}" "${REPO_ROOT}"
 
 # Ex.
 # SYMBOL=NVDA YEARS=2 ./scripts/backtest_flow.sh

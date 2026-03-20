@@ -3,6 +3,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BACKTESTER_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+REPO_ROOT="$(cd "${BACKTESTER_DIR}/.." && pwd)"
+RUN_STAMP="${RUN_STAMP:-$(date -u +%Y%m%d-%H%M%S)}"
 
 EXPERIMENTAL_SYMBOLS="${EXPERIMENTAL_SYMBOLS:-NVDA,BTC,COIN}"
 JSON_OUTPUT="${JSON_OUTPUT:-0}"
@@ -30,4 +32,7 @@ if [[ "${PERSIST_SNAPSHOT}" == "1" ]]; then
     uv run python experimental_alpha.py --persist
   )
 fi
+
+source "${SCRIPT_DIR}/auto_commit_pr.sh"
+auto_commit_pr "experimental-report" "${RUN_STAMP}" "${REPO_ROOT}"
 

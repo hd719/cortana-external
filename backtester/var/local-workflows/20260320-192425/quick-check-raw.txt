@@ -1,0 +1,12 @@
+/Users/hd/Developer/cortana-external/backtester/.venv/lib/python3.14/site-packages/yfinance/scrapers/history.py:173: Pandas4Warning: Timestamp.utcnow is deprecated and will be removed in a future version. Use Timestamp.now('UTC') instead.
+  dt_now = pd.Timestamp.utcnow()
+/Users/hd/Developer/cortana-external/backtester/.venv/lib/python3.14/site-packages/yfinance/scrapers/history.py:173: Pandas4Warning: Timestamp.utcnow is deprecated and will be removed in a future version. Use Timestamp.now('UTC') instead.
+  dt_now = pd.Timestamp.utcnow()
+
+Quick check: BTC -> avoid for now
+Path: dip_buyer | Asset: crypto
+Polymarket: conflicting | Divergence watch | themes crypto-policy
+Risk budget: remaining 0% | cap 0% | aggression lean more selective | note market regime correction
+Execution quality: quality good | liquidity high | slippage high | good liquidity | high | slippage high (196.8bps)
+Reason: Falling-knife filter active: wait for bounce confirmation above the short-term trend. Polymarket context: conflicting on crypto-policy.
+Base action: NO_BUY | Score 7/12 | Confidence 20%

@@ -1,0 +1,11 @@
+Leader buckets
+
+Takeaway
+- Updated: 2026-03-20T16:28:53.139387+00:00
+- Priority set: OXY, APA, GEV, MPC, PSX, DELL, FANG, XOM
+
+Buckets
+- Format: % move over that bucket window | (x) = number of appearances in that bucket
+- Daily: OXY n/a (1x), APA n/a (1x), GEV n/a (1x), MPC n/a (1x), PSX n/a (1x), DELL n/a (1x), FANG n/a (1x), XOM n/a (1x), DVN n/a (1x), AKAM n/a (1x), VLO n/a (1x), EQT n/a (1x)
+- Weekly: OXY n/a (1x), APA n/a (1x), GEV n/a (1x), MPC n/a (1x), PSX n/a (1x), DELL n/a (1x), FANG n/a (1x), XOM n/a (1x), AKAM n/a (1x), DVN n/a (1x), VLO n/a (1x), EQT n/a (1x), VRT n/a (1x), LYB n/a (1x), TPL n/a (1x), HAL n/a (1x)
+- Monthly: OXY n/a (1x), APA n/a (1x), GEV n/a (1x), MPC n/a (1x), PSX n/a (1x), DELL n/a (1x), FANG n/a (1x), XOM n/a (1x), AKAM n/a (1x), DVN n/a (1x), VLO n/a (1x), EQT n/a (1x), VRT n/a (1x), LYB n/a (1x), TPL n/a (1x), HAL n/a (1x), ROST n/a (1x), PWR n/a (1x), TRGP n/a (1x), JNJ n/a (1x)

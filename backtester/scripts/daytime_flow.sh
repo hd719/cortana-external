@@ -121,3 +121,7 @@ cat "${LOCAL_RUN_DIR}/quick-check.txt"
 
 echo
 echo "Saved local run outputs: ${LOCAL_RUN_DIR}"
+
+# Auto-commit workflow outputs on a branch and open a PR
+source "${SCRIPT_DIR}/auto_commit_pr.sh"
+auto_commit_pr "daytime" "${RUN_STAMP}" "${REPO_ROOT}"
