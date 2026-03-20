@@ -1,0 +1,11 @@
+Quick check: BTC -> avoid for now
+
+Takeaway
+- Setup: dip_buyer | Asset: crypto
+- Macro: conflicting | Divergence watch | themes crypto-policy
+- Risk: remaining risk budget 0% | exposure cap 0% | market regime correction
+- Trading conditions: quality good | liquidity high | slippage high
+
+Verdict
+- Why: Falling-knife filter active: wait for bounce confirmation above the short-term trend. Polymarket context: conflicting on crypto-policy.
+- Model output: NO_BUY | Score 7/12 | Confidence 16%

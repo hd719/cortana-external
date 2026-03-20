@@ -1,0 +1,17 @@
+Dip Buyer Scan
+Market regime: correction
+Polymarket: Fed easing odds 66% (0 pts/24h); US recession odds 36% (0 pts/24h); Geopolitical escalation risk 10% (0 pts/24h)
+Overlay: Risk-on conflict — Polymarket is leaning risk-on, but the current equity regime is not fully supportive.
+Posture: Conflicting | lean more selective | Divergence watch
+Polymarket posture: conviction conflicting | aggression lean more selective | divergence divergence watch
+Polymarket focus: overlap AMD, MSFT, NVDA (+2 more) | early IWM, QQQ | crypto COIN, HOOD, MARA (+4 more)
+Risk budget: remaining 0% | cap 0% | aggression lean more selective | note market regime correction
+Execution quality: quality good | liquidity high | slippage high | good liquidity | high | slippage high (187.4bps)
+Universe selection: 20 pinned | 100 ranked | source cache | cache age 4.2h
+Qualified setups: 120 of 120 scanned | BUY 0 | WATCH 8
+Watch names (regime-blocked buys): CRUS, LRCX, SLB, AMAT, ODFL, CFLT, EXAS, PWR
+Correction gate: 5 dip setups surfaced but are downgraded to WATCH while the market stays defensive
+Top leaders: CRUS WATCH (8/12) 🐦 Neutral | LRCX WATCH (8/12) 🐦 Neutral | SLB WATCH (7/12) 🐦 Neutral
+Decision review: BUY 0 | WATCH 8 | NO_BUY 0
+Tuning balance: clean BUY 0 | risky BUY proxy 0 | abstain 0 | veto 0 | higher-tq restraint proxy n/a
+Final action: WATCH only — correction regime blocks new dip buys (Regime score -7: 7 distribution days and -6.4% drawdown. Stay defensive)
