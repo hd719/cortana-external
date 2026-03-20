@@ -437,6 +437,7 @@ What it does:
 - falls back to the repo’s static constituent list if live refresh is unavailable
 - layers in the growth watchlist and fresh dynamic names
 - reuses the shared provider-backed OHLCV path (`Alpaca -> Yahoo -> cache`) for price history during screening
+- refreshes the buy-decision calibration artifact if it is missing or stale
 - ranks the surfaced leaders through the existing Python analysis path
 
 How the nightly filter works:
