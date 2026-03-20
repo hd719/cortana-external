@@ -439,6 +439,13 @@ What it does:
 - reuses the shared provider-backed OHLCV path (`Alpaca -> Yahoo -> cache`) for price history during screening
 - ranks the surfaced leaders through the existing Python analysis path
 
+How the nightly filter works:
+- nightly discovery first builds a broad candidate list from live S&P 500 names, then adds watchlist and dynamic names
+- it does a fast first pass to drop names that are not practical to trade, like very low-priced or thinly traded names
+- it then scores the survivors with a simple quality check based on momentum, trend strength, and volume behavior
+- only the names that pass that first quality gate move on to the deeper analysis step
+- the final `--limit` step picks the top survivors from that deeper pass and shows them as the nightly "leaders"
+
 Current source note:
 - the live constituent refresh currently comes from a public Wikipedia S&P 500 table
 - that is acceptable for a fallback-tolerant overnight discovery job, but it is still an HTML scrape
