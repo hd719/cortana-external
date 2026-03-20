@@ -27,8 +27,11 @@ auto_commit_pr() {
   git -C "${repo_root}" commit -m "backtester: ${flow_name} flow ${run_stamp}"
   git -C "${repo_root}" push -u origin "${branch}"
 
+  local repo_slug
+  repo_slug="$(git -C "${repo_root}" remote get-url origin | sed -E 's#.*[:/]([^/]+/[^/]+?)(\.git)?$#\1#')"
+
   gh pr create \
-    --repo "$(git -C "${repo_root}" remote get-url origin)" \
+    --repo "${repo_slug}" \
     --head "${branch}" \
     --base "${original_branch}" \
     --title "backtester: ${flow_name} ${run_stamp}" \

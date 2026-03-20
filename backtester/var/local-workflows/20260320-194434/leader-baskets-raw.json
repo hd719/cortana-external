@@ -1,0 +1,539 @@
+{
+  "schema_version": 1,
+  "artifact_type": "leader_baskets",
+  "generated_at": "2026-03-20T16:28:53.139387+00:00",
+  "source": {
+    "snapshot_path": "/Users/hd/Developer/cortana-external/backtester/.cache/leader_baskets/latest-snapshot.json",
+    "history_dir": "/Users/hd/Developer/cortana-external/backtester/.cache/leader_baskets/history",
+    "history_count": 1
+  },
+  "windows": {
+    "daily_days": 1,
+    "weekly_days": 7,
+    "monthly_days": 30
+  },
+  "buckets": {
+    "daily": [
+      {
+        "symbol": "OXY",
+        "appearances": 1,
+        "avg_rank_score": 12.25,
+        "latest_rank_score": 12.25,
+        "avg_confidence": 72.0,
+        "actions": [
+          "NO_BUY"
+        ]
+      },
+      {
+        "symbol": "APA",
+        "appearances": 1,
+        "avg_rank_score": 9.5,
+        "latest_rank_score": 9.5,
+        "avg_confidence": 64.0,
+        "actions": [
+          "NO_BUY"
+        ]
+      },
+      {
+        "symbol": "GEV",
+        "appearances": 1,
+        "avg_rank_score": 9.25,
+        "latest_rank_score": 9.25,
+        "avg_confidence": 54.0,
+        "actions": [
+          "NO_BUY"
+        ]
+      },
+      {
+        "symbol": "MPC",
+        "appearances": 1,
+        "avg_rank_score": 8.75,
+        "latest_rank_score": 8.75,
+        "avg_confidence": 58.0,
+        "actions": [
+          "NO_BUY"
+        ]
+      },
+      {
+        "symbol": "PSX",
+        "appearances": 1,
+        "avg_rank_score": 8.75,
+        "latest_rank_score": 8.75,
+        "avg_confidence": 58.0,
+        "actions": [
+          "NO_BUY"
+        ]
+      },
+      {
+        "symbol": "DELL",
+        "appearances": 1,
+        "avg_rank_score": 8.5,
+        "latest_rank_score": 8.5,
+        "avg_confidence": 59.0,
+        "actions": [
+          "NO_BUY"
+        ]
+      },
+      {
+        "symbol": "FANG",
+        "appearances": 1,
+        "avg_rank_score": 8.0,
+        "latest_rank_score": 8.0,
+        "avg_confidence": 55.0,
+        "actions": [
+          "NO_BUY"
+        ]
+      },
+      {
+        "symbol": "XOM",
+        "appearances": 1,
+        "avg_rank_score": 8.0,
+        "latest_rank_score": 8.0,
+        "avg_confidence": 54.0,
+        "actions": [
+          "NO_BUY"
+        ]
+      },
+      {
+        "symbol": "DVN",
+        "appearances": 1,
+        "avg_rank_score": 7.75,
+        "latest_rank_score": 7.75,
+        "avg_confidence": 55.0,
+        "actions": [
+          "NO_BUY"
+        ]
+      },
+      {
+        "symbol": "AKAM",
+        "appearances": 1,
+        "avg_rank_score": 7.75,
+        "latest_rank_score": 7.75,
+        "avg_confidence": 52.0,
+        "actions": [
+          "NO_BUY"
+        ]
+      },
+      {
+        "symbol": "VLO",
+        "appearances": 1,
+        "avg_rank_score": 7.75,
+        "latest_rank_score": 7.75,
+        "avg_confidence": 51.0,
+        "actions": [
+          "NO_BUY"
+        ]
+      },
+      {
+        "symbol": "EQT",
+        "appearances": 1,
+        "avg_rank_score": 7.25,
+        "latest_rank_score": 7.25,
+        "avg_confidence": 49.0,
+        "actions": [
+          "NO_BUY"
+        ]
+      }
+    ],
+    "weekly": [
+      {
+        "symbol": "OXY",
+        "appearances": 1,
+        "avg_rank_score": 12.25,
+        "latest_rank_score": 12.25,
+        "avg_confidence": 72.0,
+        "actions": [
+          "NO_BUY"
+        ]
+      },
+      {
+        "symbol": "APA",
+        "appearances": 1,
+        "avg_rank_score": 9.5,
+        "latest_rank_score": 9.5,
+        "avg_confidence": 64.0,
+        "actions": [
+          "NO_BUY"
+        ]
+      },
+      {
+        "symbol": "GEV",
+        "appearances": 1,
+        "avg_rank_score": 9.25,
+        "latest_rank_score": 9.25,
+        "avg_confidence": 54.0,
+        "actions": [
+          "NO_BUY"
+        ]
+      },
+      {
+        "symbol": "MPC",
+        "appearances": 1,
+        "avg_rank_score": 8.75,
+        "latest_rank_score": 8.75,
+        "avg_confidence": 58.0,
+        "actions": [
+          "NO_BUY"
+        ]
+      },
+      {
+        "symbol": "PSX",
+        "appearances": 1,
+        "avg_rank_score": 8.75,
+        "latest_rank_score": 8.75,
+        "avg_confidence": 58.0,
+        "actions": [
+          "NO_BUY"
+        ]
+      },
+      {
+        "symbol": "DELL",
+        "appearances": 1,
+        "avg_rank_score": 8.5,
+        "latest_rank_score": 8.5,
+        "avg_confidence": 59.0,
+        "actions": [
+          "NO_BUY"
+        ]
+      },
+      {
+        "symbol": "FANG",
+        "appearances": 1,
+        "avg_rank_score": 8.0,
+        "latest_rank_score": 8.0,
+        "avg_confidence": 55.0,
+        "actions": [
+          "NO_BUY"
+        ]
+      },
+      {
+        "symbol": "XOM",
+        "appearances": 1,
+        "avg_rank_score": 8.0,
+        "latest_rank_score": 8.0,
+        "avg_confidence": 54.0,
+        "actions": [
+          "NO_BUY"
+        ]
+      },
+      {
+        "symbol": "AKAM",
+        "appearances": 1,
+        "avg_rank_score": 7.75,
+        "latest_rank_score": 7.75,
+        "avg_confidence": 52.0,
+        "actions": [
+          "NO_BUY"
+        ]
+      },
+      {
+        "symbol": "DVN",
+        "appearances": 1,
+        "avg_rank_score": 7.75,
+        "latest_rank_score": 7.75,
+        "avg_confidence": 55.0,
+        "actions": [
+          "NO_BUY"
+        ]
+      },
+      {
+        "symbol": "VLO",
+        "appearances": 1,
+        "avg_rank_score": 7.75,
+        "latest_rank_score": 7.75,
+        "avg_confidence": 51.0,
+        "actions": [
+          "NO_BUY"
+        ]
+      },
+      {
+        "symbol": "EQT",
+        "appearances": 1,
+        "avg_rank_score": 7.25,
+        "latest_rank_score": 7.25,
+        "avg_confidence": 49.0,
+        "actions": [
+          "NO_BUY"
+        ]
+      },
+      {
+        "symbol": "VRT",
+        "appearances": 1,
+        "avg_rank_score": 7.25,
+        "latest_rank_score": 7.25,
+        "avg_confidence": 43.0,
+        "actions": [
+          "NO_BUY"
+        ]
+      },
+      {
+        "symbol": "LYB",
+        "appearances": 1,
+        "avg_rank_score": 6.5,
+        "latest_rank_score": 6.5,
+        "avg_confidence": 36.0,
+        "actions": [
+          "NO_BUY"
+        ]
+      },
+      {
+        "symbol": "TPL",
+        "appearances": 1,
+        "avg_rank_score": 5.75,
+        "latest_rank_score": 5.75,
+        "avg_confidence": 33.0,
+        "actions": [
+          "NO_BUY"
+        ]
+      },
+      {
+        "symbol": "HAL",
+        "appearances": 1,
+        "avg_rank_score": 5.5,
+        "latest_rank_score": 5.5,
+        "avg_confidence": 36.0,
+        "actions": [
+          "NO_BUY"
+        ]
+      }
+    ],
+    "monthly": [
+      {
+        "symbol": "OXY",
+        "appearances": 1,
+        "avg_rank_score": 12.25,
+        "latest_rank_score": 12.25,
+        "avg_confidence": 72.0,
+        "actions": [
+          "NO_BUY"
+        ]
+      },
+      {
+        "symbol": "APA",
+        "appearances": 1,
+        "avg_rank_score": 9.5,
+        "latest_rank_score": 9.5,
+        "avg_confidence": 64.0,
+        "actions": [
+          "NO_BUY"
+        ]
+      },
+      {
+        "symbol": "GEV",
+        "appearances": 1,
+        "avg_rank_score": 9.25,
+        "latest_rank_score": 9.25,
+        "avg_confidence": 54.0,
+        "actions": [
+          "NO_BUY"
+        ]
+      },
+      {
+        "symbol": "MPC",
+        "appearances": 1,
+        "avg_rank_score": 8.75,
+        "latest_rank_score": 8.75,
+        "avg_confidence": 58.0,
+        "actions": [
+          "NO_BUY"
+        ]
+      },
+      {
+        "symbol": "PSX",
+        "appearances": 1,
+        "avg_rank_score": 8.75,
+        "latest_rank_score": 8.75,
+        "avg_confidence": 58.0,
+        "actions": [
+          "NO_BUY"
+        ]
+      },
+      {
+        "symbol": "DELL",
+        "appearances": 1,
+        "avg_rank_score": 8.5,
+        "latest_rank_score": 8.5,
+        "avg_confidence": 59.0,
+        "actions": [
+          "NO_BUY"
+        ]
+      },
+      {
+        "symbol": "FANG",
+        "appearances": 1,
+        "avg_rank_score": 8.0,
+        "latest_rank_score": 8.0,
+        "avg_confidence": 55.0,
+        "actions": [
+          "NO_BUY"
+        ]
+      },
+      {
+        "symbol": "XOM",
+        "appearances": 1,
+        "avg_rank_score": 8.0,
+        "latest_rank_score": 8.0,
+        "avg_confidence": 54.0,
+        "actions": [
+          "NO_BUY"
+        ]
+      },
+      {
+        "symbol": "AKAM",
+        "appearances": 1,
+        "avg_rank_score": 7.75,
+        "latest_rank_score": 7.75,
+        "avg_confidence": 52.0,
+        "actions": [
+          "NO_BUY"
+        ]
+      },
+      {
+        "symbol": "DVN",
+        "appearances": 1,
+        "avg_rank_score": 7.75,
+        "latest_rank_score": 7.75,
+        "avg_confidence": 55.0,
+        "actions": [
+          "NO_BUY"
+        ]
+      },
+      {
+        "symbol": "VLO",
+        "appearances": 1,
+        "avg_rank_score": 7.75,
+        "latest_rank_score": 7.75,
+        "avg_confidence": 51.0,
+        "actions": [
+          "NO_BUY"
+        ]
+      },
+      {
+        "symbol": "EQT",
+        "appearances": 1,
+        "avg_rank_score": 7.25,
+        "latest_rank_score": 7.25,
+        "avg_confidence": 49.0,
+        "actions": [
+          "NO_BUY"
+        ]
+      },
+      {
+        "symbol": "VRT",
+        "appearances": 1,
+        "avg_rank_score": 7.25,
+        "latest_rank_score": 7.25,
+        "avg_confidence": 43.0,
+        "actions": [
+          "NO_BUY"
+        ]
+      },
+      {
+        "symbol": "LYB",
+        "appearances": 1,
+        "avg_rank_score": 6.5,
+        "latest_rank_score": 6.5,
+        "avg_confidence": 36.0,
+        "actions": [
+          "NO_BUY"
+        ]
+      },
+      {
+        "symbol": "TPL",
+        "appearances": 1,
+        "avg_rank_score": 5.75,
+        "latest_rank_score": 5.75,
+        "avg_confidence": 33.0,
+        "actions": [
+          "NO_BUY"
+        ]
+      },
+      {
+        "symbol": "HAL",
+        "appearances": 1,
+        "avg_rank_score": 5.5,
+        "latest_rank_score": 5.5,
+        "avg_confidence": 36.0,
+        "actions": [
+          "NO_BUY"
+        ]
+      },
+      {
+        "symbol": "ROST",
+        "appearances": 1,
+        "avg_rank_score": 5.5,
+        "latest_rank_score": 5.5,
+        "avg_confidence": 33.0,
+        "actions": [
+          "NO_BUY"
+        ]
+      },
+      {
+        "symbol": "PWR",
+        "appearances": 1,
+        "avg_rank_score": 5.0,
+        "latest_rank_score": 5.0,
+        "avg_confidence": 25.0,
+        "actions": [
+          "NO_BUY"
+        ]
+      },
+      {
+        "symbol": "TRGP",
+        "appearances": 1,
+        "avg_rank_score": 4.0,
+        "latest_rank_score": 4.0,
+        "avg_confidence": 23.0,
+        "actions": [
+          "NO_BUY"
+        ]
+      },
+      {
+        "symbol": "JNJ",
+        "appearances": 1,
+        "avg_rank_score": 2.5,
+        "latest_rank_score": 2.5,
+        "avg_confidence": 9.0,
+        "actions": [
+          "NO_BUY"
+        ]
+      }
+    ]
+  },
+  "priority": {
+    "symbols": [
+      "OXY",
+      "APA",
+      "GEV",
+      "MPC",
+      "PSX",
+      "DELL",
+      "FANG",
+      "XOM"
+    ],
+    "daily": [
+      "OXY",
+      "APA",
+      "GEV",
+      "MPC"
+    ],
+    "weekly": [
+      "OXY",
+      "APA",
+      "GEV",
+      "MPC",
+      "PSX",
+      "DELL"
+    ],
+    "monthly": [
+      "OXY",
+      "APA",
+      "GEV",
+      "MPC",
+      "PSX",
+      "DELL",
+      "FANG",
+      "XOM"
+    ]
+  }
+}
