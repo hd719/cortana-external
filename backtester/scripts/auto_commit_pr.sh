@@ -28,9 +28,9 @@ auto_commit_pr() {
   git -C "${repo_root}" push -u origin "${branch}"
 
   local repo_slug
-  repo_slug="$(git -C "${repo_root}" remote get-url origin | sed 's/\.git$//' | sed 's#.*[:/]##' | sed 's#^/*##')"
+  repo_slug="$(git -C "${repo_root}" remote get-url origin | sed 's/\.git$//' | awk -F '[:/]' '{print $(NF-1)"/"$NF}')"
 
-  # Return to original branch first so PR creation doesn't block checkout
+  # Return to original branch before creating PR
   git -C "${repo_root}" checkout "${original_branch}"
   # Remove untracked files that are now on the PR branch
   git -C "${repo_root}" clean -fd backtester/var/local-workflows/"${run_stamp}" 2>/dev/null || true
