@@ -1537,7 +1537,8 @@ class TradingAdvisor:
             for _, row in results.head(limit).iterrows():
                 symbol = row['symbol']
                 try:
-                    analysis = self.analyze_stock(symbol, quiet=True)
+                    with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                        analysis = self.analyze_stock(symbol, quiet=True)
                     if 'error' in analysis:
                         continue
 

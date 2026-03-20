@@ -37,6 +37,13 @@ def test_quick_profile_returns_deduped_growth_watchlist(tmp_path):
     assert len(symbols) == len(set(symbols))
 
 
+def test_bundled_static_lists_drop_known_stale_symbols():
+    stale = {"ANSS", "BPMC", "HEXY", "HES", "PXD", "SGEN", "SQ"}
+
+    assert not stale.intersection(set(SP500_TICKERS))
+    assert "XYZ" in GROWTH_WATCHLIST
+
+
 def test_sp500_constituents_cache_round_trip_and_normalization(tmp_path, monkeypatch):
     screener = UniverseScreener(cache_dir=str(tmp_path))
     monkeypatch.setattr(

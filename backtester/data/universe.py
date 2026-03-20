@@ -56,7 +56,7 @@ SP500_TICKERS = [
     # === Technology & Software ===
     "ADBE", "INTU", "NOW", "SNPS", "CDNS", "PANW", "CRWD", "FTNT", "WDAY",
     "TEAM", "HUBS", "DDOG", "ZS", "MNDY", "BILL", "PCTY", "PAYC", "TTD",
-    "VEEV", "ANSS", "CPAY", "GDDY", "GEN", "AKAM", "EPAM", "GLOB",
+    "VEEV", "CPAY", "GDDY", "GEN", "AKAM", "EPAM", "GLOB",
 
     # === Semiconductors ===
     "AVGO", "AMD", "QCOM", "TXN", "ADI", "LRCX", "KLAC", "AMAT", "MRVL",
@@ -71,7 +71,7 @@ SP500_TICKERS = [
     "LLY", "UNH", "JNJ", "MRK", "ABBV", "TMO", "ABT", "DHR", "PFE", "BMY",
     "AMGN", "GILD", "VRTX", "REGN", "ISRG", "SYK", "BSX", "MDT", "EW", "ZTS",
     "IDXX", "DXCM", "ALGN", "HOLX", "IQV", "CI", "ELV", "HUM", "MOH",
-    "MRNA", "BMRN", "SGEN", "ALNY", "PCVX", "ARGX", "NBIX", "SRPT", "IONS",
+    "MRNA", "BMRN", "ALNY", "PCVX", "ARGX", "NBIX", "SRPT", "IONS",
 
     # === Industrials & Defense ===
     "GE", "CAT", "HON", "UNP", "UPS", "RTX", "DE", "BA", "LMT", "NOC",
@@ -84,8 +84,8 @@ SP500_TICKERS = [
     "ORLY", "AZO", "ULTA", "ROST", "DG", "DLTR", "FIVE",
 
     # === Energy ===
-    "XOM", "CVX", "COP", "EOG", "SLB", "PXD", "MPC", "PSX", "VLO", "OXY",
-    "DVN", "FANG", "HES", "HAL", "TRGP", "WMB", "KMI", "OKE", "LNG",
+    "XOM", "CVX", "COP", "EOG", "SLB", "MPC", "PSX", "VLO", "OXY",
+    "DVN", "FANG", "HAL", "TRGP", "WMB", "KMI", "OKE", "LNG",
 
     # === Communication & Media ===
     "GOOGL", "META", "NFLX", "DIS", "CMCSA", "T", "VZ", "TMUS", "CHTR",
@@ -117,14 +117,14 @@ SP500_TICKERS = [
     "VRT", "CRDO", "IBKR", "FOUR", "SOUN",
 
     # === Biotech Growth ===
-    "SGEN", "PCVX", "BMRN", "INCY", "EXAS", "HALO", "RARE",
-    "BPMC", "RCKT", "DNLI", "KRYS", "RYTM", "INSM", "NUVB",
+    "PCVX", "BMRN", "INCY", "EXAS", "HALO", "RARE",
+    "RCKT", "DNLI", "KRYS", "RYTM", "INSM", "NUVB",
 
     # === Energy Transition / Infrastructure ===
     "ENPH", "SEDG", "FSLR", "RUN", "ARRY", "PWR", "QUBT",
 
     # === Industrials / Aerospace Growth ===
-    "HEXY", "ARES", "KKR", "APO", "OWL", "STEP",
+    "ARES", "KKR", "APO", "OWL", "STEP",
 ]
 
 # Growth/momentum stocks to always include in scans
@@ -142,7 +142,7 @@ GROWTH_WATCHLIST = [
     "AMD", "AVGO", "MRVL", "ARM", "SMCI", "AMAT", "LRCX", "KLAC", "ON", "MPWR",
 
     # High-growth tech / fintech
-    "UBER", "ABNB", "SQ", "SHOP", "COIN", "HOOD", "SOFI", "AFRM", "NU", "TOST",
+    "UBER", "ABNB", "XYZ", "SHOP", "COIN", "HOOD", "SOFI", "AFRM", "NU", "TOST",
     "TTD", "HUBS", "MNDY", "BILL",
 
     # Biotech / Healthcare growth

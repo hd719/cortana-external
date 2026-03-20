@@ -4,8 +4,10 @@
 from __future__ import annotations
 
 import argparse
+import io
 import json
 import warnings
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 
 DEFAULT_BUY_DECISION_CALIBRATION_PATH = (
@@ -18,7 +20,7 @@ from data.universe_selection import RankedUniverseSelector
 
 
 def _with_runtime_warning_filters(fn, *args, **kwargs):
-    with warnings.catch_warnings():
+    with warnings.catch_warnings(), redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
         warnings.filterwarnings("ignore", message="Timestamp.utcnow is deprecated.*")
         warnings.filterwarnings("ignore", category=FutureWarning, module="yfinance")
         warnings.filterwarnings("ignore", category=UserWarning, module="yfinance")
