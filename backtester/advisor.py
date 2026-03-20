@@ -35,6 +35,7 @@ import importlib
 import io
 import inspect
 import json
+import logging
 import os
 import time
 from contextlib import redirect_stderr, redirect_stdout
@@ -82,6 +83,8 @@ from evaluation.comparison import (
     score_enhanced_rank,
 )
 from strategies.dip_buyer import DipBuyerStrategy
+
+LOGGER = logging.getLogger(__name__)
 
 CRYPTO_ALIAS_MAP = {
     "BTC": "BTC-USD",
@@ -1510,13 +1513,15 @@ class TradingAdvisor:
         limit: int = 25,
         min_technical_score: int = 3,
         refresh_sp500: bool = False,
+        symbols: Optional[List[str]] = None,
     ) -> pd.DataFrame:
         """Run a broader nightly discovery pass without the live market gate."""
-        symbols = self.screener.get_universe_for_profile(
-            UNIVERSE_PROFILE_NIGHTLY_DISCOVERY,
-            refresh_sp500=refresh_sp500,
-        )
-        results = self.screener.screen(symbols, min_technical_score=min_technical_score, verbose=True)
+        if symbols is None:
+            symbols = self.screener.get_universe_for_profile(
+                UNIVERSE_PROFILE_NIGHTLY_DISCOVERY,
+                refresh_sp500=refresh_sp500,
+            )
+        results = self.screener.screen(symbols, min_technical_score=min_technical_score, verbose=False)
         if results.empty:
             return results
 
@@ -1531,23 +1536,26 @@ class TradingAdvisor:
         try:
             for _, row in results.head(limit).iterrows():
                 symbol = row['symbol']
-                analysis = self.analyze_stock(symbol, quiet=True)
-                if 'error' in analysis:
-                    continue
+                try:
+                    analysis = self.analyze_stock(symbol, quiet=True)
+                    if 'error' in analysis:
+                        continue
 
-                rec = analysis.get('recommendation', {})
-                row_dict = row.to_dict()
-                row_dict['market_regime'] = getattr(getattr(market, 'regime', None), 'value', 'unknown')
-                row_dict['total_score'] = analysis.get('total_score', 0)
-                row_dict['rank_score'] = analysis.get('rank_score', analysis.get('total_score', 0))
-                row_dict['action'] = rec.get('action', 'NO_BUY')
-                row_dict['reason'] = rec.get('reason', '')
-                row_dict['confidence'] = rec.get('confidence', analysis.get('confidence', 0))
-                row_dict['trade_quality_score'] = rec.get(
-                    'trade_quality_score',
-                    analysis.get('trade_quality_score', analysis.get('total_score', 0)),
-                )
-                enriched.append(row_dict)
+                    rec = analysis.get('recommendation', {})
+                    row_dict = row.to_dict()
+                    row_dict['market_regime'] = getattr(getattr(market, 'regime', None), 'value', 'unknown')
+                    row_dict['total_score'] = analysis.get('total_score', 0)
+                    row_dict['rank_score'] = analysis.get('rank_score', analysis.get('total_score', 0))
+                    row_dict['action'] = rec.get('action', 'NO_BUY')
+                    row_dict['reason'] = rec.get('reason', '')
+                    row_dict['confidence'] = rec.get('confidence', analysis.get('confidence', 0))
+                    row_dict['trade_quality_score'] = rec.get(
+                        'trade_quality_score',
+                        analysis.get('trade_quality_score', analysis.get('total_score', 0)),
+                    )
+                    enriched.append(row_dict)
+                except Exception as exc:
+                    LOGGER.debug("Skipping %s during nightly enrichment: %s", symbol, exc)
         finally:
             self._candidate_context_by_symbol = previous_context
 

@@ -1,5 +1,6 @@
 import json
 import logging
+from types import SimpleNamespace
 
 from data.universe import (
     GROWTH_WATCHLIST,
@@ -82,3 +83,40 @@ def test_nightly_discovery_profile_merges_live_constituents_growth_and_dynamic(t
     assert "NET" in symbols
     assert "COIN" in symbols
     assert len(symbols) == len(set(symbols))
+
+
+def test_get_stock_info_suppresses_provider_noise(tmp_path, monkeypatch, capsys):
+    screener = UniverseScreener(cache_dir=str(tmp_path))
+
+    class _NoisyTicker:
+        @property
+        def info(self):
+            print("symbol does not exist")
+            raise RuntimeError("bad ticker")
+
+    monkeypatch.setattr("data.universe.yf.Ticker", lambda symbol: _NoisyTicker())
+
+    assert screener.get_stock_info("BAD") is None
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err == ""
+
+
+def test_fetch_live_sp500_constituents_uses_request_headers(tmp_path, monkeypatch):
+    screener = UniverseScreener(cache_dir=str(tmp_path))
+    captured = {}
+
+    def _fake_get(url, headers=None, timeout=0):
+        captured["url"] = url
+        captured["headers"] = headers
+        captured["timeout"] = timeout
+        return SimpleNamespace(
+            text="<table><tr><th>Symbol</th></tr><tr><td>MSFT</td></tr></table>",
+            raise_for_status=lambda: None,
+        )
+
+    monkeypatch.setattr("data.universe.requests.get", _fake_get)
+
+    assert screener._fetch_live_sp500_constituents() == ["MSFT"]
+    assert captured["headers"]["User-Agent"]
+    assert captured["timeout"] == 20

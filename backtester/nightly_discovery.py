@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import warnings
 from pathlib import Path
 
 DEFAULT_BUY_DECISION_CALIBRATION_PATH = (
@@ -16,6 +17,14 @@ from data.universe import UNIVERSE_PROFILE_NIGHTLY_DISCOVERY
 from data.universe_selection import RankedUniverseSelector
 
 
+def _with_runtime_warning_filters(fn, *args, **kwargs):
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", message="Timestamp.utcnow is deprecated.*")
+        warnings.filterwarnings("ignore", category=FutureWarning, module="yfinance")
+        warnings.filterwarnings("ignore", category=UserWarning, module="yfinance")
+        return fn(*args, **kwargs)
+
+
 def build_report(
     limit: int = 20,
     min_technical_score: int = 3,
@@ -23,15 +32,17 @@ def build_report(
     refresh_live_prefilter: bool = True,
 ) -> dict:
     advisor = TradingAdvisor()
-    market = advisor.get_market_status(refresh=True)
+    market = _with_runtime_warning_filters(advisor.get_market_status, refresh=True)
     symbols = advisor.screener.get_universe_for_profile(
         UNIVERSE_PROFILE_NIGHTLY_DISCOVERY,
         refresh_sp500=refresh_sp500,
     )
-    discoveries = advisor.run_nightly_discovery(
+    discoveries = _with_runtime_warning_filters(
+        advisor.run_nightly_discovery,
         limit=limit,
         min_technical_score=min_technical_score,
         refresh_sp500=refresh_sp500,
+        symbols=symbols,
     )
 
     leaders = []
@@ -56,7 +67,8 @@ def build_report(
     if refresh_live_prefilter:
         standard_symbols = advisor.screener.get_universe()
         selector = RankedUniverseSelector()
-        payload = selector.refresh_cache(
+        payload = _with_runtime_warning_filters(
+            selector.refresh_cache,
             base_symbols=standard_symbols,
             market_regime=getattr(getattr(market, "regime", None), "value", "unknown"),
         )

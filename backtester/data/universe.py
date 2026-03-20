@@ -20,11 +20,13 @@ Then we score each candidate on CANSLIM factors to find the best setups.
 =============================================================================
 """
 
+import io
 import pandas as pd
 import numpy as np
 import yfinance as yf
-from typing import List, Dict, Optional, Set
+from typing import List, Dict, Optional, Set, Callable, TypeVar
 from datetime import UTC, datetime, timedelta
+from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
 import json
 import logging
@@ -32,11 +34,13 @@ import os
 from pathlib import Path
 import time
 import requests
+import warnings
 
 from .polymarket_context import load_watchlist_entries
 
 
 LOGGER = logging.getLogger(__name__)
+_T = TypeVar("_T")
 
 
 # S&P 500 tickers (we'll use this as our base universe)
@@ -171,6 +175,14 @@ UNIVERSE_PROFILES = {
     UNIVERSE_PROFILE_NIGHTLY_DISCOVERY: "Broader nightly discovery universe using live S&P 500 constituents when available",
 }
 SP500_CONSTITUENTS_URL = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
+DEFAULT_HTTP_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/137.0.0.0 Safari/537.36"
+    ),
+    "Accept-Language": "en-US,en;q=0.9",
+}
 
 
 class UniverseScreener:
@@ -236,7 +248,7 @@ class UniverseScreener:
 
     def _fetch_live_sp500_constituents(self) -> List[str]:
         url = os.getenv("SP500_CONSTITUENTS_URL", SP500_CONSTITUENTS_URL)
-        response = requests.get(url, timeout=20)
+        response = requests.get(url, headers=DEFAULT_HTTP_HEADERS, timeout=20)
         response.raise_for_status()
         tables = pd.read_html(StringIO(response.text))
         for table in tables:
@@ -247,6 +259,14 @@ class UniverseScreener:
             if symbols:
                 return symbols
         raise ValueError("Unable to parse S&P 500 constituents from source")
+
+    @staticmethod
+    def _run_market_data_quietly(fn: Callable[..., _T], *args, **kwargs) -> _T:
+        with warnings.catch_warnings(), redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+            warnings.filterwarnings("ignore", message="Timestamp.utcnow is deprecated.*")
+            warnings.filterwarnings("ignore", category=FutureWarning, module="yfinance")
+            warnings.filterwarnings("ignore", category=UserWarning, module="yfinance")
+            return fn(*args, **kwargs)
 
     def load_sp500_constituents(self, *, refresh: bool = False, max_age_hours: float = 24.0) -> List[str]:
         if not refresh:
@@ -396,7 +416,7 @@ class UniverseScreener:
         """
         try:
             ticker = yf.Ticker(symbol)
-            info = ticker.info
+            info = self._run_market_data_quietly(lambda: ticker.info)
             
             # Extract key metrics
             result = {
@@ -416,7 +436,7 @@ class UniverseScreener:
             return result
             
         except Exception as e:
-            print(f"   ⚠️ Error fetching {symbol}: {e}")
+            LOGGER.debug("Skipping %s during basic info fetch: %s", symbol, e)
             return None
     
     def passes_basic_filters(self, info: Dict) -> bool:
@@ -457,7 +477,7 @@ class UniverseScreener:
             ticker = yf.Ticker(symbol)
             
             # Get 1 year of daily data
-            hist = ticker.history(period="1y")
+            hist = self._run_market_data_quietly(ticker.history, period="1y")
             
             if hist.empty or len(hist) < 50:
                 return {'symbol': symbol, 'error': 'Insufficient data'}
@@ -539,6 +559,8 @@ class UniverseScreener:
         """
         if symbols is None:
             symbols = self.get_universe()
+        else:
+            symbols = self._dedupe_symbols(symbols)
         
         if verbose:
             print(f"🔍 Screening {len(symbols)} stocks...")

@@ -8,6 +8,7 @@ from nightly_discovery import build_report, format_report
 
 class _FakeAdvisor:
     def __init__(self):
+        self.last_nightly_symbols = None
         self.screener = SimpleNamespace(
             get_universe_for_profile=lambda profile, refresh_sp500=False: ["AAPL", "MSFT", "NVDA", "COIN"],
             get_universe=lambda: ["AAPL", "MSFT", "NVDA", "COIN"],
@@ -16,7 +17,14 @@ class _FakeAdvisor:
     def get_market_status(self, refresh: bool = False):
         return SimpleNamespace(regime=SimpleNamespace(value="confirmed_uptrend"), position_sizing=1.0)
 
-    def run_nightly_discovery(self, limit: int = 25, min_technical_score: int = 3, refresh_sp500: bool = False):
+    def run_nightly_discovery(
+        self,
+        limit: int = 25,
+        min_technical_score: int = 3,
+        refresh_sp500: bool = False,
+        symbols=None,
+    ):
+        self.last_nightly_symbols = list(symbols or [])
         return pd.DataFrame(
             [
                 {
@@ -42,7 +50,8 @@ class _FakeAdvisor:
 
 
 def test_build_report_uses_nightly_profile_and_formats_leaders():
-    with patch("nightly_discovery.TradingAdvisor", return_value=_FakeAdvisor()), patch(
+    fake_advisor = _FakeAdvisor()
+    with patch("nightly_discovery.TradingAdvisor", return_value=fake_advisor), patch(
         "nightly_discovery.RankedUniverseSelector.refresh_cache",
         return_value={
             "generated_at": "2026-03-14T09:00:00+00:00",
@@ -76,6 +85,7 @@ def test_build_report_uses_nightly_profile_and_formats_leaders():
     assert report["feature_snapshot"]["symbol_count"] == 1
     assert report["liquidity_overlay"]["symbol_count"] == 1
     assert report["liquidity_overlay"]["summary"]["median_estimated_slippage_bps"] == 11.2
+    assert fake_advisor.last_nightly_symbols == ["AAPL", "MSFT", "NVDA", "COIN"]
 
 
 def test_format_report_renders_compact_nightly_summary():

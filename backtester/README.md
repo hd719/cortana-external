@@ -13,26 +13,30 @@ This repo now includes a practical multi-wave market-intelligence stack layered 
 If you just cloned the repo and want to run the backtester yourself, do this first:
 
 ```bash
+# Install uv once if needed
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
 cd /Users/hd/Developer/cortana-external/backtester
-python3 -m venv .venv
+uv python install
+uv venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+uv pip sync requirements.txt
 ```
 
 Then start with these commands:
 
 ```bash
 # 1. Check the overall market state
-python advisor.py --market
+uv run python advisor.py --market
 
 # 2. Analyze one stock
-python advisor.py --symbol NVDA
+uv run python advisor.py --symbol NVDA
 
 # 3. Quick verdict for a stock, proxy, or coin
-python advisor.py --quick-check BTC
+uv run python advisor.py --quick-check BTC
 
 # 4. Run the legacy backtest entrypoint
-python main.py --symbol NVDA --years 2 --compare
+uv run python main.py --symbol NVDA --years 2 --compare
 ```
 
 If you also want the Polymarket context layer:
@@ -47,9 +51,8 @@ Then come back to the Python side:
 
 ```bash
 cd /Users/hd/Developer/cortana-external/backtester
-source .venv/bin/activate
-python canslim_alert.py --limit 8 --min-score 6
-python dipbuyer_alert.py --limit 8 --min-score 6
+uv run python canslim_alert.py --limit 8 --min-score 6
+uv run python dipbuyer_alert.py --limit 8 --min-score 6
 ```
 
 Important notes:
@@ -115,82 +118,81 @@ Usually this is the split:
 
 Automatic / cron-friendly:
 - `./tools/market-intel/run_market_intel.sh`
-- `python canslim_alert.py --limit 8 --min-score 6`
-- `python dipbuyer_alert.py --limit 8 --min-score 6`
-- `python nightly_discovery.py --limit 20`
+- `uv run python canslim_alert.py --limit 8 --min-score 6`
+- `uv run python dipbuyer_alert.py --limit 8 --min-score 6`
+- `uv run python nightly_discovery.py --limit 20`
 
 Manual / operator-driven:
-- `python advisor.py --market`
-- `python advisor.py --symbol NVDA`
-- `python advisor.py --quick-check BTC`
-- `python main.py --symbol NVDA --years 2 --compare`
-- `python experimental_alpha.py --symbols NVDA,BTC,COIN`
-- `python buy_decision_calibration.py`
+- `uv run python advisor.py --market`
+- `uv run python advisor.py --symbol NVDA`
+- `uv run python advisor.py --quick-check BTC`
+- `uv run python main.py --symbol NVDA --years 2 --compare`
+- `uv run python experimental_alpha.py --symbols NVDA,BTC,COIN`
+- `uv run python buy_decision_calibration.py`
 
 ## What Each Command Is For
 
 Use these questions:
 
 - "What is the market environment right now?"
-  Run `python advisor.py --market`
+  Run `uv run python advisor.py --market`
 
 - "Is this single stock or coin worth looking at?"
-  Run `python advisor.py --quick-check NVDA`
-  Run `python advisor.py --quick-check BTC`
+  Run `uv run python advisor.py --quick-check NVDA`
+  Run `uv run python advisor.py --quick-check BTC`
 
 - "Give me the fuller explanation for one stock."
-  Run `python advisor.py --symbol NVDA`
+  Run `uv run python advisor.py --symbol NVDA`
 
 - "Give me the compact daily stock summary."
-  Run `python canslim_alert.py --limit 8 --min-score 6`
+  Run `uv run python canslim_alert.py --limit 8 --min-score 6`
 
 - "Give me the compact dip-buying summary."
-  Run `python dipbuyer_alert.py --limit 8 --min-score 6`
+  Run `uv run python dipbuyer_alert.py --limit 8 --min-score 6`
 
 - "Show me what the old-style backtest says over 2 years."
-  Run `python main.py --symbol NVDA --years 2 --compare`
+  Run `uv run python main.py --symbol NVDA --years 2 --compare`
 
 - "Show me more names overnight without slowing the daytime loop."
-  Run `python nightly_discovery.py --limit 20`
+  Run `uv run python nightly_discovery.py --limit 20 --skip-live-prefilter-refresh`
 
 - "Test research math in paper-only mode."
-  Run `python experimental_alpha.py --symbols NVDA,BTC,COIN`
+  Run `uv run python experimental_alpha.py --symbols NVDA,BTC,COIN`
 
 - "Show me how reliable the recent research buckets have been."
-  Run `python buy_decision_calibration.py --json`
+  Run `uv run python buy_decision_calibration.py --json`
 
 ## Quick Start
 
 ```bash
 cd ~/Developer/cortana-external/backtester
-source venv/bin/activate
 
 # Check market status
-python advisor.py --market
+uv run python advisor.py --market
 
 # Analyze a specific stock
-python advisor.py --symbol NVDA
+uv run python advisor.py --symbol NVDA
 
 # Fast stock / coin / proxy verdict
-python advisor.py --quick-check BTC
+uv run python advisor.py --quick-check BTC
 
 # Experimental paper-only alpha report
-python experimental_alpha.py --symbols NVDA,BTC,COIN
+uv run python experimental_alpha.py --symbols NVDA,BTC,COIN
 
-# Broader nightly discovery scan
-python nightly_discovery.py --limit 20
+# Broader nightly discovery scan without refreshing the live prefilter cache
+uv run python nightly_discovery.py --limit 20 --skip-live-prefilter-refresh
 
 # Advisory calibration artifact from settled research outcomes
-python buy_decision_calibration.py
+uv run python buy_decision_calibration.py
 
 # Quick scan for opportunities (watchlist)
-python advisor.py --quick
+uv run python advisor.py --quick
 
 # Telegram-ready CANSLIM alert summary
-python canslim_alert.py --limit 8 --min-score 6
+uv run python canslim_alert.py --limit 8 --min-score 6
 
 # Run a backtest
-python main.py --symbol AAPL --years 2 --compare
+uv run python main.py --symbol AAPL --years 2 --compare
 ```
 
 Backtest data path:
@@ -230,7 +232,7 @@ Production-safe buy-decision inputs are file-backed and read-only in the daytime
   - `/Users/hd/Developer/cortana-external/backtester/.cache/experimental_alpha/calibration/buy-decision-calibration-latest.json`
   - `/Users/hd/Developer/cortana-external/backtester/data/cache/overlay-attribution-latest.json`
   - `/Users/hd/Developer/cortana-external/backtester/data/cache/overlay-promotion-state.json`
-  - produced by `python buy_decision_calibration.py` and `experimental_alpha.py --overlay-attribution --evaluate-promotions`
+  - produced by `uv run python buy_decision_calibration.py` and `uv run python experimental_alpha.py --overlay-attribution --evaluate-promotions`
 
 Freshness and fallback:
 
@@ -244,17 +246,21 @@ Short workflow:
 1. Nightly/pre-market refresh feature/liquidity snapshots:
 ```bash
 cd /Users/hd/Developer/cortana-external/backtester
-python nightly_discovery.py --limit 20
+uv run python nightly_discovery.py --limit 20
+```
+If you only want the report and do not want to refresh the live prefilter cache in that run:
+```bash
+uv run python nightly_discovery.py --limit 20 --skip-live-prefilter-refresh
 ```
 2. Daytime live scans consume snapshots (or deterministic fallback if stale/missing):
 ```bash
-python canslim_alert.py --limit 8 --min-score 6
-python dipbuyer_alert.py --limit 8 --min-score 6
+uv run python canslim_alert.py --limit 8 --min-score 6
+uv run python dipbuyer_alert.py --limit 8 --min-score 6
 ```
 3. Optional research calibration/promotion context refresh:
 ```bash
-python buy_decision_calibration.py
-python experimental_alpha.py --settle --overlay-attribution --evaluate-promotions
+uv run python buy_decision_calibration.py
+uv run python experimental_alpha.py --settle --overlay-attribution --evaluate-promotions
 ```
 
 ## Daily Flow
@@ -288,19 +294,19 @@ Simple example:
 2. check the market regime
 ```bash
 cd /Users/hd/Developer/cortana-external/backtester
-python advisor.py --market
+uv run python advisor.py --market
 ```
 
 3. read the compact daytime summaries
 ```bash
-python canslim_alert.py --limit 8 --min-score 6
-python dipbuyer_alert.py --limit 8 --min-score 6
+uv run python canslim_alert.py --limit 8 --min-score 6
+uv run python dipbuyer_alert.py --limit 8 --min-score 6
 ```
 
 4. deep-dive one name if needed
 ```bash
-python advisor.py --symbol NVDA
-python advisor.py --quick-check BTC
+uv run python advisor.py --symbol NVDA
+uv run python advisor.py --quick-check BTC
 ```
 
 What this means in plain English:
@@ -327,7 +333,7 @@ Typical nightly command:
 
 ```bash
 cd /Users/hd/Developer/cortana-external/backtester
-python nightly_discovery.py --limit 20
+uv run python nightly_discovery.py --limit 20
 ```
 
 What it does:
@@ -393,11 +399,11 @@ Simple example:
 
 Use the surfaces in this order when you are reviewing the stack end to end:
 - `./tools/market-intel/run_market_intel.sh` refreshes the Python regime snapshot first, then rebuilds and verifies the external Polymarket context consumed by the Python alerts.
-- `python advisor.py --market` checks the regime gate and sizing posture before you read any single-name output.
-- `python advisor.py --symbol NVDA` is the fastest single-name diagnostic when you want factor detail plus the current recommendation.
-- `python advisor.py --quick-check BTC` is the fast verdict path for a stock, crypto proxy, or direct crypto alias when you want one bounded answer without reading the full alert.
-- `python quick_check_batch.py --symbols AAPL,MSFT,COIN` is the bounded batch surface for cron/operator re-checks of the current `BUY/WATCH` basket.
-- `python canslim_alert.py --limit 8 --min-score 6` and `python dipbuyer_alert.py --limit 8 --min-score 6` generate the compact operator summaries used for daily review.
+- `uv run python advisor.py --market` checks the regime gate and sizing posture before you read any single-name output.
+- `uv run python advisor.py --symbol NVDA` is the fastest single-name diagnostic when you want factor detail plus the current recommendation.
+- `uv run python advisor.py --quick-check BTC` is the fast verdict path for a stock, crypto proxy, or direct crypto alias when you want one bounded answer without reading the full alert.
+- `uv run python quick_check_batch.py --symbols AAPL,MSFT,COIN` is the bounded batch surface for cron/operator re-checks of the current `BUY/WATCH` basket.
+- `uv run python canslim_alert.py --limit 8 --min-score 6` and `uv run python dipbuyer_alert.py --limit 8 --min-score 6` generate the compact operator summaries used for daily review.
 - `TradingAdvisor().compare_model_families(...)["report"]` is the review surface for Wave 4 model-family deltas, restraint metrics, and review slices.
 
 When Polymarket context is available, the alert surface now gives you:
@@ -420,8 +426,9 @@ Use it when you want wider overnight coverage without slowing the daytime alert 
 
 ```bash
 cd /Users/hd/Developer/cortana-external/backtester
-python nightly_discovery.py --limit 20
-python nightly_discovery.py --limit 30 --refresh-sp500 --json
+uv run python nightly_discovery.py --limit 20 --skip-live-prefilter-refresh
+uv run python nightly_discovery.py --limit 30 --refresh-sp500 --json
+uv run python nightly_discovery.py --limit 20
 ```
 
 What it does:
@@ -443,7 +450,8 @@ What it does not do:
 
 Recommended use:
 - keep the live alert path on the current `standard` universe
-- schedule `python nightly_discovery.py --limit 20` after market close or overnight
+- use `uv run python nightly_discovery.py --limit 20 --skip-live-prefilter-refresh` for a bounded operator report
+- schedule `uv run python nightly_discovery.py --limit 20` after market close or overnight when you also want to refresh the live prefilter cache
 - let that nightly job refresh the live prefilter cache for the next session
 - review the nightly leaders the next morning and let only the best names graduate into the normal operator workflow
 
@@ -467,11 +475,11 @@ Run it manually:
 
 ```bash
 cd /Users/hd/Developer/cortana-external/backtester
-python experimental_alpha.py --symbols NVDA,BTC,COIN
-python experimental_alpha.py --json
-python experimental_alpha.py --persist
-python experimental_alpha.py --settle
-python experimental_alpha.py --calibrate --minimum-samples 20
+uv run python experimental_alpha.py --symbols NVDA,BTC,COIN
+uv run python experimental_alpha.py --json
+uv run python experimental_alpha.py --persist
+uv run python experimental_alpha.py --settle
+uv run python experimental_alpha.py --calibrate --minimum-samples 20
 ```
 
 Guardrails:
@@ -480,11 +488,11 @@ Guardrails:
 - do not route this into the production buy/no-buy path without separate validation
 
 Execution-readiness research workflow:
-1. `python experimental_alpha.py --persist`
+1. `uv run python experimental_alpha.py --persist`
    This snapshots the current paper candidates under `.cache/experimental_alpha/snapshots/`.
-2. `python experimental_alpha.py --settle`
+2. `uv run python experimental_alpha.py --settle`
    This settles prior snapshots against later market data and writes forward returns under `.cache/experimental_alpha/settled/`.
-3. `python experimental_alpha.py --calibrate --minimum-samples 20`
+3. `uv run python experimental_alpha.py --calibrate --minimum-samples 20`
    This builds the calibration and promotion-gate report from the settled sample set.
    It now also reports 5d overlay slices for repeated buckets (`n>=2`) so you can review
    whether specific risk-budget or execution-quality states are helping or hurting.
@@ -504,7 +512,7 @@ When experimental alpha can be promoted:
 - It stays paper-only by default. No production promotion happens just because the report looks good for a few days.
 - The first eligible promotion target is a bounded annotation layer, not direct trade authority. In practice that means watchlist priority, quick-check commentary, or a small conviction modifier inside the existing Python regime/technical engine.
 - Promotion is only allowed when all of the following are true:
-  1. `python experimental_alpha.py --calibrate --minimum-samples 20` returns `Promotion gate: ready`
+  1. `uv run python experimental_alpha.py --calibrate --minimum-samples 20` returns `Promotion gate: ready`
   2. the settled sample includes at least `20` `paper_long` candidates
   3. `paper_long` 5d hit rate is at least `55%`
   4. `paper_long` average 5d return is at least `+1.0%`
@@ -525,7 +533,7 @@ When experimental alpha can be promoted:
 Example report command:
 
 ```bash
-python - <<'PY'
+uv run python - <<'PY'
 from advisor import TradingAdvisor
 
 report = TradingAdvisor().compare_model_families(quick=True, min_score=6, top_n=5)["report"]
@@ -715,7 +723,10 @@ If FRED fails after retries, the system now reports fallback explicitly:
 ## Dependencies
 
 ```bash
-pip install -r requirements.txt
+cd /Users/hd/Developer/cortana-external/backtester
+uv venv .venv
+source .venv/bin/activate
+uv pip sync requirements.txt
 ```
 
 Key packages:
@@ -727,16 +738,18 @@ Key packages:
 ## Development
 
 ```bash
-# Activate venv
-source venv/bin/activate
+# One-time setup (or after requirements changes)
+uv venv .venv
+source .venv/bin/activate
+uv pip sync requirements.txt
 
 # Run tests
-python data/fundamentals.py
-python data/market_regime.py
-python strategies/canslim.py
+uv run python data/fundamentals.py
+uv run python data/market_regime.py
+uv run python strategies/canslim.py
 
 # Full backtest
-python main.py --symbol AAPL --years 2 --strategy momentum
+uv run python main.py --symbol AAPL --years 2 --strategy momentum
 ```
 
 ## Phase Status (per PRD)
