@@ -7,11 +7,11 @@ Polymarket posture: conviction conflicting | aggression lean more selective | di
 Polymarket focus: overlap AMD, MSFT, NVDA (+2 more) | early IWM, QQQ | crypto COIN, HOOD, MARA (+4 more)
 Risk budget: remaining 0% | cap 0% | aggression lean more selective | note market regime correction
 Execution quality: quality good | liquidity high | slippage high | good liquidity | high | slippage high (187.4bps)
-Universe selection: 20 pinned | 100 ranked | source cache | cache age 1.1h
+Universe selection: 20 pinned | 100 ranked | source cache | cache age 1.2h
 Qualified setups: 120 of 120 scanned | BUY 0 | WATCH 8
-Watch names (regime-blocked buys): IBRX, CRUS, ENPH, LRCX, PCVX, SLB, ALGN, AMAT
-Correction gate: 8 dip setups surfaced but are downgraded to WATCH while the market stays defensive
-Top leaders: IBRX WATCH (9/12) 🐦 Neutral | CRUS WATCH (8/12) 🐦 Neutral | ENPH WATCH (8/12) 🐦 Neutral
+Watch names (regime-blocked buys): CRUS, ENPH, PCVX, SLB, ALGN, AMAT, ODFL, CFLT
+Correction gate: 7 dip setups surfaced but are downgraded to WATCH while the market stays defensive
+Top leaders: CRUS WATCH (8/12) 🐦 Neutral | ENPH WATCH (8/12) 🐦 Neutral | PCVX WATCH (7/12) 🐦 Neutral
 Decision review: BUY 0 | WATCH 8 | NO_BUY 0
 Tuning balance: clean BUY 0 | risky BUY proxy 0 | abstain 0 | veto 0 | higher-tq restraint proxy n/a
 Final action: WATCH only — correction regime blocks new dip buys (Regime score -7: 6 distribution days and -6.1% drawdown. Stay defensive)

@@ -1,0 +1,13 @@
+CANSLIM Scan
+Market: correction — no new positions
+Polymarket: Fed easing odds 66% (0 pts/24h); US recession odds 35% (0 pts/24h); Geopolitical escalation risk 11% (0 pts/24h)
+Overlay: Risk-on conflict — Polymarket is leaning risk-on, but the current equity regime is not fully supportive.
+Posture: Conflicting | lean more selective | Divergence watch
+Polymarket posture: conviction conflicting | aggression lean more selective | divergence divergence watch
+Polymarket focus: overlap AMD, MSFT, NVDA (+2 more) | early IWM, QQQ | crypto COIN, HOOD, MARA (+4 more)
+Risk budget: remaining 0% | cap 0% | aggression lean more selective | note market regime correction
+Execution quality: quality good | liquidity high | slippage high | good liquidity | high | slippage high (187.4bps)
+Universe selection: 20 pinned | 100 ranked | source cache | cache age 2.3h
+Scanned 120 | market gate active | 0 BUY | 0 WATCH
+Top names considered: OXY, APA, GEV
+Why no buys: Regime score -7: 6 distribution days and -6.5% drawdown. Stay defensive

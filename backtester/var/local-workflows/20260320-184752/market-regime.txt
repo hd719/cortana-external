@@ -1,0 +1,23 @@
+
+╔═════════════════════════════════════════════════════════════════════════════════╗
+║ MARKET STATUS (M Factor)                                                        ║
+╠═════════════════════════════════════════════════════════════════════════════════╣
+║ Regime: 🔴 CORRECTION                                                           ║
+║ Data Status: OK (yahoo)                                                         ║
+║ Distribution Days (25d): 6                                                      ║
+║ Last Follow-Through: None recent                                                ║
+║ Trend: down                                                                     ║
+║ Position Sizing: 0%                                                             ║
+║ Regime Score: -7 | Drawdown: -6.5% | 20d Return: -6.0%                          ║
+║                                                                                 ║
+║ Notes: Regime score -7: 6 distribution days and -6.5% drawdown. Stay defensive. ║
+╚═════════════════════════════════════════════════════════════════════════════════╝
+
+📉 Distribution Days:
+      Date
+2026-02-26
+2026-02-27
+2026-03-03
+2026-03-05
+2026-03-12
+2026-03-19

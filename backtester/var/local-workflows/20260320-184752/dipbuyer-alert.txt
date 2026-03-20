@@ -1,0 +1,19 @@
+Dip Buyer Scan
+
+Takeaway
+- Market: correction
+- Macro: Risk-on conflict — Polymarket is leaning risk-on, but the current equity regime is not fully supportive.
+- Polymarket snapshot: Fed easing odds 66% (0 pts/24h); US recession odds 35% (0 pts/24h); Geopolitical escalation risk 11% (0 pts/24h)
+- Risk: remaining risk budget 0% | exposure cap 0% | market regime correction
+- Trading conditions: quality good | liquidity high | slippage high
+- Scan input: 20 pinned + 100 ranked names | source cache | cache age 2.3h
+
+Decision
+- Qualified setups: 120 of 120 scanned | BUY 0 | WATCH 8
+- Watchlist: (regime-blocked buys): CRUS, SLB, ODFL, CFLT, GOOGL, EXAS, PWR, FIVE
+- Correction gate: 3 dip setups surfaced but are downgraded to WATCH while the market stays defensive
+- Top leaders: CRUS WATCH (8/12) 🐦 Neutral | SLB WATCH (7/12) 🐦 Neutral | ODFL WATCH (7/12) 🐦 Neutral
+- Decision review: BUY 0 | WATCH 8 | NO_BUY 0
+- Tuning balance: clean BUY 0 | risky BUY proxy 0 | abstain 0 | veto 0 | higher-tq restraint proxy n/a
+- Final action: WATCH only — correction regime blocks new dip buys (Regime score -6: 6 distribution days and 0.0% drawdown. Stay defensive)
+- Leader-bucket overlap: monthly PWR

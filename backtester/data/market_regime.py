@@ -299,6 +299,16 @@ class MarketRegimeDetector:
             return "down"
         return "sideways"
 
+    @staticmethod
+    def _safe_pct(value: float | int | None) -> float:
+        try:
+            numeric = float(value)
+        except (TypeError, ValueError):
+            return 0.0
+        if not np.isfinite(numeric):
+            return 0.0
+        return numeric
+
     def build_regime_scorecard(self) -> RegimeScorecard:
         """Build a reusable scorecard from recent index internals."""
         if self._data is None:
@@ -310,14 +320,14 @@ class MarketRegimeDetector:
         sma_50 = float(close.rolling(50, min_periods=10).mean().iloc[-1])
 
         recent_high = float(close.rolling(20, min_periods=5).max().iloc[-1])
-        drawdown_pct = ((current / recent_high) - 1) * 100 if recent_high else 0.0
+        drawdown_pct = self._safe_pct(((current / recent_high) - 1) * 100 if recent_high else 0.0)
 
         lookback_offset = min(20, len(close) - 1)
         recent_base = float(close.iloc[-1 - lookback_offset]) if lookback_offset > 0 else current
-        recent_return_pct = ((current / recent_base) - 1) * 100 if recent_base else 0.0
+        recent_return_pct = self._safe_pct(((current / recent_base) - 1) * 100 if recent_base else 0.0)
 
-        price_vs_21d_pct = ((current / sma_21) - 1) * 100 if sma_21 else 0.0
-        price_vs_50d_pct = ((current / sma_50) - 1) * 100 if sma_50 else 0.0
+        price_vs_21d_pct = self._safe_pct(((current / sma_21) - 1) * 100 if sma_21 else 0.0)
+        price_vs_50d_pct = self._safe_pct(((current / sma_50) - 1) * 100 if sma_50 else 0.0)
 
         distribution_days = len(self._distribution_days) if self._distribution_days else len(self.count_distribution_days(25))
         ftd_dates = self._ftd_dates if self._ftd_dates else self.find_follow_through_days(60)

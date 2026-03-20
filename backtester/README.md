@@ -11,6 +11,7 @@ This README is the operator manual.
 
 Use the study guide when you want to understand the system conceptually:
 - [Backtester Study Guide](./docs/backtester-study-guide.md)
+- [Roadmap](./docs/roadmap.md)
 
 Other useful docs:
 - [Polymarket + backtester flow](./docs/polymarket-backtester-flow.md)
@@ -120,6 +121,36 @@ NIGHTLY_LIMIT=30 ./scripts/nighttime_flow.sh
 
 # Pick which leader-bucket window feeds soft priority
 TRADING_LEADER_BASKET_PRIORITY_WINDOW=weekly ./scripts/daytime_flow.sh
+```
+
+## When To Run Each Script
+
+Use this as the default operator cadence:
+
+- `./scripts/daytime_flow.sh`
+  - run during market hours when you want the current regime, live bucket context, CANSLIM, Dip Buyer, and a quick-check in one local view
+  - best for `pre-market`, `morning`, `midday`, or `late afternoon` spot checks
+- `./scripts/nighttime_flow.sh`
+  - run after market close or overnight
+  - use it to refresh the next day’s inputs, rebuild leader buckets, and persist nightly research artifacts
+- `./scripts/backtest_flow.sh`
+  - run when you want to test a strategy on past data instead of reading the live operator flow
+  - best for idea validation, not live decisions
+- `./scripts/experimental_report_flow.sh`
+  - run only when you want extra paper-only research ideas for a custom basket
+  - this is optional and not required for the core daily workflow
+- `./scripts/experimental_maintenance_flow.sh`
+  - run occasionally, usually overnight or before market open, when you want to settle old paper ideas and refresh calibration research
+  - not required every time you use the daytime flow
+
+Simple routine:
+
+```bash
+# After market close or overnight
+./scripts/nighttime_flow.sh
+
+# During the next trading day
+./scripts/daytime_flow.sh
 ```
 
 ## Daily Workflow

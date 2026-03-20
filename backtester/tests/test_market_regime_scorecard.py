@@ -64,3 +64,22 @@ def test_scorecard_classifies_correction_from_downtrend_and_drawdown():
     assert status.regime == MarketRegime.CORRECTION
     assert status.regime_score <= -2
     assert status.drawdown_pct <= -8.0
+
+
+def test_scorecard_sanitizes_nan_rolling_metrics():
+    idx = pd.date_range("2026-01-02", periods=4, freq="B")
+    frame = pd.DataFrame(
+        {
+            "Close": [100.0, 99.0, 98.0, 97.0],
+            "Volume": [1_000_000, 1_100_000, 1_200_000, 1_300_000],
+        },
+        index=idx,
+    )
+
+    status = _status_for_frame(frame)
+
+    assert np.isfinite(status.drawdown_pct)
+    assert np.isfinite(status.recent_return_pct)
+    assert np.isfinite(status.price_vs_21d_pct)
+    assert np.isfinite(status.price_vs_50d_pct)
+    assert "nan%" not in status.notes.lower()

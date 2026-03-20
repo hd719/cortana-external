@@ -1,0 +1,15 @@
+CANSLIM Scan
+
+Takeaway
+- Market: correction — no new positions
+- Macro: Risk-on conflict — Polymarket is leaning risk-on, but the current equity regime is not fully supportive.
+- Polymarket snapshot: Fed easing odds 66% (0 pts/24h); US recession odds 35% (0 pts/24h); Geopolitical escalation risk 11% (0 pts/24h)
+- Risk: remaining risk budget 0% | exposure cap 0% | market regime correction
+- Trading conditions: quality good | liquidity high | slippage high
+- Scan input: 20 pinned + 100 ranked names | source cache | cache age 1.2h
+
+Decision
+- Scan result: Scanned 120 | market gate active | 0 BUY | 0 WATCH
+- Top names considered: OXY, APA, GEV
+- Why no buys: Regime score -7: 6 distribution days and -6.1% drawdown. Stay defensive
+- Leader-bucket overlap: priority OXY, APA, GEV | daily OXY, APA, GEV | weekly OXY, APA, GEV | monthly OXY, APA, GEV

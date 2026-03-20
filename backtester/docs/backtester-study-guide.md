@@ -2,6 +2,9 @@
 
 This is a plain-English learning doc for understanding the backtester from the ground up.
 
+For the operating plan and next implementation phases, use:
+- [Roadmap](./roadmap.md)
+
 The goal is to understand the system in the order it actually thinks:
 
 1. find stocks
@@ -22,6 +25,31 @@ flowchart LR
     C --> D["4. Decide: BUY / WATCH / NO_BUY"]
     D --> E["5. Send alert"]
     D --> F["6. Save history so we can learn later"]
+```
+
+### When To Run What
+
+Simple operator cadence:
+
+- `daytime_flow.sh`
+  - run during market hours when you want the live operator view
+- `nighttime_flow.sh`
+  - run after market close or overnight to refresh tomorrow’s inputs
+- `backtest_flow.sh`
+  - run when you want historical strategy testing, not live trade guidance
+- `experimental_report_flow.sh`
+  - run only when you want optional paper-only research ideas
+- `experimental_maintenance_flow.sh`
+  - run occasionally to settle old research snapshots and refresh calibration artifacts
+
+Default routine:
+
+```bash
+# Night before / after close
+./scripts/nighttime_flow.sh
+
+# Next trading day
+./scripts/daytime_flow.sh
 ```
 
 ## Core Trading Flow
