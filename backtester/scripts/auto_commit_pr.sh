@@ -28,7 +28,12 @@ auto_commit_pr() {
   git -C "${repo_root}" push -u origin "${branch}"
 
   local repo_slug
-  repo_slug="$(git -C "${repo_root}" remote get-url origin | sed -E 's#.*[:/]([^/]+/[^/]+?)(\.git)?$#\1#')"
+  repo_slug="$(git -C "${repo_root}" remote get-url origin | sed 's/\.git$//' | sed 's#.*[:/]##' | sed 's#^/*##')"
+
+  # Return to original branch first so PR creation doesn't block checkout
+  git -C "${repo_root}" checkout "${original_branch}"
+  # Remove untracked files that are now on the PR branch
+  git -C "${repo_root}" clean -fd backtester/var/local-workflows/"${run_stamp}" 2>/dev/null || true
 
   gh pr create \
     --repo "${repo_slug}" \
@@ -36,11 +41,6 @@ auto_commit_pr() {
     --base "${original_branch}" \
     --title "backtester: ${flow_name} ${run_stamp}" \
     --body "Automated ${flow_name} flow run outputs."
-
-  # Return to original branch with a clean tree
-  git -C "${repo_root}" checkout "${original_branch}"
-  # Remove untracked files that are now on the PR branch
-  git -C "${repo_root}" clean -fd backtester/var/local-workflows/"${run_stamp}" 2>/dev/null || true
 
   echo "PR created. Working tree is clean."
 }
