@@ -247,6 +247,8 @@ Operational notes:
 - the streamer keeps a bounded subscription registry for active quote/chart symbols and resubscribes them after reconnects
 - the streamer also runs periodic `VIEW` reconciliation so the Schwab field set stays aligned with the intended quote/chart subscriptions
 - documented Schwab failure codes like `LOGIN_DENIED`, `STREAM_CONN_NOT_FOUND`, and `STOP_STREAMING` are now handled explicitly instead of only surfacing as generic reconnect noise
+- Postgres-backed shared streamer state now propagates with `LISTEN/NOTIFY` so follower instances react to quote/chart updates faster than file polling
+- `/market-data/ops` and `/market-data/universe/audit` provide a compact operator surface for streamer role, lock ownership, health, source/fallback mix, and universe artifact refresh history
 - token refresh is single-flight inside TS so concurrent Schwab requests do not stampede the refresh endpoint
 - base-universe refresh is no longer just a Python static-seed copy; TS can prefer a configured remote or local JSON universe source and only fall back to the Python seed when needed
 - recommended production shape is now:

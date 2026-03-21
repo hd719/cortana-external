@@ -442,6 +442,42 @@ describe("market-data routes", () => {
     expect(result.body.data.symbols).toEqual(["NVDA", "GOOGL"]);
   });
 
+  it("surfaces operator metrics and universe audit entries", async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "market-data-ops-"));
+    const app = new Hono();
+    const service = new MarketDataService({
+      config: {
+        ...TEST_CONFIG,
+        MARKET_DATA_CACHE_DIR: tempDir,
+        SCHWAB_CLIENT_ID: "",
+        SCHWAB_CLIENT_SECRET: "",
+        SCHWAB_REFRESH_TOKEN: "",
+      },
+    });
+    registerMarketDataRoutes(app, service);
+
+    await service.handleUniverseRefresh();
+
+    const opsResponse = await app.request("/market-data/ops");
+    const opsBody = (await opsResponse.json()) as {
+      data: {
+        providerMetrics: { lastSuccessfulUniverseRefreshAt: string | null };
+        universe: { latest: { source: string } | null; audit: Array<{ symbolCount: number }> };
+      };
+    };
+    const auditResponse = await app.request("/market-data/universe/audit?limit=1");
+    const auditBody = (await auditResponse.json()) as { data: { entries: Array<{ source: string; symbolCount: number }> } };
+
+    expect(opsResponse.status).toBe(200);
+    expect(opsBody.data.providerMetrics.lastSuccessfulUniverseRefreshAt).toBeTruthy();
+    expect(opsBody.data.universe.latest?.source).toBe("static_python_seed");
+    expect(opsBody.data.universe.audit[0]?.symbolCount).toBeGreaterThan(300);
+
+    expect(auditResponse.status).toBe(200);
+    expect(auditBody.data.entries).toHaveLength(1);
+    expect(auditBody.data.entries[0]?.source).toBe("static_python_seed");
+  });
+
   it("reads streamer-backed quote state from the shared state file in follower mode", async () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "market-data-streamer-state-"));
     const sharedStatePath = path.join(tempDir, "streamer-state.json");

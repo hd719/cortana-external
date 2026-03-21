@@ -77,6 +77,25 @@ interface SubscriptionEntry {
   active: boolean;
 }
 
+interface PendingRequestMeta {
+  service: string;
+  command: string;
+  symbols: string[];
+  fields: string | null;
+  requestedAt: number;
+}
+
+interface StreamerServiceReconciliation {
+  intendedSymbols: number;
+  activeSymbols: number;
+  confirmedSymbols: number;
+  symbolDriftCount: number;
+  requestedFields: string | null;
+  confirmedFields: string | null;
+  fieldsMatch: boolean;
+  lastAckAt: string | null;
+}
+
 interface SharedCachedQuote {
   quote: MarketDataQuote;
   receivedAt: string;
@@ -99,10 +118,13 @@ export interface SchwabStreamerHealth {
   reconnectFailureStreak: number;
   lastFailureCode: number | null;
   lastFailureMessage: string | null;
+  failurePolicy: string | null;
+  reconnectSuppressed: boolean;
   nextReconnectAt: string | null;
   lastViewReconciliationAt: string | null;
   activeSubscriptions: Record<string, number>;
   requestedSubscriptions: Record<string, number>;
+  reconciliation: Record<string, StreamerServiceReconciliation>;
   staleSymbolCount: number;
   messageRatePerMinute: number;
   stale: boolean;
@@ -145,6 +167,19 @@ export class SchwabStreamerSession {
   };
   private readonly quoteCache = new Map<string, CachedQuote>();
   private readonly chartCache = new Map<string, CachedChartPoint>();
+  private readonly pendingRequests = new Map<string, PendingRequestMeta>();
+  private readonly confirmedSubscriptions: Record<StreamerServiceName, Set<string>> = {
+    [STREAMER_SERVICES.LEVELONE_EQUITIES]: new Set(),
+    [STREAMER_SERVICES.CHART_EQUITY]: new Set(),
+  };
+  private readonly confirmedFields: Record<StreamerServiceName, string | null> = {
+    [STREAMER_SERVICES.LEVELONE_EQUITIES]: null,
+    [STREAMER_SERVICES.CHART_EQUITY]: null,
+  };
+  private readonly lastAckAtByService: Record<StreamerServiceName, number> = {
+    [STREAMER_SERVICES.LEVELONE_EQUITIES]: 0,
+    [STREAMER_SERVICES.CHART_EQUITY]: 0,
+  };
   private readonly messageTimestamps: number[] = [];
   private lastMessageAt = 0;
   private lastHeartbeatAt = 0;
@@ -155,6 +190,8 @@ export class SchwabStreamerSession {
   private reconnectFailureStreak = 0;
   private lastFailureCode: number | null = null;
   private lastFailureMessage: string | null = null;
+  private failurePolicy: string | null = null;
+  private reconnectSuppressed = false;
   private nextReconnectAt = 0;
   private lastViewReconciliationAt = 0;
   private requestCounter = 0;
@@ -261,12 +298,15 @@ export class SchwabStreamerSession {
       reconnectFailureStreak: this.reconnectFailureStreak,
       lastFailureCode: this.lastFailureCode,
       lastFailureMessage: this.lastFailureMessage,
+      failurePolicy: this.failurePolicy,
+      reconnectSuppressed: this.reconnectSuppressed,
       nextReconnectAt: this.nextReconnectAt ? new Date(this.nextReconnectAt).toISOString() : null,
       lastViewReconciliationAt: this.lastViewReconciliationAt
         ? new Date(this.lastViewReconciliationAt).toISOString()
         : null,
       activeSubscriptions,
       requestedSubscriptions,
+      reconciliation: this.buildReconciliationSnapshot(),
       staleSymbolCount: this.countStaleSymbols(),
       messageRatePerMinute: this.currentMessageRatePerMinute(),
       stale: this.isStale(),
@@ -304,6 +344,9 @@ export class SchwabStreamerSession {
   }
 
   private async ensureConnected(): Promise<void> {
+    if (this.reconnectSuppressed) {
+      throw new Error(`Schwab streamer reconnect suppressed (${this.failurePolicy ?? "unknown policy"})`);
+    }
     if (this.ws && this.ws.readyState === 1 && !this.isStale()) {
       return;
     }
@@ -384,10 +427,23 @@ export class SchwabStreamerSession {
       throw new Error("Schwab streamer is not connected");
     }
     this.requestCounter += 1;
+    const requestId = String(this.requestCounter);
+    if (input.service !== "ADMIN") {
+      this.pendingRequests.set(requestId, {
+        service: input.service,
+        command: input.command,
+        symbols: (input.parameters.keys ?? "")
+          .split(",")
+          .map((value) => value.trim().toUpperCase())
+          .filter(Boolean),
+        fields: input.parameters.fields ?? null,
+        requestedAt: Date.now(),
+      });
+    }
     const payload = {
       requests: [
         {
-          requestid: String(this.requestCounter),
+          requestid: requestId,
           service: input.service,
           command: input.command,
           SchwabClientCustomerId: this.currentPreferences.schwabClientCustomerId,
@@ -424,6 +480,8 @@ export class SchwabStreamerSession {
         this.reconnectFailureStreak = 0;
         this.lastFailureCode = null;
         this.lastFailureMessage = null;
+        this.failurePolicy = null;
+        this.reconnectSuppressed = false;
         this.nextReconnectAt = 0;
         this.loginResolve?.();
         this.loginResolve = null;
@@ -439,18 +497,39 @@ export class SchwabStreamerSession {
       const entry = response as Record<string, unknown>;
       const content = (entry.content ?? {}) as StreamerResponseContent;
       const code = Number(content.code ?? -1);
+      const requestId = String(entry.requestid ?? "");
       if (code <= 0) {
+        if (requestId) {
+          const pending = this.pendingRequests.get(requestId);
+          if (pending) {
+            this.applyAcknowledgedRequest(pending, now);
+            this.pendingRequests.delete(requestId);
+          }
+        }
         continue;
+      }
+      if (requestId) {
+        this.pendingRequests.delete(requestId);
       }
       this.lastFailureCode = code;
       this.lastFailureMessage = String(content.msg ?? "");
       if (code === 3) {
         this.lastDisconnectReason = `LOGIN_DENIED:${this.lastFailureMessage}`;
+        this.failurePolicy = "manual_reauth_required";
+        this.reconnectSuppressed = true;
         this.nextReconnectAt = 0;
       } else if (code === 20) {
+        this.failurePolicy = "immediate_reconnect";
+        this.reconnectSuppressed = false;
+        this.nextReconnectAt = Date.now();
         this.forceReconnect("STREAM_CONN_NOT_FOUND");
       } else if (code === 30) {
+        this.failurePolicy = "streaming_stopped_until_reset";
+        this.reconnectSuppressed = true;
+        this.nextReconnectAt = 0;
         this.forceReconnect("STOP_STREAMING");
+      } else {
+        this.failurePolicy = "retry_backoff";
       }
     }
 
@@ -728,6 +807,54 @@ export class SchwabStreamerSession {
     }
     this.lastViewReconciliationAt = Date.now();
     this.emitStateSnapshot();
+  }
+
+  private applyAcknowledgedRequest(pending: PendingRequestMeta, timestamp: number): void {
+    const service = pending.service as StreamerServiceName;
+    if (!(service in this.confirmedSubscriptions)) {
+      return;
+    }
+    this.lastAckAtByService[service] = timestamp;
+    if (pending.command === "SUBS") {
+      this.confirmedSubscriptions[service] = new Set(pending.symbols);
+      return;
+    }
+    if (pending.command === "ADD") {
+      pending.symbols.forEach((symbol) => this.confirmedSubscriptions[service].add(symbol));
+      return;
+    }
+    if (pending.command === "UNSUBS") {
+      pending.symbols.forEach((symbol) => this.confirmedSubscriptions[service].delete(symbol));
+      return;
+    }
+    if (pending.command === "VIEW") {
+      this.confirmedFields[service] = pending.fields;
+    }
+  }
+
+  private buildReconciliationSnapshot(): Record<string, StreamerServiceReconciliation> {
+    const out: Record<string, StreamerServiceReconciliation> = {} as Record<string, StreamerServiceReconciliation>;
+    for (const service of Object.values(STREAMER_SERVICES)) {
+      const intended = this.subscriptions[service];
+      const active = this.activeSubscriptions[service];
+      const confirmed = this.confirmedSubscriptions[service];
+      const requestedFields =
+        service === STREAMER_SERVICES.LEVELONE_EQUITIES ? this.equitySubscriptionFields : this.chartSubscriptionFields;
+      const symbolDriftCount =
+        [...intended.keys()].filter((symbol) => !confirmed.has(symbol)).length +
+        [...confirmed].filter((symbol) => !intended.has(symbol)).length;
+      out[service] = {
+        intendedSymbols: intended.size,
+        activeSymbols: active.size,
+        confirmedSymbols: confirmed.size,
+        symbolDriftCount,
+        requestedFields,
+        confirmedFields: this.confirmedFields[service],
+        fieldsMatch: !this.confirmedFields[service] || this.confirmedFields[service] === requestedFields,
+        lastAckAt: this.lastAckAtByService[service] ? new Date(this.lastAckAtByService[service]).toISOString() : null,
+      };
+    }
+    return out;
   }
 }
 

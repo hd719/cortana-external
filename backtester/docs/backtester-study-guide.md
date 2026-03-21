@@ -216,6 +216,8 @@ Important clarification:
 - the Schwab streamer is supervised in TS with heartbeat tracking, reconnect backoff, delta subscription updates, and automatic resubscribe for active symbols
 - if you deploy multiple TS instances, the recommended setup is `SCHWAB_STREAMER_ROLE=auto`, which uses Postgres advisory locks to elect one streamer leader while follower instances read shared quote/chart state
 - the TS streamer also applies periodic `VIEW` reconciliation for the subscribed field sets and treats documented Schwab failure codes like `LOGIN_DENIED`, `STREAM_CONN_NOT_FOUND`, and `STOP_STREAMING` as explicit runtime states
+- Postgres-backed shared streamer state now uses `LISTEN/NOTIFY` so follower instances can react to leader updates without waiting on slow polling
+- the TS service now exposes a compact `/market-data/ops` operator surface plus `/market-data/universe/audit` so you can inspect streamer role, advisory-lock ownership, provider/fallback mix, and universe refresh history from outside the Python engine
 
 ##### 2. Fundamentals
 

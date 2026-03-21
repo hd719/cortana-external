@@ -105,8 +105,18 @@ interface ProviderMetrics {
   lastSuccessfulSchwabRestAt: string | null;
   lastSuccessfulYahooFallbackAt: string | null;
   lastSuccessfulUniverseRefreshAt: string | null;
+  lastSharedStateNotificationAt: string | null;
   tokenRefreshInFlight: boolean;
   lastTokenRefreshAt: string | null;
+  sourceUsage: Record<string, number>;
+  fallbackUsage: Record<string, number>;
+}
+
+interface UniverseAuditEntry {
+  refreshedAt: string;
+  source: string;
+  symbolCount: number;
+  sourceLadder: string[];
 }
 
 export class MarketDataService {
@@ -131,13 +141,18 @@ export class MarketDataService {
     lastSuccessfulSchwabRestAt: null,
     lastSuccessfulYahooFallbackAt: null,
     lastSuccessfulUniverseRefreshAt: null,
+    lastSharedStateNotificationAt: null,
     tokenRefreshInFlight: false,
     lastTokenRefreshAt: null,
+    sourceUsage: {},
+    fallbackUsage: {},
   };
   private tokenRefreshPromise: Promise<string> | null = null;
   private pool: Pool | null = null;
   private dbReadyPromise: Promise<void> | null = null;
   private leaderLockClient: PoolClient | null = null;
+  private sharedStateListenerClient: PoolClient | null = null;
+  private sharedStateCache: SharedStreamerState | null = null;
   private runtimeReadyPromise: Promise<void> | null = null;
 
   constructor(config: MarketDataServiceConfig = {}) {
@@ -232,6 +247,16 @@ export class MarketDataService {
   async shutdown(): Promise<void> {
     this.streamer?.close();
     this.streamer = null;
+    if (this.sharedStateListenerClient) {
+      try {
+        await this.sharedStateListenerClient.query("UNLISTEN market_data_streamer_state_changed");
+      } catch (error) {
+        this.logger.error("Unable to unlisten market-data shared state channel", error);
+      } finally {
+        this.sharedStateListenerClient.release();
+        this.sharedStateListenerClient = null;
+      }
+    }
     if (this.leaderLockClient) {
       try {
         await this.leaderLockClient.query("SELECT pg_advisory_unlock($1)", [this.streamerPgLockKey]);
@@ -252,6 +277,7 @@ export class MarketDataService {
   }
 
   async handleHistory(request: Request, rawSymbol: string, compareWith?: string): Promise<MarketDataRouteResult<MarketDataHistory>> {
+    await this.ensureRuntimeReady();
     const symbol = normalizeMarketSymbol(rawSymbol);
     if (!symbol) {
       return { status: 400, body: marketDataErrorResponse("invalid symbol", "error", { reason: "symbol required" }) };
@@ -261,6 +287,7 @@ export class MarketDataService {
     const interval = resolveQuery(request.url, "interval", DEFAULT_INTERVAL);
     try {
       const primary = await this.fetchPrimaryHistory(symbol, period, interval);
+      this.recordSourceUsage(primary.source);
       const compare = await this.buildHistoryComparison(symbol, period, interval, compareWith, primary.rows);
       return {
         status: 200,
@@ -292,6 +319,7 @@ export class MarketDataService {
 
     try {
       const primary = await this.fetchPrimaryQuote(symbol);
+      this.recordSourceUsage(primary.source);
       const compare = await this.buildQuoteComparison(symbol, compareWith, primary.quote);
       return {
         status: 200,
@@ -322,6 +350,7 @@ export class MarketDataService {
 
     try {
       const primary = await this.fetchPrimarySnapshot(symbol);
+      this.recordSourceUsage(primary.source);
       const compare = await this.buildQuoteComparison(symbol, compareWith, primary.snapshot.quote as MarketDataQuote | undefined);
       return {
         status: 200,
@@ -464,6 +493,7 @@ export class MarketDataService {
   }
 
   async handleRiskHistory(request: Request): Promise<MarketDataRouteResult<MarketDataRiskHistory>> {
+    await this.ensureRuntimeReady();
     const days = Math.max(parseInt(resolveQuery(request.url, "days", "90"), 10) || 90, 5);
     try {
       const payload = await this.buildRiskPayload(days);
@@ -483,6 +513,7 @@ export class MarketDataService {
   }
 
   async handleRiskSnapshot(): Promise<MarketDataRouteResult<MarketDataRiskSnapshot>> {
+    await this.ensureRuntimeReady();
     try {
       const payload = await this.buildRiskPayload(200);
       const latest = payload.rows[payload.rows.length - 1];
@@ -516,6 +547,50 @@ export class MarketDataService {
         warnings: [],
       });
     }
+  }
+
+  async handleOps(): Promise<MarketDataRouteResult<Record<string, unknown>>> {
+    await this.ensureRuntimeReady();
+    const health = await this.checkHealth();
+    const latestUniverse = readJsonFile<MarketDataUniverse>(path.join(this.cacheDir, "base-universe.json"));
+    const universeAudit = this.readUniverseAudit(5);
+    return {
+      status: 200,
+      body: {
+        source: "service",
+        status: "ok",
+        degradedReason: null,
+        stalenessSeconds: 0,
+        data: {
+          streamerRoleConfigured: this.configuredStreamerRole,
+          streamerRoleActive: this.activeStreamerRole,
+          streamerLockHeld: Boolean(this.leaderLockClient),
+          sharedStateBackend: this.streamerSharedStateBackend,
+          sharedStateUpdatedAt: this.sharedStateCache?.updatedAt ?? (await this.readSharedStreamerState())?.updatedAt ?? null,
+          providerMetrics: this.providerMetrics,
+          health,
+          universe: {
+            latest: latestUniverse,
+            audit: universeAudit,
+          },
+        },
+      },
+    };
+  }
+
+  async handleUniverseAudit(request: Request): Promise<MarketDataRouteResult<Record<string, unknown>>> {
+    const limit = Math.max(parseInt(resolveQuery(request.url, "limit", "20"), 10) || 20, 1);
+    const audit = this.readUniverseAudit(limit);
+    return {
+      status: 200,
+      body: {
+        source: "service",
+        status: "ok",
+        degradedReason: null,
+        stalenessSeconds: 0,
+        data: { entries: audit },
+      },
+    };
   }
 
   private async fetchPrimaryHistory(symbol: string, period: string, interval: string): Promise<HistoryFetchResult> {
@@ -894,6 +969,9 @@ export class MarketDataService {
       if (this.streamerSharedStateBackend === "postgres" || this.configuredStreamerRole === "auto") {
         await this.ensureDB();
       }
+      if (this.streamerSharedStateBackend === "postgres") {
+        await this.setupSharedStateListener();
+      }
       if (this.configuredStreamerRole === "auto") {
         const acquired = await this.tryAcquireStreamerLeadership();
         this.activeStreamerRole = acquired ? "leader" : "follower";
@@ -960,6 +1038,20 @@ export class MarketDataService {
       client.release();
       throw error;
     }
+  }
+
+  private async setupSharedStateListener(): Promise<void> {
+    if (!this.pool || this.sharedStateListenerClient) {
+      return;
+    }
+    const client = await this.pool.connect();
+    client.on("notification", () => {
+      this.providerMetrics.lastSharedStateNotificationAt = new Date().toISOString();
+      void this.refreshSharedStateCacheFromBackend();
+    });
+    await client.query("LISTEN market_data_streamer_state_changed");
+    this.sharedStateListenerClient = client;
+    await this.refreshSharedStateCacheFromBackend();
   }
 
   private async fetchSchwabHistory(symbol: string, period: string, interval: string): Promise<MarketDataHistoryPoint[]> {
@@ -1186,6 +1278,12 @@ export class MarketDataService {
     fs.mkdirSync(path.dirname(artifactPath), { recursive: true });
     fs.writeFileSync(artifactPath, JSON.stringify(payload, null, 2));
     this.providerMetrics.lastSuccessfulUniverseRefreshAt = payload.updatedAt;
+    this.appendUniverseAudit({
+      refreshedAt: payload.updatedAt ?? new Date().toISOString(),
+      source: payload.source,
+      symbolCount: payload.symbols.length,
+      sourceLadder: this.universeSourceLadder,
+    });
     return payload;
   }
 
@@ -1397,6 +1495,15 @@ export class MarketDataService {
 
   private recordYahooFallbackSuccess(): void {
     this.providerMetrics.lastSuccessfulYahooFallbackAt = new Date().toISOString();
+    this.providerMetrics.fallbackUsage.yahoo = (this.providerMetrics.fallbackUsage.yahoo ?? 0) + 1;
+  }
+
+  private recordSharedStateFallbackSuccess(): void {
+    this.providerMetrics.fallbackUsage.shared_state = (this.providerMetrics.fallbackUsage.shared_state ?? 0) + 1;
+  }
+
+  private recordSourceUsage(source: string): void {
+    this.providerMetrics.sourceUsage[source] = (this.providerMetrics.sourceUsage[source] ?? 0) + 1;
   }
 
   private async writeSharedStreamerState(state: SharedStreamerState): Promise<void> {
@@ -1414,20 +1521,26 @@ export class MarketDataService {
           `,
           ["schwab_market_data", JSON.stringify(state)],
         );
+        await this.pool.query("SELECT pg_notify('market_data_streamer_state_changed', $1)", [state.updatedAt]);
       } catch (error) {
         this.logger.error("Unable to persist shared Schwab streamer state to Postgres", error);
       }
+      this.sharedStateCache = state;
       return;
     }
     try {
       fs.mkdirSync(path.dirname(this.streamerSharedStatePath), { recursive: true });
       fs.writeFileSync(this.streamerSharedStatePath, JSON.stringify(state, null, 2));
+      this.sharedStateCache = state;
     } catch (error) {
       this.logger.error("Unable to persist shared Schwab streamer state", error);
     }
   }
 
   private async readSharedStreamerState(): Promise<SharedStreamerState | null> {
+    if (this.sharedStateCache) {
+      return this.sharedStateCache;
+    }
     if (this.streamerSharedStateBackend === "postgres") {
       if (!this.pool) {
         return null;
@@ -1437,13 +1550,15 @@ export class MarketDataService {
           "SELECT payload FROM market_data_streamer_state WHERE stream_name = $1",
           ["schwab_market_data"],
         );
-        return result.rows[0]?.payload ?? null;
+        this.sharedStateCache = result.rows[0]?.payload ?? null;
+        return this.sharedStateCache;
       } catch (error) {
         this.logger.error("Unable to read shared Schwab streamer state from Postgres", error);
         return null;
       }
     }
-    return readJsonFile<SharedStreamerState>(this.streamerSharedStatePath);
+    this.sharedStateCache = readJsonFile<SharedStreamerState>(this.streamerSharedStatePath);
+    return this.sharedStateCache;
   }
 
   private async readSharedStreamerQuote(symbol: string): Promise<MarketDataQuote | null> {
@@ -1459,6 +1574,7 @@ export class MarketDataService {
     if (ageSeconds == null || ageSeconds > Math.round(this.config.SCHWAB_STREAMER_QUOTE_TTL_MS / 1000)) {
       return null;
     }
+    this.recordSharedStateFallbackSuccess();
     return quote.quote;
   }
 
@@ -1475,7 +1591,47 @@ export class MarketDataService {
     if (ageSeconds == null || ageSeconds > Math.round(this.config.SCHWAB_STREAMER_QUOTE_TTL_MS / 1000)) {
       return null;
     }
+    this.recordSharedStateFallbackSuccess();
     return chart.point as unknown as Record<string, unknown>;
+  }
+
+  private async refreshSharedStateCacheFromBackend(): Promise<void> {
+    if (this.streamerSharedStateBackend !== "postgres" || !this.pool) {
+      return;
+    }
+    try {
+      const result = await this.pool.query<{ payload: SharedStreamerState }>(
+        "SELECT payload FROM market_data_streamer_state WHERE stream_name = $1",
+        ["schwab_market_data"],
+      );
+      this.sharedStateCache = result.rows[0]?.payload ?? null;
+    } catch (error) {
+      this.logger.error("Unable to refresh shared Schwab streamer state cache", error);
+    }
+  }
+
+  private appendUniverseAudit(entry: UniverseAuditEntry): void {
+    try {
+      const auditPath = path.join(this.cacheDir, "base-universe-audit.jsonl");
+      fs.mkdirSync(path.dirname(auditPath), { recursive: true });
+      fs.appendFileSync(auditPath, `${JSON.stringify(entry)}\n`);
+    } catch (error) {
+      this.logger.error("Unable to append universe audit entry", error);
+    }
+  }
+
+  private readUniverseAudit(limit: number): UniverseAuditEntry[] {
+    try {
+      const auditPath = path.join(this.cacheDir, "base-universe-audit.jsonl");
+      const lines = fs
+        .readFileSync(auditPath, "utf8")
+        .split(/\r?\n/)
+        .filter(Boolean)
+        .slice(-limit);
+      return lines.map((line) => JSON.parse(line) as UniverseAuditEntry).reverse();
+    } catch {
+      return [];
+    }
   }
 
   private secondsSince(value: string | null | undefined): number | null {

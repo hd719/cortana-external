@@ -44,6 +44,11 @@ export function registerMarketDataRoutes(app: Hono, service: MarketDataService):
     return c.json(result.body, result.status as never);
   });
 
+  app.get("/market-data/universe/audit", async (c) => {
+    const result = await service.handleUniverseAudit(c.req.raw);
+    return c.json(result.body, result.status as never);
+  });
+
   app.post("/market-data/universe/refresh", async (c) => {
     const result = await service.handleUniverseRefresh();
     return c.json(result.body, result.status as never);
@@ -57,6 +62,12 @@ export function registerMarketDataRoutes(app: Hono, service: MarketDataService):
   app.get("/market-data/risk/snapshot", async (c) => {
     void c;
     const result = await service.handleRiskSnapshot();
+    return c.json(result.body, result.status as never);
+  });
+
+  app.get("/market-data/ops", async (c) => {
+    void c;
+    const result = await service.handleOps();
     return c.json(result.body, result.status as never);
   });
 }
