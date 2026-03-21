@@ -32,6 +32,7 @@ const TEST_CONFIG: AppConfig = {
   SCHWAB_STREAMER_SHARED_STATE_PATH: ".cache/market_data/test-schwab-streamer-state.json",
   SCHWAB_STREAMER_CONNECT_TIMEOUT_MS: 1_000,
   SCHWAB_STREAMER_QUOTE_TTL_MS: 15_000,
+  SCHWAB_STREAMER_SYMBOL_SOFT_CAP: 250,
   FRED_API_KEY: "",
   WHOOP_CLIENT_ID: "",
   WHOOP_CLIENT_SECRET: "",
@@ -66,7 +67,7 @@ class FakeWebSocket implements WebSocketLike {
 
   send(data: string): void {
     const payload = JSON.parse(data) as {
-      requests?: Array<{ service: string; command: string; parameters?: { keys?: string } }>;
+      requests?: Array<{ requestid?: string; service: string; command: string; parameters?: { keys?: string; fields?: string } }>;
     };
     const request = payload.requests?.[0];
     if (!request) {
@@ -95,6 +96,20 @@ class FakeWebSocket implements WebSocketLike {
       queueMicrotask(() => {
         this.onmessage?.({
           data: JSON.stringify({
+            response: [
+              {
+                service: "LEVELONE_EQUITIES",
+                command: request.command,
+                requestid: request.requestid ?? "0",
+                content: { code: 0, msg: `${request.command} command succeeded` },
+              },
+            ],
+          }),
+        });
+      });
+      queueMicrotask(() => {
+        this.onmessage?.({
+          data: JSON.stringify({
             data: [
               {
                 service: "LEVELONE_EQUITIES",
@@ -114,8 +129,39 @@ class FakeWebSocket implements WebSocketLike {
       });
       return;
     }
+    if (request.service === "LEVELONE_EQUITIES" && request.command === "UNSUBS") {
+      queueMicrotask(() => {
+        this.onmessage?.({
+          data: JSON.stringify({
+            response: [
+              {
+                service: "LEVELONE_EQUITIES",
+                command: request.command,
+                requestid: request.requestid ?? "0",
+                content: { code: 0, msg: "UNSUBS command succeeded" },
+              },
+            ],
+          }),
+        });
+      });
+      return;
+    }
     if (request.service === "CHART_EQUITY" && (request.command === "SUBS" || request.command === "ADD")) {
       const firstKey = request.parameters?.keys?.split(",")[0] ?? "AAPL";
+      queueMicrotask(() => {
+        this.onmessage?.({
+          data: JSON.stringify({
+            response: [
+              {
+                service: "CHART_EQUITY",
+                command: request.command,
+                requestid: request.requestid ?? "0",
+                content: { code: 0, msg: `${request.command} command succeeded` },
+              },
+            ],
+          }),
+        });
+      });
       queueMicrotask(() => {
         this.onmessage?.({
           data: JSON.stringify({
@@ -141,12 +187,64 @@ class FakeWebSocket implements WebSocketLike {
           }),
         });
       });
+      return;
+    }
+    if ((request.service === "LEVELONE_EQUITIES" || request.service === "CHART_EQUITY") && request.command === "VIEW") {
+      queueMicrotask(() => {
+        this.onmessage?.({
+          data: JSON.stringify({
+            response: [
+              {
+                service: request.service,
+                command: request.command,
+                requestid: request.requestid ?? "0",
+                content: { code: 0, msg: "VIEW command succeeded" },
+              },
+            ],
+          }),
+        });
+      });
     }
   }
 
   close(code?: number, reason?: string): void {
     this.readyState = 3;
     this.onclose?.({ code, reason });
+  }
+}
+
+class FailureWebSocket extends FakeWebSocket {
+  static failureCode: number | null = null;
+  static failureMessage = "forced failure";
+
+  override send(data: string): void {
+    const payload = JSON.parse(data) as {
+      requests?: Array<{ requestid?: string; service: string; command: string; parameters?: { keys?: string; fields?: string } }>;
+    };
+    const request = payload.requests?.[0];
+    if (
+      request &&
+      request.service !== "ADMIN" &&
+      (request.command === "SUBS" || request.command === "ADD" || request.command === "VIEW") &&
+      FailureWebSocket.failureCode != null
+    ) {
+      queueMicrotask(() => {
+        this.onmessage?.({
+          data: JSON.stringify({
+            response: [
+              {
+                service: request.service,
+                command: request.command,
+                requestid: request.requestid ?? "0",
+                content: { code: FailureWebSocket.failureCode, msg: FailureWebSocket.failureMessage },
+              },
+            ],
+          }),
+        });
+      });
+      return;
+    }
+    super.send(data);
   }
 }
 
@@ -476,6 +574,112 @@ describe("market-data routes", () => {
     expect(auditResponse.status).toBe(200);
     expect(auditBody.data.entries).toHaveLength(1);
     expect(auditBody.data.entries[0]?.source).toBe("static_python_seed");
+  });
+
+  it("demotes the streamer leader after CLOSE_CONNECTION max-connection policy", async () => {
+    FailureWebSocket.failureCode = 12;
+    FailureWebSocket.failureMessage = "maximum streamer connections reached";
+    const service = new MarketDataService({
+      config: TEST_CONFIG,
+      websocketFactory: () => new FailureWebSocket(),
+      fetchImpl: async (input) => {
+        const url = String(input);
+        if (url.includes("/oauth/token")) {
+          return new Response(JSON.stringify({ access_token: "access-token", expires_in: 1800 }), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          });
+        }
+        if (url.includes("/trader/v1/userPreference")) {
+          return new Response(
+            JSON.stringify({
+              streamerInfo: {
+                streamerSocketUrl: "wss://streamer.example.test/ws",
+                schwabClientCustomerId: "customer-id",
+                schwabClientCorrelId: "correl-id",
+                schwabClientChannel: "N9",
+                schwabClientFunctionId: "APIAP",
+              },
+            }),
+            { status: 200, headers: { "content-type": "application/json" } },
+          );
+        }
+        if (url.includes("query1.finance.yahoo.com/v7/finance/quote")) {
+          return new Response(
+            JSON.stringify({
+              quoteResponse: { result: [{ symbol: "AAPL", regularMarketPrice: 199.0, currency: "USD" }] },
+            }),
+            { status: 200, headers: { "content-type": "application/json" } },
+          );
+        }
+        return new Response("not found", { status: 404 });
+      },
+    });
+
+    await service.handleQuote(new Request("http://localhost/market-data/quote/AAPL"), "AAPL");
+    const health = await service.checkHealth();
+    const providers = (health.providers ?? {}) as Record<string, unknown>;
+
+    expect(providers.schwabStreamerRole).toBe("follower");
+    const streamerMeta = (providers.schwabStreamerMeta ?? {}) as Record<string, unknown>;
+    expect(streamerMeta.failurePolicy).toBe("max_connections_exceeded");
+    expect(streamerMeta.operatorState).toBe("max_connections_blocked");
+    FailureWebSocket.failureCode = null;
+  });
+
+  it("surfaces subscription budget pressure when Schwab reports symbol limit failures", async () => {
+    FailureWebSocket.failureCode = 19;
+    FailureWebSocket.failureMessage = "symbol limit reached";
+    const service = new MarketDataService({
+      config: { ...TEST_CONFIG, SCHWAB_STREAMER_SYMBOL_SOFT_CAP: 1 },
+      websocketFactory: () => new FailureWebSocket(),
+      fetchImpl: async (input) => {
+        const url = String(input);
+        if (url.includes("/oauth/token")) {
+          return new Response(JSON.stringify({ access_token: "access-token", expires_in: 1800 }), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          });
+        }
+        if (url.includes("/trader/v1/userPreference")) {
+          return new Response(
+            JSON.stringify({
+              streamerInfo: {
+                streamerSocketUrl: "wss://streamer.example.test/ws",
+                schwabClientCustomerId: "customer-id",
+                schwabClientCorrelId: "correl-id",
+                schwabClientChannel: "N9",
+                schwabClientFunctionId: "APIAP",
+              },
+            }),
+            { status: 200, headers: { "content-type": "application/json" } },
+          );
+        }
+        if (url.includes("query1.finance.yahoo.com/v7/finance/quote")) {
+          const symbol = url.includes("symbols=MSFT") ? "MSFT" : "AAPL";
+          return new Response(
+            JSON.stringify({
+              quoteResponse: { result: [{ symbol, regularMarketPrice: 199.0, currency: "USD" }] },
+            }),
+            { status: 200, headers: { "content-type": "application/json" } },
+          );
+        }
+        return new Response("not found", { status: 404 });
+      },
+    });
+
+    await service.handleQuote(new Request("http://localhost/market-data/quote/AAPL"), "AAPL");
+    await service.handleQuote(new Request("http://localhost/market-data/quote/MSFT"), "MSFT");
+    const health = await service.checkHealth();
+    const providers = (health.providers ?? {}) as Record<string, unknown>;
+    const streamerMeta = (providers.schwabStreamerMeta ?? {}) as Record<string, unknown>;
+    const budget = (streamerMeta.subscriptionBudget ?? {}) as Record<string, { overSoftCap?: boolean; softCap?: number }>;
+
+    expect(streamerMeta.failurePolicy).toBe("symbol_limit_reached");
+    expect(streamerMeta.operatorState).toBe("subscription_budget_exceeded");
+    expect(budget.LEVELONE_EQUITIES?.softCap).toBe(1);
+    expect(budget.LEVELONE_EQUITIES?.overSoftCap).toBe(true);
+    FailureWebSocket.failureCode = null;
   });
 
   it("reads streamer-backed quote state from the shared state file in follower mode", async () => {

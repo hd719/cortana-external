@@ -245,15 +245,19 @@ Operational notes:
 - streamer health and reconnect state are exposed through the TS service health payload
 - that health payload now includes message rate, stale symbol count, reconnect failure streak, token refresh state, and last successful Schwab/Yahoo fallback timestamps
 - the streamer keeps a bounded subscription registry for active quote/chart symbols and resubscribes them after reconnects
+- streamer mutation commands are now serialized per service and wait for Schwab acks, which reduces `FAILED_COMMAND_SUBS` / `ADD` / `UNSUBS` / `VIEW` races
 - the streamer also runs periodic `VIEW` reconciliation so the Schwab field set stays aligned with the intended quote/chart subscriptions
-- documented Schwab failure codes like `LOGIN_DENIED`, `STREAM_CONN_NOT_FOUND`, and `STOP_STREAMING` are now handled explicitly instead of only surfacing as generic reconnect noise
+- documented Schwab failure codes like `LOGIN_DENIED`, `STREAM_CONN_NOT_FOUND`, `STOP_STREAMING`, `CLOSE_CONNECTION`, and `REACHED_SYMBOL_LIMIT` are now handled explicitly instead of only surfacing as generic reconnect noise
+- the ops surface now exposes runbook-grade operator state and symbol-budget accounting so max-connection or subscription-limit issues are visible before they become silent drift
 - Postgres-backed shared streamer state now propagates with `LISTEN/NOTIFY` so follower instances react to quote/chart updates faster than file polling
 - `/market-data/ops` and `/market-data/universe/audit` provide a compact operator surface for streamer role, lock ownership, health, source/fallback mix, and universe artifact refresh history
 - token refresh is single-flight inside TS so concurrent Schwab requests do not stampede the refresh endpoint
 - base-universe refresh is no longer just a Python static-seed copy; TS can prefer a configured remote or local JSON universe source and only fall back to the Python seed when needed
+- universe ownership is now more explicit in ops: the service exposes the artifact path, audit path, source ladder, and the expectation that `python_seed` is terminal fallback only
 - recommended production shape is now:
   - `SCHWAB_STREAMER_ROLE=auto`
   - `SCHWAB_STREAMER_SHARED_STATE_BACKEND=postgres`
+  - `SCHWAB_STREAMER_SYMBOL_SOFT_CAP=<bounded value>` so the ops surface can warn before Schwab returns `REACHED_SYMBOL_LIMIT`
 
 Backtester-facing service endpoints:
 - `GET /market-data/history/:symbol`

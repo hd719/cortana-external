@@ -30,6 +30,7 @@ export interface SchwabStreamerSessionOptions {
   reconnectMaxDelayMs?: number;
   viewReconciliationIntervalMs?: number;
   supervisionIntervalMs?: number;
+  subscriptionSoftCap?: number;
   stateSink?: (state: SharedStreamerState) => void;
 }
 
@@ -78,11 +79,18 @@ interface SubscriptionEntry {
 }
 
 interface PendingRequestMeta {
+  requestId: string;
   service: string;
   command: string;
   symbols: string[];
   fields: string | null;
   requestedAt: number;
+}
+
+interface PendingAck {
+  resolve: () => void;
+  reject: (error: Error) => void;
+  timeout: NodeJS.Timeout;
 }
 
 interface StreamerServiceReconciliation {
@@ -94,6 +102,13 @@ interface StreamerServiceReconciliation {
   confirmedFields: string | null;
   fieldsMatch: boolean;
   lastAckAt: string | null;
+}
+
+interface StreamerServiceBudget {
+  requestedSymbols: number;
+  softCap: number;
+  headroomRemaining: number;
+  overSoftCap: boolean;
 }
 
 interface SharedCachedQuote {
@@ -119,12 +134,15 @@ export interface SchwabStreamerHealth {
   lastFailureCode: number | null;
   lastFailureMessage: string | null;
   failurePolicy: string | null;
+  operatorState: string;
+  operatorAction: string;
   reconnectSuppressed: boolean;
   nextReconnectAt: string | null;
   lastViewReconciliationAt: string | null;
   activeSubscriptions: Record<string, number>;
   requestedSubscriptions: Record<string, number>;
   reconciliation: Record<string, StreamerServiceReconciliation>;
+  subscriptionBudget: Record<string, StreamerServiceBudget>;
   staleSymbolCount: number;
   messageRatePerMinute: number;
   stale: boolean;
@@ -153,6 +171,7 @@ export class SchwabStreamerSession {
   private readonly reconnectMaxDelayMs: number;
   private readonly viewReconciliationIntervalMs: number;
   private readonly stateSink?: (state: SharedStreamerState) => void;
+  private readonly subscriptionSoftCap: number;
   private ws: WebSocketLike | null = null;
   private connectPromise: Promise<void> | null = null;
   private loginResolve: (() => void) | null = null;
@@ -168,6 +187,7 @@ export class SchwabStreamerSession {
   private readonly quoteCache = new Map<string, CachedQuote>();
   private readonly chartCache = new Map<string, CachedChartPoint>();
   private readonly pendingRequests = new Map<string, PendingRequestMeta>();
+  private readonly pendingAcks = new Map<string, PendingAck>();
   private readonly confirmedSubscriptions: Record<StreamerServiceName, Set<string>> = {
     [STREAMER_SERVICES.LEVELONE_EQUITIES]: new Set(),
     [STREAMER_SERVICES.CHART_EQUITY]: new Set(),
@@ -179,6 +199,10 @@ export class SchwabStreamerSession {
   private readonly lastAckAtByService: Record<StreamerServiceName, number> = {
     [STREAMER_SERVICES.LEVELONE_EQUITIES]: 0,
     [STREAMER_SERVICES.CHART_EQUITY]: 0,
+  };
+  private readonly serviceCommandChains: Record<StreamerServiceName, Promise<void>> = {
+    [STREAMER_SERVICES.LEVELONE_EQUITIES]: Promise.resolve(),
+    [STREAMER_SERVICES.CHART_EQUITY]: Promise.resolve(),
   };
   private readonly messageTimestamps: number[] = [];
   private lastMessageAt = 0;
@@ -213,6 +237,7 @@ export class SchwabStreamerSession {
     this.reconnectBaseDelayMs = options.reconnectBaseDelayMs ?? 1_000;
     this.reconnectMaxDelayMs = options.reconnectMaxDelayMs ?? 30_000;
     this.viewReconciliationIntervalMs = options.viewReconciliationIntervalMs ?? 5 * 60_000;
+    this.subscriptionSoftCap = options.subscriptionSoftCap ?? 250;
     this.stateSink = options.stateSink;
     this.supervisionTimer = setInterval(() => {
       void this.runSupervisionCycle();
@@ -299,6 +324,8 @@ export class SchwabStreamerSession {
       lastFailureCode: this.lastFailureCode,
       lastFailureMessage: this.lastFailureMessage,
       failurePolicy: this.failurePolicy,
+      operatorState: this.currentOperatorState(),
+      operatorAction: this.currentOperatorAction(),
       reconnectSuppressed: this.reconnectSuppressed,
       nextReconnectAt: this.nextReconnectAt ? new Date(this.nextReconnectAt).toISOString() : null,
       lastViewReconciliationAt: this.lastViewReconciliationAt
@@ -307,6 +334,7 @@ export class SchwabStreamerSession {
       activeSubscriptions,
       requestedSubscriptions,
       reconciliation: this.buildReconciliationSnapshot(),
+      subscriptionBudget: this.buildBudgetSnapshot(),
       staleSymbolCount: this.countStaleSymbols(),
       messageRatePerMinute: this.currentMessageRatePerMinute(),
       stale: this.isStale(),
@@ -339,8 +367,8 @@ export class SchwabStreamerSession {
     this.touchSubscriptions(STREAMER_SERVICES.LEVELONE_EQUITIES, equitySymbols);
     this.touchSubscriptions(STREAMER_SERVICES.CHART_EQUITY, chartSymbols);
     await this.ensureConnected();
-    this.syncSubscriptions(STREAMER_SERVICES.LEVELONE_EQUITIES);
-    this.syncSubscriptions(STREAMER_SERVICES.CHART_EQUITY);
+    await this.syncSubscriptions(STREAMER_SERVICES.LEVELONE_EQUITIES);
+    await this.syncSubscriptions(STREAMER_SERVICES.CHART_EQUITY);
   }
 
   private async ensureConnected(): Promise<void> {
@@ -422,7 +450,7 @@ export class SchwabStreamerSession {
     service: string;
     command: string;
     parameters: Record<string, string>;
-  }): void {
+  }): string {
     if (!this.ws || this.ws.readyState !== 1 || !this.currentPreferences) {
       throw new Error("Schwab streamer is not connected");
     }
@@ -430,6 +458,7 @@ export class SchwabStreamerSession {
     const requestId = String(this.requestCounter);
     if (input.service !== "ADMIN") {
       this.pendingRequests.set(requestId, {
+        requestId,
         service: input.service,
         command: input.command,
         symbols: (input.parameters.keys ?? "")
@@ -453,6 +482,7 @@ export class SchwabStreamerSession {
       ],
     };
     this.ws.send(JSON.stringify(payload));
+    return requestId;
   }
 
   private handleMessage(raw: string): void {
@@ -498,18 +528,20 @@ export class SchwabStreamerSession {
       const content = (entry.content ?? {}) as StreamerResponseContent;
       const code = Number(content.code ?? -1);
       const requestId = String(entry.requestid ?? "");
-      if (code <= 0) {
+      if (this.isSuccessfulResponseCode(code)) {
         if (requestId) {
           const pending = this.pendingRequests.get(requestId);
           if (pending) {
             this.applyAcknowledgedRequest(pending, now);
             this.pendingRequests.delete(requestId);
           }
+          this.resolvePendingAck(requestId);
         }
         continue;
       }
       if (requestId) {
         this.pendingRequests.delete(requestId);
+        this.rejectPendingAck(requestId, new Error(`Schwab streamer request failed (${code}): ${String(content.msg ?? "")}`));
       }
       this.lastFailureCode = code;
       this.lastFailureMessage = String(content.msg ?? "");
@@ -518,6 +550,13 @@ export class SchwabStreamerSession {
         this.failurePolicy = "manual_reauth_required";
         this.reconnectSuppressed = true;
         this.nextReconnectAt = 0;
+      } else if (code === 12) {
+        this.failurePolicy = "max_connections_exceeded";
+        this.reconnectSuppressed = true;
+        this.nextReconnectAt = 0;
+        this.forceReconnect("CLOSE_CONNECTION");
+      } else if (code === 19) {
+        this.failurePolicy = "symbol_limit_reached";
       } else if (code === 20) {
         this.failurePolicy = "immediate_reconnect";
         this.reconnectSuppressed = false;
@@ -575,14 +614,14 @@ export class SchwabStreamerSession {
     if (!this.ws && this.nextReconnectAt > 0 && Date.now() >= this.nextReconnectAt && !this.connectPromise) {
       try {
         await this.ensureConnected();
-        this.syncSubscriptions(STREAMER_SERVICES.LEVELONE_EQUITIES);
-        this.syncSubscriptions(STREAMER_SERVICES.CHART_EQUITY);
+        await this.syncSubscriptions(STREAMER_SERVICES.LEVELONE_EQUITIES);
+        await this.syncSubscriptions(STREAMER_SERVICES.CHART_EQUITY);
       } catch (error) {
         this.logger.error("schwab streamer reconnect failed", error);
       }
     }
     if (this.ws && this.ws.readyState === 1 && Date.now() - this.lastViewReconciliationAt >= this.viewReconciliationIntervalMs) {
-      this.reconcileSubscriptionViews();
+      await this.reconcileSubscriptionViews();
     }
   }
 
@@ -603,20 +642,20 @@ export class SchwabStreamerSession {
     }
   }
 
-  private syncSubscriptions(service: StreamerServiceName): void {
+  private async syncSubscriptions(service: StreamerServiceName): Promise<void> {
     const registry = this.subscriptions[service];
     const active = this.activeSubscriptions[service];
     const wantedSymbols = [...registry.keys()];
     if (!wantedSymbols.length) {
       if (active.size) {
-        this.sendSubscriptionCommand(service, "UNSUBS", [...active]);
+        await this.sendSubscriptionCommand(service, "UNSUBS", [...active]);
         active.clear();
         this.emitStateSnapshot();
       }
       return;
     }
     if (!active.size) {
-      this.sendSubscriptionCommand(service, "SUBS", wantedSymbols);
+      await this.sendSubscriptionCommand(service, "SUBS", wantedSymbols);
       wantedSymbols.forEach((symbol) => active.add(symbol));
       for (const entry of registry.values()) {
         entry.active = true;
@@ -631,11 +670,11 @@ export class SchwabStreamerSession {
       return;
     }
     if (additions.length) {
-      this.sendSubscriptionCommand(service, "ADD", additions);
+      await this.sendSubscriptionCommand(service, "ADD", additions);
       additions.forEach((symbol) => active.add(symbol));
     }
     if (removals.length) {
-      this.sendSubscriptionCommand(service, "UNSUBS", removals);
+      await this.sendSubscriptionCommand(service, "UNSUBS", removals);
       removals.forEach((symbol) => active.delete(symbol));
     }
     for (const [symbol, entry] of registry.entries()) {
@@ -644,17 +683,17 @@ export class SchwabStreamerSession {
     this.emitStateSnapshot();
   }
 
-  private sendSubscriptionCommand(service: StreamerServiceName, command: "SUBS" | "ADD" | "UNSUBS", symbols: string[]): void {
+  private async sendSubscriptionCommand(
+    service: StreamerServiceName,
+    command: "SUBS" | "ADD" | "UNSUBS",
+    symbols: string[],
+  ): Promise<void> {
     if (!symbols.length) {
       return;
     }
-    this.sendRequest({
-      service,
-      command,
-      parameters: {
-        keys: symbols.join(","),
-        fields: service === STREAMER_SERVICES.LEVELONE_EQUITIES ? this.equitySubscriptionFields : this.chartSubscriptionFields,
-      },
+    await this.queueServiceMutation(service, command, {
+      keys: symbols.join(","),
+      fields: service === STREAMER_SERVICES.LEVELONE_EQUITIES ? this.equitySubscriptionFields : this.chartSubscriptionFields,
     });
   }
 
@@ -674,7 +713,7 @@ export class SchwabStreamerSession {
       if (removed.length && this.ws && this.ws.readyState === 1) {
         const activeRemoved = removed.filter((symbol) => active.has(symbol));
         if (activeRemoved.length) {
-          this.sendSubscriptionCommand(service, "UNSUBS", activeRemoved);
+          void this.sendSubscriptionCommand(service, "UNSUBS", activeRemoved);
           activeRemoved.forEach((symbol) => active.delete(symbol));
           this.emitStateSnapshot();
         }
@@ -713,10 +752,16 @@ export class SchwabStreamerSession {
     this.loginReject = null;
     this.lastDisconnectAt = Date.now();
     this.lastDisconnectReason = `${code ?? "unknown"}:${reason ?? "no reason"}`;
+    for (const [requestId, pending] of this.pendingAcks.entries()) {
+      clearTimeout(pending.timeout);
+      pending.reject(new Error(`Schwab streamer closed before ack (${requestId})`));
+      this.pendingAcks.delete(requestId);
+    }
+    this.pendingRequests.clear();
     for (const active of Object.values(this.activeSubscriptions)) {
       active.clear();
     }
-    if (this.hasRequestedSubscriptions()) {
+    if (this.hasRequestedSubscriptions() && !this.reconnectSuppressed) {
       this.reconnectAttempts += 1;
       this.reconnectFailureStreak += 1;
       const backoff = Math.min(
@@ -724,6 +769,8 @@ export class SchwabStreamerSession {
         this.reconnectMaxDelayMs,
       );
       this.nextReconnectAt = Date.now() + backoff;
+    } else {
+      this.nextReconnectAt = 0;
     }
     this.emitStateSnapshot();
   }
@@ -791,18 +838,14 @@ export class SchwabStreamerSession {
     });
   }
 
-  private reconcileSubscriptionViews(): void {
+  private async reconcileSubscriptionViews(): Promise<void> {
     for (const service of Object.values(STREAMER_SERVICES)) {
       const hasActive = this.activeSubscriptions[service].size > 0;
       if (!hasActive) {
         continue;
       }
-      this.sendRequest({
-        service,
-        command: "VIEW",
-        parameters: {
-          fields: service === STREAMER_SERVICES.LEVELONE_EQUITIES ? this.equitySubscriptionFields : this.chartSubscriptionFields,
-        },
+      await this.queueServiceMutation(service, "VIEW", {
+        fields: service === STREAMER_SERVICES.LEVELONE_EQUITIES ? this.equitySubscriptionFields : this.chartSubscriptionFields,
       });
     }
     this.lastViewReconciliationAt = Date.now();
@@ -855,6 +898,114 @@ export class SchwabStreamerSession {
       };
     }
     return out;
+  }
+
+  private buildBudgetSnapshot(): Record<string, StreamerServiceBudget> {
+    const out: Record<string, StreamerServiceBudget> = {} as Record<string, StreamerServiceBudget>;
+    for (const service of Object.values(STREAMER_SERVICES)) {
+      const requestedSymbols = this.subscriptions[service].size;
+      out[service] = {
+        requestedSymbols,
+        softCap: this.subscriptionSoftCap,
+        headroomRemaining: Math.max(this.subscriptionSoftCap - requestedSymbols, 0),
+        overSoftCap: requestedSymbols > this.subscriptionSoftCap,
+      };
+    }
+    return out;
+  }
+
+  private currentOperatorState(): string {
+    if (this.failurePolicy === "manual_reauth_required") {
+      return "human_action_required";
+    }
+    if (this.failurePolicy === "max_connections_exceeded") {
+      return "max_connections_blocked";
+    }
+    if (this.failurePolicy === "streaming_stopped_until_reset") {
+      return "streaming_paused";
+    }
+    if (this.failurePolicy === "immediate_reconnect") {
+      return "session_drift_reconnect";
+    }
+    if (this.failurePolicy === "symbol_limit_reached") {
+      return "subscription_budget_exceeded";
+    }
+    if (this.failurePolicy === "retry_backoff") {
+      return "retrying";
+    }
+    return "healthy";
+  }
+
+  private currentOperatorAction(): string {
+    if (this.failurePolicy === "manual_reauth_required") {
+      return "Re-authenticate Schwab credentials and refresh the access token before retrying the stream.";
+    }
+    if (this.failurePolicy === "max_connections_exceeded") {
+      return "Another Schwab stream is already using the user session. Demote this instance or stop the competing connection.";
+    }
+    if (this.failurePolicy === "streaming_stopped_until_reset") {
+      return "Streaming was stopped by Schwab due to inactivity or slowness. Verify subscriptions and re-enable the leader session.";
+    }
+    if (this.failurePolicy === "immediate_reconnect") {
+      return "Session drift detected. Reconnect immediately and verify Schwab customer/correlation identifiers remain stable.";
+    }
+    if (this.failurePolicy === "symbol_limit_reached") {
+      return "Requested subscriptions exceeded the Schwab symbol budget. Prune the registry or raise the soft cap only if justified.";
+    }
+    if (this.failurePolicy === "retry_backoff") {
+      return "A streamer command failed. Let the session retry with backoff and inspect request sequencing if the problem repeats.";
+    }
+    return "No operator action required.";
+  }
+
+  private isSuccessfulResponseCode(code: number): boolean {
+    return code <= 0 || code === 26 || code === 27 || code === 28 || code === 29;
+  }
+
+  private async queueServiceMutation(
+    service: StreamerServiceName,
+    command: "SUBS" | "ADD" | "UNSUBS" | "VIEW",
+    parameters: Record<string, string>,
+  ): Promise<void> {
+    const previous = this.serviceCommandChains[service];
+    const next = previous
+      .catch(() => undefined)
+      .then(async () => {
+        const requestId = this.sendRequest({ service, command, parameters });
+        await this.waitForAck(requestId);
+      });
+    this.serviceCommandChains[service] = next;
+    await next;
+  }
+
+  private waitForAck(requestId: string): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        this.pendingAcks.delete(requestId);
+        reject(new Error(`Schwab streamer request timed out waiting for ack (${requestId})`));
+      }, this.connectTimeoutMs);
+      this.pendingAcks.set(requestId, { resolve, reject, timeout });
+    });
+  }
+
+  private resolvePendingAck(requestId: string): void {
+    const pending = this.pendingAcks.get(requestId);
+    if (!pending) {
+      return;
+    }
+    clearTimeout(pending.timeout);
+    this.pendingAcks.delete(requestId);
+    pending.resolve();
+  }
+
+  private rejectPendingAck(requestId: string, error: Error): void {
+    const pending = this.pendingAcks.get(requestId);
+    if (!pending) {
+      return;
+    }
+    clearTimeout(pending.timeout);
+    this.pendingAcks.delete(requestId);
+    pending.reject(error);
   }
 }
 

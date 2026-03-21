@@ -29,6 +29,7 @@ const ConfigSchema = z.object({
   SCHWAB_STREAMER_SHARED_STATE_PATH: z.string().default(".cache/market_data/schwab-streamer-state.json"),
   SCHWAB_STREAMER_CONNECT_TIMEOUT_MS: z.coerce.number().int().positive().default(5_000),
   SCHWAB_STREAMER_QUOTE_TTL_MS: z.coerce.number().int().positive().default(15_000),
+  SCHWAB_STREAMER_SYMBOL_SOFT_CAP: z.coerce.number().int().positive().default(250),
   FRED_API_KEY: z.string().default(""),
   WHOOP_CLIENT_ID: z.string().default(""),
   WHOOP_CLIENT_SECRET: z.string().default(""),

@@ -180,6 +180,7 @@ export class MarketDataService {
       SCHWAB_STREAMER_SHARED_STATE_PATH: ".cache/market_data/schwab-streamer-state.json",
       SCHWAB_STREAMER_CONNECT_TIMEOUT_MS: 5_000,
       SCHWAB_STREAMER_QUOTE_TTL_MS: 15_000,
+      SCHWAB_STREAMER_SYMBOL_SOFT_CAP: 250,
       FRED_API_KEY: "",
       WHOOP_CLIENT_ID: "",
       WHOOP_CLIENT_SECRET: "",
@@ -216,13 +217,15 @@ export class MarketDataService {
 
   async checkHealth(): Promise<Record<string, unknown>> {
     await this.ensureRuntimeReady();
+    await this.enforceStreamerFailurePolicy();
     const sharedState = await this.readSharedStreamerState();
+    const streamerHealth = this.streamer?.getHealth() ?? sharedState?.health ?? null;
     return {
       status: "healthy",
       providers: {
         schwab: this.isSchwabConfigured() ? "configured" : "disabled",
         schwabStreamer: this.streamer ? "enabled" : "disabled",
-        schwabStreamerMeta: this.streamer?.getHealth() ?? null,
+        schwabStreamerMeta: streamerHealth,
         schwabStreamerRole: this.activeStreamerRole,
         schwabStreamerRoleConfigured: this.configuredStreamerRole,
         schwabStreamerPgLockKey: this.streamerPgLockKey,
@@ -551,6 +554,7 @@ export class MarketDataService {
 
   async handleOps(): Promise<MarketDataRouteResult<Record<string, unknown>>> {
     await this.ensureRuntimeReady();
+    await this.enforceStreamerFailurePolicy();
     const health = await this.checkHealth();
     const latestUniverse = readJsonFile<MarketDataUniverse>(path.join(this.cacheDir, "base-universe.json"));
     const universeAudit = this.readUniverseAudit(5);
@@ -572,6 +576,12 @@ export class MarketDataService {
           universe: {
             latest: latestUniverse,
             audit: universeAudit,
+            ownership: {
+              artifactPath: path.join(this.cacheDir, "base-universe.json"),
+              auditPath: path.join(this.cacheDir, "base-universe-audit.jsonl"),
+              sourceLadder: this.universeSourceLadder,
+              refreshPolicy: "TS owns the artifact refresh path; python_seed is a terminal fallback only.",
+            },
           },
         },
       },
@@ -617,6 +627,7 @@ export class MarketDataService {
   }
 
   private async fetchPrimaryQuote(symbol: string): Promise<QuoteFetchResult> {
+    await this.enforceStreamerFailurePolicy();
     const reasons: string[] = [];
     if (this.isSchwabConfigured()) {
       try {
@@ -652,6 +663,7 @@ export class MarketDataService {
   }
 
   private async fetchPrimarySnapshot(symbol: string): Promise<SnapshotFetchResult> {
+    await this.enforceStreamerFailurePolicy();
     const quote = await this.fetchPrimaryQuote(symbol);
     const chartEquity =
       (await this.streamer?.getChartEquity(symbol).catch(() => null)) ?? (await this.readSharedStreamerChart(symbol));
@@ -955,10 +967,39 @@ export class MarketDataService {
       preferencesProvider: () => this.fetchSchwabStreamerPreferences(),
       connectTimeoutMs: this.config.SCHWAB_STREAMER_CONNECT_TIMEOUT_MS,
       freshnessTtlMs: this.config.SCHWAB_STREAMER_QUOTE_TTL_MS,
+      subscriptionSoftCap: this.config.SCHWAB_STREAMER_SYMBOL_SOFT_CAP,
       stateSink: (state) => {
         void this.writeSharedStreamerState(state);
       },
     });
+  }
+
+  private async enforceStreamerFailurePolicy(): Promise<void> {
+    const streamer = this.streamer;
+    if (!streamer) {
+      return;
+    }
+    const health = streamer.getHealth();
+    if (!health) {
+      return;
+    }
+    if (health.failurePolicy !== "max_connections_exceeded" || this.activeStreamerRole !== "leader") {
+      return;
+    }
+    this.logger.error("Demoting Schwab streamer leader after CLOSE_CONNECTION / max connection policy");
+    streamer.close();
+    this.streamer = null;
+    if (this.leaderLockClient) {
+      try {
+        await this.leaderLockClient.query("SELECT pg_advisory_unlock($1)", [this.streamerPgLockKey]);
+      } catch (error) {
+        this.logger.error("Unable to release Schwab streamer advisory lock during demotion", error);
+      } finally {
+        this.leaderLockClient.release();
+        this.leaderLockClient = null;
+      }
+    }
+    this.activeStreamerRole = "follower";
   }
 
   private async ensureRuntimeReady(): Promise<void> {
