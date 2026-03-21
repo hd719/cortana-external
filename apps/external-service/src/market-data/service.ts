@@ -7,6 +7,7 @@ import type { AppConfig } from "../config.js";
 import { HttpError, readJsonResponse } from "../lib/http.js";
 import type { AppLogger } from "../lib/logger.js";
 import { createLogger } from "../lib/logger.js";
+import { SchwabStreamerSession, type SchwabStreamerPreferences, type WebSocketFactory } from "./streamer.js";
 import type {
   MarketDataComparison,
   MarketDataGenericPayload,
@@ -40,6 +41,7 @@ interface MarketDataServiceConfig {
   config?: AppConfig;
   logger?: AppLogger;
   fetchImpl?: FetchImpl;
+  websocketFactory?: WebSocketFactory;
 }
 
 interface ServiceMetadata {
@@ -96,6 +98,8 @@ export class MarketDataService {
   private readonly cacheDir: string;
   private readonly universeSeedPath: string;
   private readonly schwabTokenPath: string;
+  private readonly streamerEnabled: boolean;
+  private readonly streamer: SchwabStreamerSession | null;
 
   constructor(config: MarketDataServiceConfig = {}) {
     this.logger = config.logger ?? createLogger("market-data");
@@ -111,6 +115,10 @@ export class MarketDataService {
       SCHWAB_TOKEN_PATH: ".cache/market_data/schwab-token.json",
       SCHWAB_API_BASE_URL: "https://api.schwabapi.com",
       SCHWAB_TOKEN_URL: "https://api.schwabapi.com/v1/oauth/token",
+      SCHWAB_USER_PREFERENCES_URL: "",
+      SCHWAB_STREAMER_ENABLED: "1",
+      SCHWAB_STREAMER_CONNECT_TIMEOUT_MS: 5_000,
+      SCHWAB_STREAMER_QUOTE_TTL_MS: 15_000,
       FRED_API_KEY: "",
       WHOOP_CLIENT_ID: "",
       WHOOP_CLIENT_SECRET: "",
@@ -129,6 +137,20 @@ export class MarketDataService {
     this.cacheDir = resolveRepoPath(this.config.MARKET_DATA_CACHE_DIR);
     this.universeSeedPath = resolveRepoPath(this.config.MARKET_DATA_UNIVERSE_SEED_PATH);
     this.schwabTokenPath = resolveRepoPath(this.config.SCHWAB_TOKEN_PATH);
+    this.streamerEnabled = !["0", "false", "no", "off"].includes(
+      this.config.SCHWAB_STREAMER_ENABLED.trim().toLowerCase(),
+    );
+    this.streamer =
+      this.streamerEnabled && this.isSchwabConfigured()
+        ? new SchwabStreamerSession({
+            logger: this.logger,
+            websocketFactory: config.websocketFactory,
+            accessTokenProvider: () => this.getSchwabAccessToken(),
+            preferencesProvider: () => this.fetchSchwabStreamerPreferences(),
+            connectTimeoutMs: this.config.SCHWAB_STREAMER_CONNECT_TIMEOUT_MS,
+            freshnessTtlMs: this.config.SCHWAB_STREAMER_QUOTE_TTL_MS,
+          })
+        : null;
   }
 
   async checkHealth(): Promise<Record<string, unknown>> {
@@ -136,6 +158,7 @@ export class MarketDataService {
       status: "healthy",
       providers: {
         schwab: this.isSchwabConfigured() ? "configured" : "disabled",
+        schwabStreamer: this.streamer ? "enabled" : "disabled",
         yahoo: "ready",
         fred: this.config.FRED_API_KEY ? "configured" : "unauthenticated",
         universeSeedPath: this.universeSeedPath,
@@ -434,6 +457,14 @@ export class MarketDataService {
     const reasons: string[] = [];
     if (this.isSchwabConfigured()) {
       try {
+        const streamed = await this.streamer?.getQuote(symbol);
+        if (streamed?.price != null) {
+          return { source: "schwab_streamer", status: "ok", stalenessSeconds: 0, quote: streamed };
+        }
+      } catch (error) {
+        reasons.push(`Schwab streamer failed: ${summarizeError(error)}`);
+      }
+      try {
         const quote = await this.fetchSchwabQuote(symbol);
         return { source: "schwab", status: "ok", stalenessSeconds: 0, quote };
       } catch (error) {
@@ -710,6 +741,38 @@ export class MarketDataService {
         this.config.SCHWAB_CLIENT_SECRET.trim() &&
         this.config.SCHWAB_REFRESH_TOKEN.trim(),
     );
+  }
+
+  private async fetchSchwabStreamerPreferences(): Promise<SchwabStreamerPreferences> {
+    const token = await this.getSchwabAccessToken();
+    const defaultUrl = `${this.config.SCHWAB_API_BASE_URL.replace(/\/+$/, "")}/trader/v1/userPreference`;
+    const url = this.config.SCHWAB_USER_PREFERENCES_URL.trim() || defaultUrl;
+    const payload = await this.fetchJson<JsonRecord | JsonRecord[]>(url, {
+      headers: { Authorization: `Bearer ${token}`, accept: "application/json" },
+    });
+    const root = Array.isArray(payload) ? ((payload[0] as JsonRecord | undefined) ?? {}) : payload;
+    const streamerInfo = ((Array.isArray(root.streamerInfo) ? root.streamerInfo[0] : root.streamerInfo) as JsonRecord | undefined) ?? root;
+    const prefs: SchwabStreamerPreferences = {
+      streamerSocketUrl: firstString(streamerInfo.streamerSocketUrl, streamerInfo.socketUrl, streamerInfo.streamerUrl) ?? "",
+      schwabClientCustomerId: firstString(
+        streamerInfo.schwabClientCustomerId,
+        root.schwabClientCustomerId,
+        root.accountId,
+      ) ?? "",
+      schwabClientCorrelId: firstString(streamerInfo.schwabClientCorrelId, root.schwabClientCorrelId) ?? "",
+      schwabClientChannel: firstString(streamerInfo.schwabClientChannel, root.schwabClientChannel) ?? "",
+      schwabClientFunctionId: firstString(streamerInfo.schwabClientFunctionId, root.schwabClientFunctionId) ?? "",
+    };
+    if (
+      !prefs.streamerSocketUrl ||
+      !prefs.schwabClientCustomerId ||
+      !prefs.schwabClientCorrelId ||
+      !prefs.schwabClientChannel ||
+      !prefs.schwabClientFunctionId
+    ) {
+      throw new Error("Schwab user preferences did not include complete streamer connection details");
+    }
+    return prefs;
   }
 
   private async fetchSchwabHistory(symbol: string, period: string, interval: string): Promise<MarketDataHistoryPoint[]> {

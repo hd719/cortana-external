@@ -207,6 +207,7 @@ This is the basic question:
 Important clarification:
 - Python is no longer talking to Schwab or Yahoo directly for the normal path
 - it calls the local TS market-data service, which picks `Schwab -> Yahoo -> cache`
+- quote and snapshot freshness can come from a Schwab streamer session inside TS, but Python still only sees normalized HTTP JSON
 
 ##### 2. Fundamentals
 

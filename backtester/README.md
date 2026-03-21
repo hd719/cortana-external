@@ -57,6 +57,7 @@ Important notes:
 - Alpaca keys are no longer required for normal backtester runs
 - the Python engine now reads external market data through the local TS service
 - default runtime order is `Schwab -> Yahoo (inside TS) -> Python cache`
+- quote and snapshot freshness can use the Schwab streamer session inside TS when credentials and user preferences are available
 - FRED, CBOE, and the base-universe artifact are also owned by the TS service
 - Alpaca is no longer part of the default runtime chain; use it only for explicit compare/diagnostic checks
 - Polymarket integration is read-only
@@ -228,6 +229,7 @@ The Python layer is now the engine only. External IO lives behind the TS service
 
 Provider order:
 - `Schwab`
+- `Schwab streamer` for fresher quote/snapshot state when available
 - `Yahoo` fallback inside TS
 - Python local cache as the last fallback
 
