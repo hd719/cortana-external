@@ -485,6 +485,7 @@ export class MarketDataService {
 
   private async fetchPrimarySnapshot(symbol: string): Promise<SnapshotFetchResult> {
     const quote = await this.fetchPrimaryQuote(symbol);
+    const chartEquity = await this.streamer?.getChartEquity(symbol).catch(() => null);
     const [metadata, fundamentals] = await Promise.all([
       this.fetchYahooMetadata(symbol).catch(() => ({})),
       this.fetchYahooFundamentals(symbol).catch(() => ({})),
@@ -499,6 +500,7 @@ export class MarketDataService {
         quote: quote.quote as unknown as Record<string, unknown>,
         metadata,
         fundamentals,
+        ...(chartEquity ? { chartEquity } : {}),
       },
     };
   }

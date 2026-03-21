@@ -94,6 +94,34 @@ class FakeWebSocket implements WebSocketLike {
           }),
         });
       });
+      return;
+    }
+    if (request.service === "CHART_EQUITY" && request.command === "SUBS") {
+      queueMicrotask(() => {
+        this.onmessage?.({
+          data: JSON.stringify({
+            data: [
+              {
+                service: "CHART_EQUITY",
+                timestamp: 1_710_000_120_000,
+                command: "SUBS",
+                content: [
+                  {
+                    "0": "AAPL",
+                    "1": 200.9,
+                    "2": 202.1,
+                    "3": 200.4,
+                    "4": 201.7,
+                    "5": 150000,
+                    "6": 123,
+                    "7": 1_710_000_120_000,
+                  },
+                ],
+              },
+            ],
+          }),
+        });
+      });
     }
   }
 
@@ -177,6 +205,77 @@ describe("market-data routes", () => {
     expect(body.source).toBe("schwab_streamer");
     expect(body.data.symbol).toBe("AAPL");
     expect(body.data.price).toBe(201.5);
+  });
+
+  it("enriches snapshot payloads with streamer-backed chart equity data", async () => {
+    const app = new Hono();
+    const service = new MarketDataService({
+      config: TEST_CONFIG,
+      websocketFactory: () => new FakeWebSocket(),
+      fetchImpl: async (input) => {
+        const url = String(input);
+        if (url.includes("/oauth/token")) {
+          return new Response(JSON.stringify({ access_token: "access-token", expires_in: 1800 }), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          });
+        }
+        if (url.includes("/trader/v1/userPreference")) {
+          return new Response(
+            JSON.stringify({
+              streamerInfo: {
+                streamerSocketUrl: "wss://streamer.example.test/ws",
+                schwabClientCustomerId: "customer-id",
+                schwabClientCorrelId: "correl-id",
+                schwabClientChannel: "N9",
+                schwabClientFunctionId: "APIAP",
+              },
+            }),
+            { status: 200, headers: { "content-type": "application/json" } },
+          );
+        }
+        if (url.includes("query1.finance.yahoo.com/v10/finance/quoteSummary")) {
+          return new Response(
+            JSON.stringify({
+              quoteSummary: {
+                result: [
+                  {
+                    summaryProfile: { sector: "Technology", industry: "Consumer Electronics" },
+                    defaultKeyStatistics: {},
+                    financialData: {},
+                    price: { shortName: "Apple Inc." },
+                    calendarEvents: { earnings: { earningsDate: [] } },
+                    earningsTrend: { trend: [] },
+                  },
+                ],
+              },
+            }),
+            { status: 200, headers: { "content-type": "application/json" } },
+          );
+        }
+        if (url.includes("query1.finance.yahoo.com/v7/finance/quote")) {
+          return new Response(
+            JSON.stringify({
+              quoteResponse: { result: [{ symbol: "AAPL", regularMarketPrice: 200.12, currency: "USD" }] },
+            }),
+            { status: 200, headers: { "content-type": "application/json" } },
+          );
+        }
+        return new Response("not found", { status: 404 });
+      },
+    });
+    registerMarketDataRoutes(app, service);
+
+    const response = await app.request("/market-data/snapshot/AAPL");
+    const body = (await response.json()) as {
+      source: string;
+      data: { chartEquity?: { close?: number; symbol?: string } };
+    };
+
+    expect(response.status).toBe(200);
+    expect(body.source).toBe("schwab_streamer");
+    expect(body.data.chartEquity?.symbol).toBe("AAPL");
+    expect(body.data.chartEquity?.close).toBe(201.7);
   });
 
   it("refreshes universe artifact from python static seed", async () => {

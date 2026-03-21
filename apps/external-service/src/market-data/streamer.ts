@@ -37,6 +37,22 @@ interface CachedQuote {
   receivedAt: number;
 }
 
+export interface StreamerChartEquityPoint {
+  symbol: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+  sequence?: number;
+  chartTime: string;
+}
+
+interface CachedChartPoint {
+  point: StreamerChartEquityPoint;
+  receivedAt: number;
+}
+
 interface StreamerResponseContent {
   code?: number;
   msg?: string;
@@ -47,7 +63,8 @@ export class SchwabStreamerSession {
   private readonly websocketFactory: WebSocketFactory;
   private readonly accessTokenProvider: () => Promise<string>;
   private readonly preferencesProvider: () => Promise<SchwabStreamerPreferences>;
-  private readonly subscriptionFields: string;
+  private readonly equitySubscriptionFields: string;
+  private readonly chartSubscriptionFields: string;
   private readonly connectTimeoutMs: number;
   private readonly quoteWaitTimeoutMs: number;
   private readonly freshnessTtlMs: number;
@@ -55,8 +72,10 @@ export class SchwabStreamerSession {
   private connectPromise: Promise<void> | null = null;
   private loginResolve: (() => void) | null = null;
   private loginReject: ((error: Error) => void) | null = null;
-  private readonly subscribedSymbols = new Set<string>();
+  private readonly subscribedEquitySymbols = new Set<string>();
+  private readonly subscribedChartSymbols = new Set<string>();
   private readonly quoteCache = new Map<string, CachedQuote>();
+  private readonly chartCache = new Map<string, CachedChartPoint>();
   private lastMessageAt = 0;
   private requestCounter = 0;
   private currentPreferences: SchwabStreamerPreferences | null = null;
@@ -66,7 +85,8 @@ export class SchwabStreamerSession {
     this.websocketFactory = options.websocketFactory ?? defaultWebSocketFactory;
     this.accessTokenProvider = options.accessTokenProvider;
     this.preferencesProvider = options.preferencesProvider;
-    this.subscriptionFields = options.subscriptionFields ?? "0,1,2,3,34";
+    this.equitySubscriptionFields = options.subscriptionFields ?? "0,1,2,3,34";
+    this.chartSubscriptionFields = "0,1,2,3,4,5,6,7";
     this.connectTimeoutMs = options.connectTimeoutMs ?? 5_000;
     this.quoteWaitTimeoutMs = options.quoteWaitTimeoutMs ?? 750;
     this.freshnessTtlMs = options.freshnessTtlMs ?? 15_000;
@@ -82,7 +102,7 @@ export class SchwabStreamerSession {
       return cached;
     }
 
-    await this.ensureConnectedAndSubscribed([normalized]);
+    await this.ensureConnectedAndSubscribed([normalized], []);
     const deadline = Date.now() + this.quoteWaitTimeoutMs;
     while (Date.now() < deadline) {
       const next = this.getFreshQuote(normalized);
@@ -92,6 +112,28 @@ export class SchwabStreamerSession {
       await sleep(50);
     }
     return this.getFreshQuote(normalized);
+  }
+
+  async getChartEquity(symbol: string): Promise<StreamerChartEquityPoint | null> {
+    const normalized = symbol.trim().toUpperCase();
+    if (!normalized) {
+      return null;
+    }
+    const cached = this.getFreshChart(normalized);
+    if (cached) {
+      return cached;
+    }
+
+    await this.ensureConnectedAndSubscribed([], [normalized]);
+    const deadline = Date.now() + this.quoteWaitTimeoutMs;
+    while (Date.now() < deadline) {
+      const next = this.getFreshChart(normalized);
+      if (next) {
+        return next;
+      }
+      await sleep(50);
+    }
+    return this.getFreshChart(normalized);
   }
 
   close(): void {
@@ -118,23 +160,58 @@ export class SchwabStreamerSession {
     return cached.quote;
   }
 
-  private async ensureConnectedAndSubscribed(symbols: string[]): Promise<void> {
-    await this.ensureConnected();
-    const wanted = new Set([...this.subscribedSymbols, ...symbols.map((symbol) => symbol.trim().toUpperCase()).filter(Boolean)]);
-    const changed = wanted.size !== this.subscribedSymbols.size || [...wanted].some((symbol) => !this.subscribedSymbols.has(symbol));
-    if (!changed) {
-      return;
+  private getFreshChart(symbol: string): StreamerChartEquityPoint | null {
+    const cached = this.chartCache.get(symbol);
+    if (!cached) {
+      return null;
     }
-    this.subscribedSymbols.clear();
-    wanted.forEach((symbol) => this.subscribedSymbols.add(symbol));
-    this.sendRequest({
-      service: "LEVELONE_EQUITIES",
-      command: "SUBS",
-      parameters: {
-        keys: [...this.subscribedSymbols].join(","),
-        fields: this.subscriptionFields,
-      },
-    });
+    if (Date.now() - cached.receivedAt > this.freshnessTtlMs) {
+      return null;
+    }
+    return cached.point;
+  }
+
+  private async ensureConnectedAndSubscribed(equitySymbols: string[], chartSymbols: string[]): Promise<void> {
+    await this.ensureConnected();
+    const wantedEquities = new Set([
+      ...this.subscribedEquitySymbols,
+      ...equitySymbols.map((symbol) => symbol.trim().toUpperCase()).filter(Boolean),
+    ]);
+    const equitiesChanged =
+      wantedEquities.size !== this.subscribedEquitySymbols.size ||
+      [...wantedEquities].some((symbol) => !this.subscribedEquitySymbols.has(symbol));
+    if (equitiesChanged) {
+      this.subscribedEquitySymbols.clear();
+      wantedEquities.forEach((symbol) => this.subscribedEquitySymbols.add(symbol));
+      this.sendRequest({
+        service: "LEVELONE_EQUITIES",
+        command: "SUBS",
+        parameters: {
+          keys: [...this.subscribedEquitySymbols].join(","),
+          fields: this.equitySubscriptionFields,
+        },
+      });
+    }
+
+    const wantedCharts = new Set([
+      ...this.subscribedChartSymbols,
+      ...chartSymbols.map((symbol) => symbol.trim().toUpperCase()).filter(Boolean),
+    ]);
+    const chartsChanged =
+      wantedCharts.size !== this.subscribedChartSymbols.size ||
+      [...wantedCharts].some((symbol) => !this.subscribedChartSymbols.has(symbol));
+    if (chartsChanged) {
+      this.subscribedChartSymbols.clear();
+      wantedCharts.forEach((symbol) => this.subscribedChartSymbols.add(symbol));
+      this.sendRequest({
+        service: "CHART_EQUITY",
+        command: "SUBS",
+        parameters: {
+          keys: [...this.subscribedChartSymbols].join(","),
+          fields: this.chartSubscriptionFields,
+        },
+      });
+    }
   }
 
   private async ensureConnected(): Promise<void> {
@@ -263,17 +340,27 @@ export class SchwabStreamerSession {
     const dataEntries = Array.isArray(payload.data) ? payload.data : [];
     for (const item of dataEntries) {
       const entry = item as Record<string, unknown>;
-      if (String(entry.service ?? "") !== "LEVELONE_EQUITIES") {
-        continue;
-      }
       const content = Array.isArray(entry.content) ? entry.content : [];
-      for (const row of content) {
-        const normalized = normalizeStreamerEquityQuote(row as Record<string, unknown>, Number(entry.timestamp ?? Date.now()));
-        if (normalized) {
-          this.quoteCache.set(normalized.symbol, {
-            quote: normalized,
-            receivedAt: Date.now(),
-          });
+      const service = String(entry.service ?? "");
+      if (service === "LEVELONE_EQUITIES") {
+        for (const row of content) {
+          const normalized = normalizeStreamerEquityQuote(row as Record<string, unknown>, Number(entry.timestamp ?? Date.now()));
+          if (normalized) {
+            this.quoteCache.set(normalized.symbol, {
+              quote: normalized,
+              receivedAt: Date.now(),
+            });
+          }
+        }
+      } else if (service === "CHART_EQUITY") {
+        for (const row of content) {
+          const normalized = normalizeStreamerChartEquity(row as Record<string, unknown>);
+          if (normalized) {
+            this.chartCache.set(normalized.symbol, {
+              point: normalized,
+              receivedAt: Date.now(),
+            });
+          }
         }
       }
     }
@@ -295,6 +382,29 @@ function normalizeStreamerEquityQuote(row: Record<string, unknown>, fallbackTime
     price,
     timestamp: new Date(timestampMs).toISOString(),
     currency: "USD",
+  };
+}
+
+function normalizeStreamerChartEquity(row: Record<string, unknown>): StreamerChartEquityPoint | null {
+  const symbol = String(row["0"] ?? row.key ?? "").trim().toUpperCase();
+  const open = firstNumber(row["1"]);
+  const high = firstNumber(row["2"]);
+  const low = firstNumber(row["3"]);
+  const close = firstNumber(row["4"]);
+  const volume = firstNumber(row["5"]);
+  const chartTimeMs = firstNumber(row["7"]);
+  if (!symbol || open == null || high == null || low == null || close == null || volume == null || chartTimeMs == null) {
+    return null;
+  }
+  return {
+    symbol,
+    open,
+    high,
+    low,
+    close,
+    volume,
+    sequence: firstNumber(row["6"]),
+    chartTime: new Date(chartTimeMs).toISOString(),
   };
 }
 
