@@ -1,4 +1,4 @@
-"""Resilient market data provider with provider fallback + local cache."""
+"""Service-first market data provider with Python cache fallback."""
 
 from __future__ import annotations
 
@@ -9,13 +9,11 @@ import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Iterable, Optional
+from typing import Optional, Sequence
+from urllib.parse import quote
 
 import pandas as pd
 import requests
-import yfinance as yf
-
-from config import ALPACA_DATA_URL, ALPACA_KEY_ID, ALPACA_SECRET_KEY
 
 
 class MarketDataError(RuntimeError):
@@ -42,7 +40,8 @@ class MarketHistoryResult:
 class MarketDataProvider:
     def __init__(
         self,
-        provider_order: str = "alpaca,yahoo",
+        provider_order: str = "service",
+        service_base_url: str = "http://localhost:3033",
         cache_dir: Optional[str] = None,
         cache_ttl_seconds: int = 1800,
         max_retries: int = 2,
@@ -51,6 +50,7 @@ class MarketDataProvider:
         cooldown_seconds: int = 45,
     ):
         self.providers = [p.strip().lower() for p in provider_order.split(",") if p.strip()]
+        self.service_base_url = os.getenv("MARKET_DATA_SERVICE_URL", service_base_url).rstrip("/")
         self.cache_dir = Path(cache_dir or os.getenv("MARKET_DATA_CACHE_DIR", ".cache/market_data")).expanduser()
         self.cache_ttl_seconds = int(cache_ttl_seconds)
         self.max_retries = int(max_retries)
@@ -67,10 +67,24 @@ class MarketDataProvider:
         for provider in self.providers:
             providers_tried.append(provider)
             try:
-                frame = self._fetch_with_retries(provider, symbol, period, auto_adjust=auto_adjust)
+                frame, metadata = self._fetch_with_retries(provider, symbol, period, auto_adjust=auto_adjust)
                 self._validate_frame(frame, symbol=symbol, provider=provider)
-                self._write_cache(symbol, period, provider, frame)
-                return MarketHistoryResult(frame=frame, source=provider, status="ok", staleness_seconds=0.0)
+                source = str(metadata.get("source") or provider)
+                status = str(metadata.get("status") or "ok")
+                degraded_reason = str(metadata.get("degraded_reason") or metadata.get("degradedReason") or "")
+                staleness_seconds = float(metadata.get("staleness_seconds") or metadata.get("stalenessSeconds") or 0.0)
+                if status not in {"ok", "degraded"}:
+                    status = "ok"
+                if source == "service":
+                    source = provider
+                self._write_cache(symbol, period, source, frame)
+                return MarketHistoryResult(
+                    frame=frame,
+                    source=source,
+                    status=status,
+                    degraded_reason=degraded_reason,
+                    staleness_seconds=staleness_seconds,
+                )
             except MarketDataError as exc:
                 if exc.transient:
                     transient_failures.append(f"{provider}: {exc}")
@@ -103,14 +117,16 @@ class MarketDataProvider:
             transient=bool(transient_failures) and not fatal_failures,
         )
 
-    def _fetch_with_retries(self, provider: str, symbol: str, period: str, auto_adjust: bool = False) -> pd.DataFrame:
+    def _fetch_with_retries(self, provider: str, symbol: str, period: str, auto_adjust: bool = False) -> tuple[pd.DataFrame, dict]:
+        if provider not in {"service", "alpaca", "yahoo"}:
+            raise MarketDataError(f"Unknown provider '{provider}'", transient=False)
         attempt = 0
         while True:
             try:
-                if provider == "alpaca":
-                    return self._fetch_alpaca_history(symbol, period, auto_adjust=auto_adjust)
-                if provider == "yahoo":
-                    return self._fetch_yahoo_history(symbol, period, auto_adjust=auto_adjust)
+                if provider == "service":
+                    return self._fetch_service_history(symbol, period, auto_adjust=auto_adjust)
+                if provider in {"alpaca", "yahoo"}:
+                    return self._fetch_service_history(symbol, period, auto_adjust=auto_adjust)
                 raise MarketDataError(f"Unknown provider '{provider}'", transient=False)
             except MarketDataError as exc:
                 if attempt >= self.max_retries or not exc.transient:
@@ -119,60 +135,113 @@ class MarketDataProvider:
                 time.sleep(max(delay, 0))
                 attempt += 1
 
-    def _fetch_alpaca_history(self, symbol: str, period: str, auto_adjust: bool = False) -> pd.DataFrame:
-        if not (ALPACA_KEY_ID and ALPACA_SECRET_KEY and ALPACA_DATA_URL):
-            raise MarketDataError("Alpaca credentials/data URL not configured", transient=False)
-
-        start, end = self._period_to_date_range(period)
-        url = f"{ALPACA_DATA_URL.rstrip('/')}/v2/stocks/{symbol}/bars"
-        headers = {
-            "APCA-API-KEY-ID": ALPACA_KEY_ID,
-            "APCA-API-SECRET-KEY": ALPACA_SECRET_KEY,
-        }
-        params = {
-            "timeframe": "1Day",
-            "start": start,
-            "end": end,
-            "limit": 10000,
-            "adjustment": "split" if auto_adjust else "raw",
-        }
+    def _fetch_service_history(self, symbol: str, period: str, auto_adjust: bool = False) -> tuple[pd.DataFrame, dict]:
+        safe_symbol = quote(symbol)
+        url = f"{self.service_base_url}/market-data/history/{safe_symbol}"
+        params = {"period": period, "auto_adjust": str(bool(auto_adjust)).lower()}
 
         try:
-            resp = requests.get(url, headers=headers, params=params, timeout=15)
+            resp = requests.get(url, params=params, timeout=15)
         except requests.RequestException as exc:
-            raise MarketDataError(f"alpaca request failed: {exc}", transient=True) from exc
+            raise MarketDataError(f"market-data service request failed: {exc}", transient=True) from exc
 
-        if resp.status_code in {429, 500, 502, 503, 504}:
-            raise MarketDataError(f"alpaca transient error {resp.status_code}", transient=True)
+        if resp.status_code in {404, 429, 500, 502, 503, 504}:
+            raise MarketDataError(f"market-data service transient error {resp.status_code}", transient=True)
         if resp.status_code != 200:
-            raise MarketDataError(f"alpaca error {resp.status_code}: {resp.text[:180]}", transient=False)
+            raise MarketDataError(f"market-data service error {resp.status_code}: {resp.text[:180]}", transient=False)
 
-        payload = resp.json() or {}
-        bars = payload.get("bars") or []
-        if not bars:
-            raise MarketDataError(f"alpaca returned no bars for {symbol}", transient=True)
+        try:
+            payload = resp.json() or {}
+        except ValueError as exc:
+            raise MarketDataError(f"market-data service returned invalid JSON: {exc}", transient=True) from exc
 
-        frame = pd.DataFrame(bars)
-        colmap = {"t": "Date", "o": "Open", "h": "High", "l": "Low", "c": "Close", "v": "Volume"}
-        frame = frame.rename(columns=colmap)
-        frame["Date"] = pd.to_datetime(frame["Date"], utc=True)
-        frame = frame.set_index("Date")[["Open", "High", "Low", "Close", "Volume"]]
-        return frame.sort_index()
+        frame = self._build_frame_from_service_payload(payload, symbol=symbol)
+        metadata = {
+            "source": str(payload.get("source") or "service"),
+            "status": str(payload.get("status") or "ok"),
+            "degradedReason": str(payload.get("degradedReason") or payload.get("degraded_reason") or ""),
+            "stalenessSeconds": float(payload.get("stalenessSeconds") or payload.get("staleness_seconds") or 0.0),
+            "sourceData": payload.get("sourceData", {}),
+            "availability": payload.get("availability"),
+        }
+        return frame, metadata
+
+    def _fetch_alpaca_history(self, symbol: str, period: str, auto_adjust: bool = False) -> pd.DataFrame:
+        frame, _ = self._fetch_service_history(symbol, period, auto_adjust=auto_adjust)
+        return frame
 
     def _fetch_yahoo_history(self, symbol: str, period: str, auto_adjust: bool = False) -> pd.DataFrame:
-        try:
-            frame = yf.Ticker(symbol).history(period=period, auto_adjust=auto_adjust)
-        except Exception as exc:
-            raise MarketDataError(f"yahoo request failed: {exc}", transient=True) from exc
+        frame, _ = self._fetch_service_history(symbol, period, auto_adjust=auto_adjust)
+        return frame
 
-        if frame is None or frame.empty:
-            raise MarketDataError(f"yahoo returned no bars for {symbol}", transient=True)
+    @staticmethod
+    def _build_frame_from_service_payload(payload: dict, *, symbol: str) -> pd.DataFrame:
+        rows = payload.get("rows")
+        if rows is None:
+            rows = payload.get("data")
+        if rows is None and isinstance(payload.get("data"), dict):
+            rows = (
+                payload["data"].get("rows")
+                or payload["data"].get("history")
+                or payload["data"].get("bars")
+                or []
+            )
+        if rows is None and isinstance(payload, dict):
+            rows = (
+                payload.get("bars")
+                or payload.get("history")
+                or payload.get("records")
+                or []
+            )
+        if not isinstance(rows, list) or not rows:
+            raise MarketDataError(f"market-data service returned no rows for {symbol}", transient=True)
 
-        required = ["Open", "High", "Low", "Close", "Volume"]
-        if not set(required).issubset(frame.columns):
-            raise MarketDataError("yahoo frame missing OHLCV columns", transient=True)
+        parsed: list[dict] = []
+        date_field_candidates = ["date", "Date", "datetime", "timestamp", "ts", "time"]
+        open_field_candidates = ["Open", "open", "o"]
+        high_field_candidates = ["High", "high", "h"]
+        low_field_candidates = ["Low", "low", "l"]
+        close_field_candidates = ["Close", "close", "c"]
+        volume_field_candidates = ["Volume", "volume", "v"]
+        def _pick(row: dict, keys: Sequence[str]) -> Optional[object]:
+            for key in keys:
+                if key in row:
+                    return row[key]
+            return None
 
-        return frame[required].sort_index()
+        for row in rows:
+            if not isinstance(row, dict):
+                raise MarketDataError(
+                    f"market-data service returned malformed row for {symbol}: {row!r}",
+                    transient=True,
+                )
+            date_value = _pick(row, date_field_candidates)
+            if date_value is None:
+                raise MarketDataError(f"market-data service row missing date for {symbol}", transient=True)
+            open_value = _pick(row, open_field_candidates)
+            high_value = _pick(row, high_field_candidates)
+            low_value = _pick(row, low_field_candidates)
+            close_value = _pick(row, close_field_candidates)
+            volume_value = _pick(row, volume_field_candidates)
+            if None in {open_value, high_value, low_value, close_value, volume_value}:
+                raise MarketDataError(f"market-data service row missing OHLCV fields for {symbol}", transient=True)
+
+            try:
+                parsed.append(
+                    {
+                        "Date": pd.to_datetime(date_value),
+                        "Open": float(open_value),
+                        "High": float(high_value),
+                        "Low": float(low_value),
+                        "Close": float(close_value),
+                        "Volume": float(volume_value),
+                    }
+                )
+            except (TypeError, ValueError) as exc:
+                raise MarketDataError(f"market-data service row had invalid numeric values for {symbol}: {exc}", transient=True) from exc
+
+        frame = pd.DataFrame(parsed).set_index("Date")[["Open", "High", "Low", "Close", "Volume"]]
+        return frame.sort_index()
 
     def _write_cache(self, symbol: str, period: str, source: str, frame: pd.DataFrame) -> None:
         payload = {

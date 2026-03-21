@@ -1,9 +1,8 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 
 import pandas as pd
-import pytest
 
 from data.market_data_provider import MarketDataError, MarketDataProvider
 
@@ -22,48 +21,76 @@ def _frame() -> pd.DataFrame:
     )
 
 
-def test_alpaca_provider_happy_path(tmp_path):
-    provider = MarketDataProvider(provider_order="alpaca,yahoo", cache_dir=str(tmp_path), max_retries=0)
+def test_service_provider_happy_path(tmp_path):
+    provider = MarketDataProvider(cache_dir=str(tmp_path), max_retries=0)
     expected = _frame()
 
-    provider._fetch_alpaca_history = lambda symbol, period, auto_adjust=False: expected  # type: ignore[method-assign]
-
+    provider._fetch_service_history = lambda symbol, period, auto_adjust=False: (  # type: ignore[method-assign]
+        expected,
+        {"source": "schwab", "status": "ok", "degradedReason": "", "stalenessSeconds": 0.0},
+    )
     result = provider.get_history("SPY", period="1y")
 
-    assert result.source == "alpaca"
+    assert result.source == "schwab"
     assert result.status == "ok"
     assert not result.frame.empty
 
 
-def test_provider_fallback_to_yahoo_when_alpaca_fails(tmp_path):
-    provider = MarketDataProvider(provider_order="alpaca,yahoo", cache_dir=str(tmp_path), max_retries=0)
+def test_service_metadata_and_status_passthrough(tmp_path):
+    provider = MarketDataProvider(cache_dir=str(tmp_path), max_retries=0)
     expected = _frame()
-
-    def _alpaca_fail(symbol, period, auto_adjust=False):
-        raise MarketDataError("alpaca unavailable", transient=True)
-
-    provider._fetch_alpaca_history = _alpaca_fail  # type: ignore[method-assign]
-    provider._fetch_yahoo_history = lambda symbol, period, auto_adjust=False: expected  # type: ignore[method-assign]
+    provider._fetch_service_history = lambda symbol, period, auto_adjust=False: (  # type: ignore[method-assign]
+        expected,
+        {
+            "source": "service",
+            "status": "degraded",
+            "degradedReason": "using fallback quote",
+            "stalenessSeconds": 12.0,
+        },
+    )
 
     result = provider.get_history("SPY", period="1y")
 
-    assert result.source == "yahoo"
-    assert result.status == "ok"
+    assert result.source == "service"
+    assert result.status == "degraded"
+    assert result.degraded_reason == "using fallback quote"
+    assert result.staleness_seconds == 12.0
 
 
 def test_degraded_cache_path_when_live_providers_fail(tmp_path):
-    provider = MarketDataProvider(provider_order="alpaca,yahoo", cache_dir=str(tmp_path), cache_ttl_seconds=1800, max_retries=0)
+    provider = MarketDataProvider(cache_dir=str(tmp_path), cache_ttl_seconds=1800, max_retries=0)
     cached_df = _frame()
-    provider._write_cache("SPY", "1y", "alpaca", cached_df)
+    provider._write_cache("SPY", "1y", "schwab", cached_df)
 
     def _fail(*args, **kwargs):
         raise MarketDataError("rate limit", transient=True)
 
-    provider._fetch_alpaca_history = _fail  # type: ignore[method-assign]
-    provider._fetch_yahoo_history = _fail  # type: ignore[method-assign]
+    provider._fetch_service_history = _fail  # type: ignore[method-assign]
 
     result = provider.get_history("SPY", period="1y")
 
     assert result.source == "cache"
     assert result.status == "degraded"
     assert "cached" in result.degraded_reason.lower()
+
+
+def test_fallback_between_legacy_providers_defaults_to_service(tmp_path):
+    provider = MarketDataProvider(provider_order="alpaca,yahoo", cache_dir=str(tmp_path), cache_ttl_seconds=0, max_retries=0)
+    expected = _frame()
+    calls = 0
+
+    def _legacy_service(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise MarketDataError("legacy primary failed", transient=True)
+        return (
+            expected,
+            {"source": "yahoo", "status": "ok", "degradedReason": "", "stalenessSeconds": 0.0},
+        )
+
+    provider._fetch_service_history = _legacy_service  # type: ignore[method-assign]
+    result = provider.get_history("SPY", period="1y")
+
+    assert calls == 2
+    assert result.source == "yahoo"

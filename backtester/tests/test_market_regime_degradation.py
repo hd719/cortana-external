@@ -58,3 +58,18 @@ def test_stale_cache_raises_with_staleness_message(tmp_path):
     msg = str(exc_info.value).lower()
     assert "stale" in msg
     assert "ttl=" in msg
+
+
+def test_missing_cache_uses_conservative_emergency_status(tmp_path):
+    cache_path = tmp_path / "market_snapshot.json"
+
+    detector = MarketRegimeDetector(cache_path=str(cache_path), cache_ttl_seconds=1800)
+    detector.data_provider.get_history = lambda *args, **kwargs: (_ for _ in ()).throw(MarketDataError("service unavailable", transient=True))  # type: ignore[method-assign]
+
+    status = detector.get_status()
+
+    assert status.status == "degraded"
+    assert status.regime == MarketRegime.CORRECTION
+    assert status.data_source == "unknown"
+    assert status.position_sizing == 0.0
+    assert "emergency fallback" in status.degraded_reason.lower()

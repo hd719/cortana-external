@@ -1,5 +1,6 @@
 import json
 import logging
+from datetime import UTC, datetime
 from types import SimpleNamespace
 
 import pandas as pd
@@ -48,8 +49,11 @@ def test_sp500_constituents_cache_round_trip_and_normalization(tmp_path, monkeyp
     screener = UniverseScreener(cache_dir=str(tmp_path))
     monkeypatch.setattr(
         screener,
-        "_fetch_live_sp500_constituents",
-        lambda: ["BRK.B", "MSFT", "AAPL", "AAPL"],
+        "_service_request",
+        lambda path, method="GET", **kwargs: (
+            {"status": "ok", "data": {"symbols": ["BRK.B", "MSFT", "AAPL", "AAPL"], "updatedAt": datetime.now(UTC).isoformat()}},
+            200,
+        ),
     )
 
     symbols = screener.load_sp500_constituents(refresh=True)
@@ -57,21 +61,15 @@ def test_sp500_constituents_cache_round_trip_and_normalization(tmp_path, monkeyp
     assert symbols == ["BRK-B", "MSFT", "AAPL"]
     payload = json.loads((tmp_path / "sp500_constituents.json").read_text(encoding="utf-8"))
     assert payload["symbols"] == ["BRK-B", "MSFT", "AAPL"]
-
-    monkeypatch.setattr(
-        screener,
-        "_fetch_live_sp500_constituents",
-        lambda: (_ for _ in ()).throw(RuntimeError("network down")),
-    )
     assert screener.load_sp500_constituents(refresh=False) == ["BRK-B", "MSFT", "AAPL"]
 
 
-def test_sp500_constituents_fall_back_to_static_list_when_live_fetch_and_cache_fail(tmp_path, monkeypatch):
+def test_sp500_constituents_fall_back_to_static_list_when_service_and_cache_fail(tmp_path, monkeypatch):
     screener = UniverseScreener(cache_dir=str(tmp_path))
     monkeypatch.setattr(
         screener,
-        "_fetch_live_sp500_constituents",
-        lambda: (_ for _ in ()).throw(RuntimeError("network down")),
+        "_service_request",
+        lambda path, method="GET", **kwargs: (None, 503),
     )
 
     symbols = screener.load_sp500_constituents(refresh=True)
@@ -79,18 +77,17 @@ def test_sp500_constituents_fall_back_to_static_list_when_live_fetch_and_cache_f
     assert symbols == screener._dedupe_symbols(SP500_TICKERS)
 
 
-def test_sp500_constituents_logs_when_live_refresh_falls_back(tmp_path, monkeypatch, caplog):
+def test_sp500_constituents_logs_when_service_refresh_falls_back(tmp_path, monkeypatch, caplog):
     screener = UniverseScreener(cache_dir=str(tmp_path))
     monkeypatch.setattr(
         screener,
-        "_fetch_live_sp500_constituents",
-        lambda: (_ for _ in ()).throw(RuntimeError("network down")),
+        "_service_request",
+        lambda path, method="GET", **kwargs: (None, 503),
     )
 
     with caplog.at_level(logging.WARNING):
         screener.load_sp500_constituents(refresh=True)
 
-    assert "Live S&P 500 constituent refresh failed" in caplog.text
     assert "Using static bundled S&P 500 constituents" in caplog.text
 
 
@@ -112,14 +109,7 @@ def test_nightly_discovery_profile_merges_live_constituents_growth_and_dynamic(t
 def test_get_stock_info_suppresses_provider_noise(tmp_path, monkeypatch, capsys):
     screener = UniverseScreener(cache_dir=str(tmp_path))
     monkeypatch.setattr(screener, "_fetch_price_history", lambda symbol, period="1y": _history_frame())
-
-    class _NoisyTicker:
-        @property
-        def info(self):
-            print("symbol does not exist")
-            raise RuntimeError("bad ticker")
-
-    monkeypatch.setattr("data.universe.yf.Ticker", lambda symbol: _NoisyTicker())
+    monkeypatch.setattr(screener.service_client, "get_symbol_payload", lambda *args, **kwargs: None)
 
     info = screener.get_stock_info("BAD")
     captured = capsys.readouterr()
@@ -129,24 +119,18 @@ def test_get_stock_info_suppresses_provider_noise(tmp_path, monkeypatch, capsys)
     assert captured.err == ""
 
 
-def test_fetch_live_sp500_constituents_uses_request_headers(tmp_path, monkeypatch):
+def test_load_sp500_constituents_prefers_service_artifact(tmp_path, monkeypatch):
     screener = UniverseScreener(cache_dir=str(tmp_path))
-    captured = {}
+    monkeypatch.setattr(
+        screener,
+        "_service_request",
+        lambda path, method="GET", **kwargs: (
+            {"status": "ok", "data": {"symbols": ["MSFT", "NVDA"], "updatedAt": datetime.now(UTC).isoformat()}},
+            200,
+        ),
+    )
 
-    def _fake_get(url, headers=None, timeout=0):
-        captured["url"] = url
-        captured["headers"] = headers
-        captured["timeout"] = timeout
-        return SimpleNamespace(
-            text="<table><tr><th>Symbol</th></tr><tr><td>MSFT</td></tr></table>",
-            raise_for_status=lambda: None,
-        )
-
-    monkeypatch.setattr("data.universe.requests.get", _fake_get)
-
-    assert screener._fetch_live_sp500_constituents() == ["MSFT"]
-    assert captured["headers"]["User-Agent"]
-    assert captured["timeout"] == 20
+    assert screener.load_sp500_constituents(refresh=True) == ["MSFT", "NVDA"]
 
 
 def test_calculate_technical_score_uses_market_data_provider_history(tmp_path, monkeypatch):
@@ -158,12 +142,6 @@ def test_calculate_technical_score_uses_market_data_provider_history(tmp_path, m
             return SimpleNamespace(frame=_history_frame())
 
     screener = UniverseScreener(cache_dir=str(tmp_path), market_data=_Provider())
-
-    class _TickerShouldNotBeUsed:
-        def history(self, *args, **kwargs):
-            raise AssertionError("Ticker.history should not be used")
-
-    monkeypatch.setattr("data.universe.yf.Ticker", lambda symbol: _TickerShouldNotBeUsed())
 
     result = screener.calculate_technical_score("AAPL")
 

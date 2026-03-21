@@ -11,7 +11,8 @@ from pathlib import Path
 from typing import Dict, Iterable, List, Optional
 
 import pandas as pd
-import yfinance as yf
+
+from data.market_data_provider import MarketDataError, MarketDataProvider
 
 
 LOGGER = logging.getLogger(__name__)
@@ -53,6 +54,7 @@ class LiquidityOverlayModel:
         cache_path: Optional[str | Path] = None,
         max_age_hours: Optional[float] = None,
         chunk_size: int = 64,
+        market_data: Optional[MarketDataProvider] = None,
     ):
         self.cache_path = Path(
             cache_path
@@ -65,6 +67,7 @@ class LiquidityOverlayModel:
             else os.getenv("TRADING_LIQUIDITY_OVERLAY_MAX_AGE_HOURS", "30")
         )
         self.chunk_size = max(int(chunk_size), 1)
+        self.market_data = market_data or MarketDataProvider()
 
     @staticmethod
     def _dedupe(symbols: Iterable[str]) -> List[str]:
@@ -123,50 +126,15 @@ class LiquidityOverlayModel:
     def _fetch_histories(self, symbols: Iterable[str]) -> Dict[str, pd.DataFrame]:
         requested = self._dedupe(symbols)
         out: Dict[str, pd.DataFrame] = {}
-        for start in range(0, len(requested), self.chunk_size):
-            chunk = requested[start : start + self.chunk_size]
+        for symbol in requested:
             try:
-                raw = yf.download(
-                    tickers=chunk,
-                    period="1y",
-                    auto_adjust=False,
-                    progress=False,
-                    threads=False,
-                    group_by="ticker",
-                )
-            except Exception as exc:
-                LOGGER.warning(
-                    "Liquidity overlay chunk download failed for %s: %s",
-                    ",".join(chunk),
-                    exc,
-                )
+                frame = self.market_data.get_history(symbol, period="1y", auto_adjust=False).frame
+            except MarketDataError as exc:
+                LOGGER.warning("Liquidity overlay history fetch failed for %s: %s", symbol, exc)
                 continue
-
-            for symbol in chunk:
-                frame = self._extract_frame(raw, symbol)
-                if frame is not None and not frame.empty:
-                    out[symbol] = frame
+            if frame is not None and not frame.empty:
+                out[symbol] = frame
         return out
-
-    @staticmethod
-    def _extract_frame(raw: pd.DataFrame, symbol: str) -> Optional[pd.DataFrame]:
-        if raw is None or raw.empty:
-            return None
-        if isinstance(raw.columns, pd.MultiIndex):
-            if symbol in raw.columns.get_level_values(0):
-                frame = raw[symbol].copy()
-            elif symbol in raw.columns.get_level_values(-1):
-                frame = raw.xs(symbol, axis=1, level=-1).copy()
-            else:
-                return None
-        else:
-            frame = raw.copy()
-
-        if not set(REQUIRED_COLUMNS).issubset(frame.columns):
-            return None
-        frame = frame[list(REQUIRED_COLUMNS)].copy()
-        frame = frame.dropna(subset=["Open", "Close", "Volume"])
-        return frame.sort_index()
 
     def _build_overlay(self, *, symbol: str, history: Optional[pd.DataFrame]) -> Optional[dict]:
         if history is None or history.empty or len(history) < 60:

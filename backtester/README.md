@@ -37,6 +37,14 @@ source .venv/bin/activate
 uv pip sync requirements.txt
 ```
 
+Start the local TS market-data service in a separate terminal:
+
+```bash
+cd /Users/hd/Developer/cortana-external/apps/external-service
+pnpm install
+pnpm start
+```
+
 Optional Polymarket context:
 
 ```bash
@@ -47,7 +55,10 @@ pnpm install
 
 Important notes:
 - Alpaca keys are no longer required for normal backtester runs
-- market data defaults to `Alpaca -> Yahoo -> cache` where supported
+- the Python engine now reads external market data through the local TS service
+- default runtime order is `Schwab -> Yahoo (inside TS) -> Python cache`
+- FRED, CBOE, and the base-universe artifact are also owned by the TS service
+- Alpaca is no longer part of the default runtime chain; use it only for explicit compare/diagnostic checks
 - Polymarket integration is read-only
 - if you skip Polymarket refresh, the Python backtester still runs
 
@@ -176,6 +187,10 @@ What it does:
 - saves raw and formatted local artifacts under:
   - [var/local-workflows](./var/local-workflows)
 
+Service note:
+- the live engine expects the TS service at `http://localhost:3033` unless you override `MARKET_DATA_SERVICE_BASE_URL`
+- if the service is unavailable, Python falls back to local cache where possible and otherwise uses conservative degraded behavior
+
 Best use:
 - during market hours
 - when you want a compact local operator view
@@ -197,11 +212,39 @@ What it does:
 - refreshes the buy-decision calibration artifact
 - rebuilds leader-basket artifacts
 
+Service note:
+- nightly discovery also depends on the TS market-data service for history, fundamentals, risk data, and base-universe refresh
+
 Best use:
 - after market close or overnight
 - before the next day’s live scan
 
 ## Core Surfaces
+
+## Market Data Boundary
+
+The Python layer is now the engine only. External IO lives behind the TS service in:
+- `/Users/hd/Developer/cortana-external/apps/external-service`
+
+Provider order:
+- `Schwab`
+- `Yahoo` fallback inside TS
+- Python local cache as the last fallback
+
+Backtester-facing service endpoints:
+- `GET /market-data/history/:symbol`
+- `GET /market-data/quote/:symbol`
+- `GET /market-data/snapshot/:symbol`
+- `GET /market-data/fundamentals/:symbol`
+- `GET /market-data/metadata/:symbol`
+- `GET /market-data/news/:symbol`
+- `GET /market-data/universe/base`
+- `POST /market-data/universe/refresh`
+- `GET /market-data/risk/history`
+- `GET /market-data/risk/snapshot`
+
+Optional compare mode:
+- use `compare_with=alpaca` or another provider on the TS endpoints when you want a diagnostic comparison without changing the default runtime chain
 
 Use these depending on what question you are asking:
 

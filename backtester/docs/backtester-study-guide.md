@@ -72,18 +72,16 @@ For the nightly path, the system tries sources in this order:
 
 ```mermaid
 flowchart TD
-    A["Live S&P 500 table"] --> B["Cached S&P 500 list"]
-    B --> C["Bundled fallback list in universe.py"]
-    A --> D["Nightly base universe"]
-    B --> D
-    C --> D
+    A["TS base-universe artifact"] --> D["Nightly base universe"]
+    B["Bundled fallback list in universe.py"] --> D
     E["Growth watchlist"] --> D
     F["Dynamic names"] --> D
 ```
 
 Important note:
-- the bundled `SP500_TICKERS` list is only a fallback it is not the full current S&P 500
-- the nightly path is best when the live constituent refresh works
+- the TS service owns the base-universe artifact now
+- the bundled `SP500_TICKERS` list is only a fallback
+- Python no longer scrapes Wikipedia directly for this path
 
 #### Mental model
 
@@ -206,6 +204,10 @@ This is used for:
 This is the basic question:
 - "What has the stock actually been doing?"
 
+Important clarification:
+- Python is no longer talking to Schwab or Yahoo directly for the normal path
+- it calls the local TS market-data service, which picks `Schwab -> Yahoo -> cache`
+
 ##### 2. Fundamentals
 
 The advisor pulls fundamental data like:
@@ -216,6 +218,9 @@ The advisor pulls fundamental data like:
 
 This is the basic question:
 - "Is the business strong enough to support the chart?"
+
+Important clarification:
+- fundamentals and symbol metadata are now normalized by the TS service before Python scores them
 
 ##### 3. Technicals
 
@@ -243,7 +248,9 @@ This is the basic question:
 - "Even if the stock looks good, are market conditions good enough?"
 
 Important clarification:
-- market regime is primarily owned by the Python market-regime engine
+- market regime logic still lives in Python
+- but its raw inputs now come from the TS service risk endpoints
+- those TS risk endpoints own the external fetches for Schwab/Yahoo/FRED/CBOE
 
 Simple version:
 - market regime = "How healthy is the market?"

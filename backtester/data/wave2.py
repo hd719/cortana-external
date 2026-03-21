@@ -5,8 +5,8 @@ from __future__ import annotations
 from typing import Dict, List, Optional
 
 import pandas as pd
-import yfinance as yf
 
+from data.market_data_service_client import MarketDataServiceClient
 from data.x_sentiment import XSentimentAnalyzer
 
 
@@ -101,7 +101,7 @@ def score_breakout_follow_through(history: pd.DataFrame) -> Dict:
 
 
 class HeadlineSentimentAnalyzer:
-    """Lightweight headline sentiment using yfinance news as a practical source."""
+    """Lightweight headline sentiment using the local market-data service."""
 
     BEARISH_KEYWORDS = {
         "downgrade", "miss", "misses", "cuts", "cut", "probe", "lawsuit", "fall", "falls",
@@ -111,6 +111,9 @@ class HeadlineSentimentAnalyzer:
         "upgrade", "beats", "beat", "raises", "record", "growth", "strong", "bullish",
         "breakout", "surge", "demand", "buyback", "expands", "wins", "momentum",
     }
+
+    def __init__(self, service_client: Optional[MarketDataServiceClient] = None):
+        self.service_client = service_client or MarketDataServiceClient()
 
     def _default_result(self, ticker: str) -> Dict:
         return {
@@ -150,11 +153,10 @@ class HeadlineSentimentAnalyzer:
 
     def analyze(self, ticker: str) -> Dict:
         symbol = ticker.upper().strip()
-        try:
-            texts = self._extract_texts(getattr(yf.Ticker(symbol), "news", []))
-        except Exception:
-            return self._default_result(symbol)
-
+        payload = self.service_client.get_symbol_payload("news", symbol)
+        data = self.service_client.extract_data(payload) or {}
+        items = data.get("items", []) if isinstance(data, dict) else []
+        texts = self._extract_texts(items)
         if not texts:
             return self._default_result(symbol)
 
@@ -327,3 +329,5 @@ def score_exit_risk(history: pd.DataFrame, breakout: Optional[Dict] = None) -> D
         "distribution_days_10d": distribution_days,
         "reasons": reasons or ["exit structure looks orderly"],
     }
+    def __init__(self, service_client: Optional[MarketDataServiceClient] = None):
+        self.service_client = service_client or MarketDataServiceClient()

@@ -4,6 +4,7 @@ export interface AggregateHealthInput {
   whoop: Record<string, unknown>;
   tonal: Record<string, unknown>;
   alpaca: Record<string, unknown>;
+  marketData: Record<string, unknown>;
 }
 
 export interface AggregateHealthOutput extends AggregateHealthInput {
@@ -16,10 +17,10 @@ function isHealthy(entry: Record<string, unknown>): boolean {
 }
 
 export function buildAggregateHealth(input: AggregateHealthInput): AggregateHealthOutput {
-  const healthyCount = [input.whoop, input.tonal, input.alpaca].filter(isHealthy).length;
+  const healthyCount = [input.whoop, input.tonal, input.alpaca, input.marketData].filter(isHealthy).length;
 
   const status: AggregateHealthOutput["status"] =
-    healthyCount === 3 ? "ok" : healthyCount === 0 ? "unhealthy" : "degraded";
+    healthyCount === 4 ? "ok" : healthyCount === 0 ? "unhealthy" : "degraded";
 
   return {
     status,
@@ -27,5 +28,6 @@ export function buildAggregateHealth(input: AggregateHealthInput): AggregateHeal
     whoop: input.whoop,
     tonal: input.tonal,
     alpaca: input.alpaca,
+    marketData: input.marketData,
   };
 }

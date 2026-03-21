@@ -248,6 +248,28 @@ class MarketRegimeDetector:
             follow_through_active=bool(cached.get("follow_through_active", False)),
         )
 
+    def _build_emergency_status(self, failure_reason: str) -> MarketStatus:
+        """Conservative last-resort fallback when neither live data nor snapshot cache is available."""
+        return MarketStatus(
+            regime=MarketRegime.CORRECTION,
+            distribution_days=0,
+            last_ftd=None,
+            trend_direction="unknown",
+            position_sizing=0.0,
+            notes="Market inputs unavailable. Defaulting to defensive posture until fresh data is restored.",
+            data_source="unknown",
+            status="degraded",
+            degraded_reason=f"{failure_reason}. No snapshot cache available; using conservative emergency fallback.",
+            snapshot_age_seconds=0.0,
+            next_action=f"Restore market-data service or seed {self.cache_path}.",
+            regime_score=-99,
+            drawdown_pct=0.0,
+            recent_return_pct=0.0,
+            price_vs_21d_pct=0.0,
+            price_vs_50d_pct=0.0,
+            follow_through_active=False,
+        )
+
     def fetch_data(self, days: int = 90) -> pd.DataFrame:
         try:
             result = self.data_provider.get_history(self.symbol, period=f"{days}d")
@@ -384,7 +406,15 @@ class MarketRegimeDetector:
             self.fetch_data()
         except MarketDataFetchError as exc:
             if exc.transient:
-                return self._build_degraded_status(str(exc))
+                try:
+                    return self._build_degraded_status(str(exc))
+                except MarketDataFetchError as degraded_exc:
+                    degraded_message = str(degraded_exc)
+                    if "No usable market snapshot cache" in degraded_message:
+                        return self._build_emergency_status(str(exc))
+                    if "transient error 404" in str(exc) and "Cached snapshot is stale" in degraded_message:
+                        return self._build_emergency_status(str(exc))
+                    raise
             raise
 
         dist_days = self.count_distribution_days(25)

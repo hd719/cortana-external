@@ -20,32 +20,28 @@ Then we score each candidate on CANSLIM factors to find the best setups.
 =============================================================================
 """
 
-import io
 import pandas as pd
 import numpy as np
-import yfinance as yf
-from typing import List, Dict, Optional, Set, Callable, TypeVar
+from typing import List, Dict, Optional, Set
 from datetime import UTC, datetime, timedelta
-from contextlib import redirect_stderr, redirect_stdout
-from io import StringIO
 import json
 import logging
 import os
 from pathlib import Path
 import time
 import requests
-import warnings
 
 from .market_data_provider import MarketDataError, MarketDataProvider
+from .market_data_service_client import MarketDataServiceClient
 from .polymarket_context import load_watchlist_entries
 
 
 LOGGER = logging.getLogger(__name__)
-_T = TypeVar("_T")
 
 
-# S&P 500 tickers (we'll use this as our base universe)
-# In production, this should be fetched dynamically
+# Bundled fallback universe.
+# Normal runtime should prefer the TS-owned base-universe artifact and only use
+# this list when the service artifact is unavailable or stale.
 SP500_TICKERS = [
     # === Mega Cap / Top 30 by market cap ===
     "AAPL", "MSFT", "AMZN", "NVDA", "GOOGL", "GOOG", "META", "TSLA", "BRK-B",
@@ -175,15 +171,6 @@ UNIVERSE_PROFILES = {
     UNIVERSE_PROFILE_STANDARD: "Curated broad universe used by the current live stack",
     UNIVERSE_PROFILE_NIGHTLY_DISCOVERY: "Broader nightly discovery universe using live S&P 500 constituents when available",
 }
-SP500_CONSTITUENTS_URL = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
-DEFAULT_HTTP_HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/137.0.0.0 Safari/537.36"
-    ),
-    "Accept-Language": "en-US,en;q=0.9",
-}
 
 
 class UniverseScreener:
@@ -204,7 +191,32 @@ class UniverseScreener:
             cache_dir = Path(__file__).parent / "cache"
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(exist_ok=True)
+        self._service_base_url = os.getenv("MARKET_DATA_SERVICE_BASE_URL", "http://localhost:3033").rstrip("/")
+        self._service_timeout_seconds = float(os.getenv("MARKET_DATA_SERVICE_TIMEOUT_SECONDS", "1.5"))
+        self._base_universe_cache: Optional[List[str]] = None
+        self._base_universe_cache_refresh = datetime.now(UTC)
         self.market_data = market_data or MarketDataProvider(cache_dir=str(self.cache_dir / "market_data"))
+        self.service_client = MarketDataServiceClient(
+            base_url=self._service_base_url,
+            timeout_seconds=self._service_timeout_seconds,
+        )
+
+    def _service_request(self, path: str, method: str = "GET", **kwargs):
+        try:
+            if method == "POST":
+                response = requests.post(f"{self._service_base_url}{path}", timeout=self._service_timeout_seconds, **kwargs)
+            else:
+                response = requests.get(f"{self._service_base_url}{path}", timeout=self._service_timeout_seconds, **kwargs)
+        except Exception as exc:
+            LOGGER.debug("Universe service request failed for %s: %s", path, exc)
+            return None, 0
+        if response is None or response.status_code != 200:
+            return None, getattr(response, "status_code", 0)
+        try:
+            return response.json(), response.status_code
+        except Exception as exc:
+            LOGGER.debug("Universe service response parse failed for %s: %s", path, exc)
+            return None, response.status_code
 
     def _sp500_constituents_cache_path(self) -> Path:
         return self.cache_dir / "sp500_constituents.json"
@@ -230,8 +242,11 @@ class UniverseScreener:
             return None
         try:
             payload = json.loads(path.read_text(encoding="utf-8"))
-            generated_at = datetime.fromisoformat(str(payload.get("generated_at")))
-            age_seconds = max((datetime.now(UTC) - generated_at.replace(tzinfo=UTC)).total_seconds(), 0.0)
+            raw_generated_at = str(payload.get("generated_at")).strip().replace("Z", "+00:00")
+            generated_at = datetime.fromisoformat(raw_generated_at)
+            if generated_at.tzinfo is None:
+                generated_at = generated_at.replace(tzinfo=UTC)
+            age_seconds = max((datetime.now(UTC) - generated_at).total_seconds(), 0.0)
             if age_seconds > max_age_hours * 3600:
                 return None
             symbols = payload.get("symbols", [])
@@ -248,27 +263,61 @@ class UniverseScreener:
         }
         self._sp500_constituents_cache_path().write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 
-    def _fetch_live_sp500_constituents(self) -> List[str]:
-        url = os.getenv("SP500_CONSTITUENTS_URL", SP500_CONSTITUENTS_URL)
-        response = requests.get(url, headers=DEFAULT_HTTP_HEADERS, timeout=20)
-        response.raise_for_status()
-        tables = pd.read_html(StringIO(response.text))
-        for table in tables:
-            if "Symbol" not in table.columns:
-                continue
-            symbols = [self._normalize_symbol(value) for value in table["Symbol"].tolist()]
-            symbols = self._dedupe_symbols(symbols)
-            if symbols:
-                return symbols
-        raise ValueError("Unable to parse S&P 500 constituents from source")
+    @staticmethod
+    def _parse_ts_timestamp(value: object) -> Optional[datetime]:
+        if not value:
+            return None
+        try:
+            if isinstance(value, (int, float)):
+                return datetime.fromtimestamp(float(value), tz=UTC)
+            if isinstance(value, datetime):
+                return value.replace(tzinfo=value.tzinfo or UTC)
+            raw = str(value).strip().replace("Z", "+00:00")
+            if not raw:
+                return None
+            return datetime.fromisoformat(raw)
+        except Exception:
+            return None
 
     @staticmethod
-    def _run_market_data_quietly(fn: Callable[..., _T], *args, **kwargs) -> _T:
-        with warnings.catch_warnings(), redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
-            warnings.filterwarnings("ignore", message="Timestamp.utcnow is deprecated.*")
-            warnings.filterwarnings("ignore", category=FutureWarning, module="yfinance")
-            warnings.filterwarnings("ignore", category=UserWarning, module="yfinance")
-            return fn(*args, **kwargs)
+    def _is_fresh_timestamp(ts: Optional[datetime], max_age_hours: float) -> bool:
+        if ts is None:
+            return False
+        age_seconds = max((datetime.now(UTC) - ts.astimezone(UTC)).total_seconds(), 0.0)
+        return age_seconds <= max_age_hours * 3600
+
+    def _parse_universe_payload(self, payload: dict, *, max_age_hours: float = 24.0) -> Optional[List[str]]:
+        if not isinstance(payload, dict):
+            return None
+
+        status = str(payload.get("status") or "").lower()
+        if status and status not in {"ok", "degraded"}:
+            return None
+
+        data = payload.get("data", payload)
+        if not isinstance(data, dict):
+            return None
+
+        symbols = data.get("symbols") or payload.get("symbols")
+        if not isinstance(symbols, list) or not symbols:
+            return None
+
+        generated_at = self._parse_ts_timestamp(data.get("updatedAt") or payload.get("updatedAt"))
+        if generated_at is not None and not self._is_fresh_timestamp(generated_at, max_age_hours):
+            return None
+
+        return self._dedupe_symbols(symbols)
+
+    def _load_base_universe_from_service(self, *, max_age_hours: float = 24.0, refresh: bool = False) -> Optional[List[str]]:
+        if refresh:
+            _, refresh_status = self._service_request("/market-data/universe/refresh", method="POST")
+            if refresh_status == 0:
+                LOGGER.debug("Universe refresh service request failed or unavailable.")
+
+        payload, status_code = self._service_request("/market-data/universe/base")
+        if payload is None or status_code == 0:
+            return None
+        return self._parse_universe_payload(payload, max_age_hours=max_age_hours)
 
     def _fetch_price_history(self, symbol: str, period: str = "1y") -> Optional[pd.DataFrame]:
         try:
@@ -278,22 +327,18 @@ class UniverseScreener:
             return None
 
     def _fetch_stock_metadata(self, symbol: str) -> Dict:
-        try:
-            ticker = yf.Ticker(symbol)
-            info = self._run_market_data_quietly(lambda: ticker.info)
-            if not isinstance(info, dict):
-                return {}
-            return {
-                'name': info.get('shortName', symbol),
-                'market_cap': info.get('marketCap'),
-                'float_shares': info.get('floatShares'),
-                'beta': info.get('beta'),
-                'sector': info.get('sector'),
-                'industry': info.get('industry'),
-            }
-        except Exception as exc:
-            LOGGER.debug("Skipping %s during metadata fetch: %s", symbol, exc)
+        payload = self.service_client.get_symbol_payload("metadata", symbol)
+        data = self.service_client.extract_data(payload) or {}
+        if not isinstance(data, dict):
             return {}
+        return {
+            'name': data.get('name', symbol),
+            'market_cap': data.get('market_cap'),
+            'float_shares': data.get('float_shares'),
+            'beta': data.get('beta'),
+            'sector': data.get('sector'),
+            'industry': data.get('industry'),
+        }
 
     def load_sp500_constituents(self, *, refresh: bool = False, max_age_hours: float = 24.0) -> List[str]:
         if not refresh:
@@ -301,22 +346,38 @@ class UniverseScreener:
             if cached:
                 return cached
 
-        try:
-            symbols = self._dedupe_symbols(self._fetch_live_sp500_constituents())
+        symbols = self._load_base_universe_from_service(
+            refresh=refresh,
+            max_age_hours=max_age_hours,
+        )
+        if symbols:
             self._write_sp500_constituents_cache(symbols)
             return symbols
-        except Exception as exc:
-            LOGGER.warning("Live S&P 500 constituent refresh failed; falling back to cache/static list: %s", exc)
+
+        if not refresh:
             cached = self._load_cached_sp500_constituents(max_age_hours=24 * 365)
             if cached:
                 LOGGER.warning("Using cached S&P 500 constituents for nightly discovery")
                 return cached
-            LOGGER.warning("Using static bundled S&P 500 constituents for nightly discovery")
-            return self._dedupe_symbols(SP500_TICKERS)
+
+        cached = self._load_cached_sp500_constituents(max_age_hours=24 * 365)
+        if cached:
+            LOGGER.warning("Using cached S&P 500 constituents for nightly discovery")
+            return cached
+        LOGGER.warning("Using static bundled S&P 500 constituents for nightly discovery")
+        return self._dedupe_symbols(SP500_TICKERS)
     
     def _dynamic_watchlist_path(self) -> Path:
         """Path to dynamic watchlist JSON in this module directory."""
         return Path(__file__).parent / "dynamic_watchlist.json"
+
+    def _get_base_universe(self, *, refresh: bool = False, max_age_hours: float = 24.0) -> List[str]:
+        if not refresh and self._base_universe_cache is not None:
+            return self._base_universe_cache
+        symbols = self.load_sp500_constituents(refresh=refresh, max_age_hours=max_age_hours)
+        self._base_universe_cache = self._dedupe_symbols(symbols)
+        self._base_universe_cache_refresh = datetime.now(UTC)
+        return self._base_universe_cache
 
     def _load_watchlist_payload(self, path: Path) -> List[Dict]:
         """
@@ -356,7 +417,7 @@ class UniverseScreener:
         """
         Return only dynamic ticker symbols that are not already in static lists.
         """
-        static_universe: Set[str] = set(static_symbols or self._dedupe_symbols(SP500_TICKERS))
+        static_universe: Set[str] = set(static_symbols or self._get_base_universe())
         if include_growth:
             static_universe.update(GROWTH_WATCHLIST)
 
@@ -372,7 +433,7 @@ class UniverseScreener:
         """
         Return static/dynamic/total ticker counts for the active universe.
         """
-        static_universe: Set[str] = set(SP500_TICKERS)
+        static_universe: Set[str] = set(self._get_base_universe())
         if include_growth:
             static_universe.update(GROWTH_WATCHLIST)
 
@@ -395,7 +456,7 @@ class UniverseScreener:
         Returns:
             List of ticker symbols
         """
-        universe: Set[str] = set(SP500_TICKERS)
+        universe: Set[str] = set(self._get_base_universe())
 
         if include_growth:
             universe.update(GROWTH_WATCHLIST)
@@ -411,7 +472,7 @@ class UniverseScreener:
         include_growth: bool = True,
         refresh_sp500: bool = False,
     ) -> List[str]:
-        universe: Set[str] = set(self.load_sp500_constituents(refresh=refresh_sp500))
+        universe: Set[str] = set(self._get_base_universe(refresh=refresh_sp500))
         if include_growth:
             universe.update(self._dedupe_symbols(GROWTH_WATCHLIST))
         universe.update(self.get_dynamic_tickers(include_growth=include_growth, static_symbols=universe))
@@ -729,10 +790,9 @@ def find_breakouts(days: int = 5) -> pd.DataFrame:
     
     for symbol in symbols:
         try:
-            ticker = yf.Ticker(symbol)
-            hist = ticker.history(period="3mo")
+            hist = screener._fetch_price_history(symbol, period="3mo")
             
-            if len(hist) < 20:
+            if hist is None or len(hist) < 20:
                 continue
             
             # Check if made new 20-day high in last N days

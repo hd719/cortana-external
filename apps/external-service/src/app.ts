@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 
+import { createMarketDataService, registerMarketDataRoutes, type MarketDataService } from "./market-data/index.js";
 import { createAlpacaService, registerAlpacaRoutes, type AlpacaService } from "./alpaca/index.js";
 import { getConfig } from "./config.js";
 import { buildAggregateHealth } from "./health.js";
@@ -11,6 +12,7 @@ export interface ExternalServices {
   whoop: WhoopService;
   tonal: TonalService;
   alpaca: AlpacaService;
+  marketData: MarketDataService;
 }
 
 function toUnhealthyPayload(error: unknown): Record<string, unknown> {
@@ -35,6 +37,7 @@ export function createExternalServices(): ExternalServices {
     whoop: createWhoopService(config),
     tonal: createTonalService(config),
     alpaca: createAlpacaService({ logger: createLogger("alpaca") }),
+    marketData: createMarketDataService(config),
   };
 }
 
@@ -47,24 +50,27 @@ export function createApplication(services: ExternalServices = createExternalSer
   registerWhoopRoutes(app, services.whoop);
   registerTonalRoutes(app, services.tonal);
   registerAlpacaRoutes(app, services.alpaca);
+  registerMarketDataRoutes(app, services.marketData);
 
   app.get("/health", async (c) => {
     const { signal, cancel } = createHealthSignal(10_000);
 
     try {
-      const [whoop, tonal, alpaca] = await Promise.all([
+      const [whoop, tonal, alpaca, marketData] = await Promise.all([
         services.whoop.getAggregateHealth().catch(toUnhealthyPayload),
         services.tonal.getAggregateHealth(signal).catch(toUnhealthyPayload),
         services.alpaca.checkHealth().catch(toUnhealthyPayload),
+        services.marketData.checkHealth().catch(toUnhealthyPayload),
       ]);
 
-      const result = buildAggregateHealth({ whoop, tonal, alpaca });
+      const result = buildAggregateHealth({ whoop, tonal, alpaca, marketData });
       return c.json(
         {
           status: result.status,
           whoop: result.whoop,
           tonal: result.tonal,
           alpaca: result.alpaca,
+          marketData: result.marketData,
         },
         result.statusCode as never,
       );

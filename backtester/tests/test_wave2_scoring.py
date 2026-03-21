@@ -1,5 +1,3 @@
-from unittest.mock import patch
-
 import pandas as pd
 
 from data.wave2 import (
@@ -42,10 +40,8 @@ def test_headline_sentiment_analyzer_scores_yfinance_news():
         {"title": "Analyst upgrade highlights strong demand"},
         {"title": "Momentum breakout extends after record growth"},
     ]
-
-    with patch("data.wave2.yf.Ticker") as ticker_cls:
-        ticker_cls.return_value.news = payload
-        result = analyzer.analyze("NVDA")
+    analyzer.service_client.get_symbol_payload = lambda *args, **kwargs: {"status": "ok", "data": {"payload": {"items": payload}}}  # type: ignore[assignment]
+    result = analyzer.analyze("NVDA")
 
     assert result["article_count"] == 3
     assert result["sentiment"] in {"BULLISH", "VERY_BULLISH"}
