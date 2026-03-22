@@ -109,6 +109,8 @@ interface StreamerServiceBudget {
   softCap: number;
   headroomRemaining: number;
   overSoftCap: boolean;
+  lastPrunedAt: string | null;
+  lastPrunedCount: number;
 }
 
 interface SharedCachedQuote {
@@ -205,6 +207,8 @@ export class SchwabStreamerSession {
     [STREAMER_SERVICES.CHART_EQUITY]: Promise.resolve(),
   };
   private readonly messageTimestamps: number[] = [];
+  private lastBudgetPrunedAt = 0;
+  private lastBudgetPrunedCount = 0;
   private lastMessageAt = 0;
   private lastHeartbeatAt = 0;
   private lastLoginAt = 0;
@@ -528,9 +532,9 @@ export class SchwabStreamerSession {
       const content = (entry.content ?? {}) as StreamerResponseContent;
       const code = Number(content.code ?? -1);
       const requestId = String(entry.requestid ?? "");
+      const pending = requestId ? this.pendingRequests.get(requestId) : undefined;
       if (this.isSuccessfulResponseCode(code)) {
         if (requestId) {
-          const pending = this.pendingRequests.get(requestId);
           if (pending) {
             this.applyAcknowledgedRequest(pending, now);
             this.pendingRequests.delete(requestId);
@@ -557,6 +561,9 @@ export class SchwabStreamerSession {
         this.forceReconnect("CLOSE_CONNECTION");
       } else if (code === 19) {
         this.failurePolicy = "symbol_limit_reached";
+        if (pending) {
+          this.handleSymbolLimitFailure(pending);
+        }
       } else if (code === 20) {
         this.failurePolicy = "immediate_reconnect";
         this.reconnectSuppressed = false;
@@ -640,6 +647,7 @@ export class SchwabStreamerSession {
         active: false,
       });
     }
+    this.pruneToBudget(service);
   }
 
   private async syncSubscriptions(service: StreamerServiceName): Promise<void> {
@@ -691,10 +699,32 @@ export class SchwabStreamerSession {
     if (!symbols.length) {
       return;
     }
-    await this.queueServiceMutation(service, command, {
-      keys: symbols.join(","),
-      fields: service === STREAMER_SERVICES.LEVELONE_EQUITIES ? this.equitySubscriptionFields : this.chartSubscriptionFields,
-    });
+    const fields =
+      service === STREAMER_SERVICES.LEVELONE_EQUITIES ? this.equitySubscriptionFields : this.chartSubscriptionFields;
+    const chunkSize = this.subscriptionChunkSize();
+    const chunks = chunkSymbols(symbols, chunkSize);
+    if (command === "SUBS") {
+      const [firstChunk, ...remaining] = chunks;
+      if (firstChunk?.length) {
+        await this.queueServiceMutation(service, "SUBS", {
+          keys: firstChunk.join(","),
+          fields,
+        });
+      }
+      for (const chunk of remaining) {
+        await this.queueServiceMutation(service, "ADD", {
+          keys: chunk.join(","),
+          fields,
+        });
+      }
+      return;
+    }
+    for (const chunk of chunks) {
+      await this.queueServiceMutation(service, command, {
+        keys: chunk.join(","),
+        fields,
+      });
+    }
   }
 
   private pruneIdleSubscriptions(): void {
@@ -909,9 +939,49 @@ export class SchwabStreamerSession {
         softCap: this.subscriptionSoftCap,
         headroomRemaining: Math.max(this.subscriptionSoftCap - requestedSymbols, 0),
         overSoftCap: requestedSymbols > this.subscriptionSoftCap,
+        lastPrunedAt: this.lastBudgetPrunedAt ? new Date(this.lastBudgetPrunedAt).toISOString() : null,
+        lastPrunedCount: this.lastBudgetPrunedCount,
       };
     }
     return out;
+  }
+
+  private subscriptionChunkSize(): number {
+    return Math.max(1, Math.min(this.subscriptionSoftCap, 50));
+  }
+
+  private pruneToBudget(service: StreamerServiceName): void {
+    const registry = this.subscriptions[service];
+    if (registry.size <= this.subscriptionSoftCap) {
+      return;
+    }
+    const ordered = [...registry.values()].sort((left, right) => left.lastRequestedAt - right.lastRequestedAt);
+    const removeCount = registry.size - this.subscriptionSoftCap;
+    const toRemove = ordered.slice(0, removeCount);
+    for (const entry of toRemove) {
+      registry.delete(entry.symbol);
+    }
+    this.lastBudgetPrunedAt = Date.now();
+    this.lastBudgetPrunedCount = toRemove.length;
+  }
+
+  private handleSymbolLimitFailure(pending: PendingRequestMeta): void {
+    const service = pending.service as StreamerServiceName;
+    if (!(service in this.subscriptions)) {
+      return;
+    }
+    this.pruneToBudget(service);
+    if (pending.symbols.length <= 1) {
+      return;
+    }
+    const registry = this.subscriptions[service];
+    const allowed = new Set([...registry.keys()]);
+    for (const symbol of pending.symbols) {
+      if (!allowed.has(symbol)) {
+        this.activeSubscriptions[service].delete(symbol);
+        this.confirmedSubscriptions[service].delete(symbol);
+      }
+    }
   }
 
   private currentOperatorState(): string {
@@ -1035,4 +1105,12 @@ function firstHeartbeat(entry: Record<string, unknown>): number | undefined {
     }
   }
   return undefined;
+}
+
+function chunkSymbols(symbols: string[], chunkSize: number): string[][] {
+  const out: string[][] = [];
+  for (let index = 0; index < symbols.length; index += chunkSize) {
+    out.push(symbols.slice(index, index + chunkSize));
+  }
+  return out;
 }

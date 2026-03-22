@@ -111,3 +111,59 @@ def test_format_leader_baskets_surfaces_daily_weekly_monthly_names():
     assert "- Daily: NVDA +3.2% (1x), AMD n/a (1x)" in text
     assert "- Weekly: NVDA +8.4% (4x), MSFT +6.1% (3x)" in text
     assert "- Monthly: NVDA +16.2% (9x), META +12.5% (7x), AAPL +9.0% (5x)" in text
+
+
+def test_format_market_data_ops_surfaces_role_budget_and_universe_state():
+    raw = json.dumps(
+        {
+            "data": {
+                "streamerRoleConfigured": "auto",
+                "streamerRoleActive": "leader",
+                "streamerLockHeld": True,
+                "providerMetrics": {
+                    "fallbackUsage": {"yahoo": 3, "shared_state": 2},
+                    "sourceUsage": {"schwab_streamer": 12, "yahoo": 3},
+                },
+                "health": {
+                    "providers": {
+                        "schwabStreamerMeta": {
+                            "operatorState": "healthy",
+                            "failurePolicy": None,
+                            "connected": True,
+                            "operatorAction": "No operator action required.",
+                            "subscriptionBudget": {
+                                "LEVELONE_EQUITIES": {
+                                    "requestedSymbols": 40,
+                                    "softCap": 250,
+                                    "headroomRemaining": 210,
+                                    "overSoftCap": False,
+                                    "lastPrunedCount": 0,
+                                },
+                                "CHART_EQUITY": {
+                                    "requestedSymbols": 10,
+                                    "softCap": 250,
+                                    "headroomRemaining": 240,
+                                    "overSoftCap": False,
+                                    "lastPrunedCount": 0,
+                                },
+                            },
+                        }
+                    }
+                },
+                "universe": {
+                    "latest": {"source": "remote_json", "updatedAt": "2026-03-21T20:00:00+00:00"},
+                    "ownership": {
+                        "refreshPolicy": "TS owns the artifact refresh path; python_seed is a terminal fallback only."
+                    },
+                },
+            }
+        }
+    )
+    text = MODULE.format_market_data_ops(raw)
+
+    assert "Market data ops" in text
+    assert "- Streamer role: leader (configured auto) | lock held yes" in text
+    assert "- Stream state: healthy | policy none | connected yes" in text
+    assert "- Symbol budget: LEVELONE_EQUITIES: 40/250 requested | headroom 210 | CHART_EQUITY: 10/250 requested | headroom 240" in text
+    assert "- Fallbacks: yahoo 3 | shared_state 2 | primary source mix schwab_streamer 12, yahoo 3" in text
+    assert "- Universe: remote_json | updated 2026-03-21T20:00:00+00:00" in text

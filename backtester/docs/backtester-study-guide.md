@@ -219,8 +219,10 @@ Important clarification:
 - the TS streamer also applies periodic `VIEW` reconciliation for the subscribed field sets and treats documented Schwab failure codes like `LOGIN_DENIED`, `STREAM_CONN_NOT_FOUND`, `STOP_STREAMING`, `CLOSE_CONNECTION`, and `REACHED_SYMBOL_LIMIT` as explicit runtime states
 - the ops surface now includes runbook-grade operator state plus subscription-budget accounting, so max-connection and symbol-limit problems are visible without reading raw streamer logs
 - `SCHWAB_STREAMER_SYMBOL_SOFT_CAP` is now part of the operating model: it is a bounded warning threshold that helps you see budget pressure before Schwab returns `REACHED_SYMBOL_LIMIT`
+- the streamer now applies a real chunk/prune policy: larger subscription mutations are split into smaller commands, and older requested symbols are pruned back to the configured soft cap before the registry drifts too far
 - Postgres-backed shared streamer state now uses `LISTEN/NOTIFY` so follower instances can react to leader updates without waiting on slow polling
-- the TS service now exposes a compact `/market-data/ops` operator surface plus `/market-data/universe/audit` so you can inspect streamer role, advisory-lock ownership, provider/fallback mix, and universe artifact ownership/history from outside the Python engine
+- file-backed follower mode now rechecks the shared-state file before reusing cache, so it does not get stuck on the first snapshot it loaded
+- the TS service now exposes a compact `/market-data/ops` operator surface plus `/market-data/universe/audit` so you can inspect streamer role, advisory-lock ownership, provider/fallback mix, and universe artifact ownership/history from outside the Python engine, and the local daytime/nighttime wrappers now show that summary directly
 
 ##### 2. Fundamentals
 

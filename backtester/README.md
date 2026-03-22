@@ -128,6 +128,9 @@ SYMBOL=AAPL YEARS=2 COMPARE=1 ./scripts/backtest_flow.sh
 # Skip the Polymarket/context refresh during daytime flow
 RUN_MARKET_INTEL=0 ./scripts/daytime_flow.sh
 
+# Skip the market-data ops summary in the local wrappers
+RUN_MARKET_DATA_OPS=0 ./scripts/daytime_flow.sh
+
 # Change the quick-check symbol
 QUICK_CHECK_SYMBOL=NVDA ./scripts/daytime_flow.sh
 
@@ -140,6 +143,9 @@ SKIP_LIVE_PREFILTER_REFRESH=1 ./scripts/nighttime_flow.sh
 # Broader nightly scan
 NIGHTLY_LIMIT=30 ./scripts/nighttime_flow.sh
 
+# Point the local wrappers at a non-default TS service URL
+MARKET_DATA_SERVICE_URL=http://localhost:3033 ./scripts/daytime_flow.sh
+
 # Pick which leader-bucket window feeds soft priority
 TRADING_LEADER_BASKET_PRIORITY_WINDOW=weekly ./scripts/daytime_flow.sh
 ```
@@ -149,11 +155,11 @@ TRADING_LEADER_BASKET_PRIORITY_WINDOW=weekly ./scripts/daytime_flow.sh
 Use this as the default operator cadence:
 
 - `./scripts/daytime_flow.sh`
-  - run during market hours when you want the current regime, live bucket context, CANSLIM, Dip Buyer, and a quick-check in one local view
+  - run during market hours when you want the current regime, live bucket context, market-data ops summary, CANSLIM, Dip Buyer, and a quick-check in one local view
   - best for `pre-market`, `morning`, `midday`, or `late afternoon` spot checks
 - `./scripts/nighttime_flow.sh`
   - run after market close or overnight
-  - use it to refresh the next day’s inputs, rebuild leader buckets, and persist nightly research artifacts
+  - use it to refresh the next day’s inputs, rebuild leader buckets, print the current market-data ops state, and persist nightly research artifacts
 - `./scripts/backtest_flow.sh`
   - run when you want to test a strategy on past data instead of reading the live operator flow
   - best for idea validation, not live decisions
@@ -246,10 +252,12 @@ Operational notes:
 - that health payload now includes message rate, stale symbol count, reconnect failure streak, token refresh state, and last successful Schwab/Yahoo fallback timestamps
 - the streamer keeps a bounded subscription registry for active quote/chart symbols and resubscribes them after reconnects
 - streamer mutation commands are now serialized per service and wait for Schwab acks, which reduces `FAILED_COMMAND_SUBS` / `ADD` / `UNSUBS` / `VIEW` races
+- larger subscription mutations are now chunked and the registry prunes older symbols back toward the configured soft cap before budget pressure turns into a hard failure
 - the streamer also runs periodic `VIEW` reconciliation so the Schwab field set stays aligned with the intended quote/chart subscriptions
 - documented Schwab failure codes like `LOGIN_DENIED`, `STREAM_CONN_NOT_FOUND`, `STOP_STREAMING`, `CLOSE_CONNECTION`, and `REACHED_SYMBOL_LIMIT` are now handled explicitly instead of only surfacing as generic reconnect noise
 - the ops surface now exposes runbook-grade operator state and symbol-budget accounting so max-connection or subscription-limit issues are visible before they become silent drift
 - Postgres-backed shared streamer state now propagates with `LISTEN/NOTIFY` so follower instances react to quote/chart updates faster than file polling
+- file-backed follower mode now rechecks shared-state file mtimes instead of pinning the first cached snapshot forever
 - `/market-data/ops` and `/market-data/universe/audit` provide a compact operator surface for streamer role, lock ownership, health, source/fallback mix, and universe artifact refresh history
 - token refresh is single-flight inside TS so concurrent Schwab requests do not stampede the refresh endpoint
 - base-universe refresh is no longer just a Python static-seed copy; TS can prefer a configured remote or local JSON universe source and only fall back to the Python seed when needed

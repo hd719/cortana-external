@@ -323,9 +323,78 @@ def format_leader_baskets(text: str) -> str:
     return "\n".join(out)
 
 
+def format_market_data_ops(text: str) -> str:
+    try:
+        payload = json.loads(text)
+    except Exception:
+        return "Market data ops\n\n- Ops payload is missing or unreadable."
+
+    data = payload.get("data") if isinstance(payload, dict) else {}
+    if not isinstance(data, dict):
+        return "Market data ops\n\n- Ops payload is missing or unreadable."
+
+    provider_metrics = data.get("providerMetrics") if isinstance(data.get("providerMetrics"), dict) else {}
+    health = data.get("health") if isinstance(data.get("health"), dict) else {}
+    providers = health.get("providers") if isinstance(health.get("providers"), dict) else {}
+    streamer = providers.get("schwabStreamerMeta") if isinstance(providers.get("schwabStreamerMeta"), dict) else {}
+    budget = streamer.get("subscriptionBudget") if isinstance(streamer.get("subscriptionBudget"), dict) else {}
+    universe = data.get("universe") if isinstance(data.get("universe"), dict) else {}
+    latest_universe = universe.get("latest") if isinstance(universe.get("latest"), dict) else {}
+    ownership = universe.get("ownership") if isinstance(universe.get("ownership"), dict) else {}
+
+    def _budget_line(name: str) -> str | None:
+        item = budget.get(name)
+        if not isinstance(item, dict):
+            return None
+        requested = item.get("requestedSymbols")
+        soft_cap = item.get("softCap")
+        headroom = item.get("headroomRemaining")
+        if requested is None or soft_cap is None:
+            return None
+        extra = " | over cap" if item.get("overSoftCap") else ""
+        if item.get("lastPrunedCount"):
+            extra += f" | pruned {item.get('lastPrunedCount')}"
+        return f"{name}: {requested}/{soft_cap} requested | headroom {headroom}{extra}"
+
+    fallback_usage = provider_metrics.get("fallbackUsage") if isinstance(provider_metrics.get("fallbackUsage"), dict) else {}
+    source_usage = provider_metrics.get("sourceUsage") if isinstance(provider_metrics.get("sourceUsage"), dict) else {}
+
+    out = ["Market data ops", "", "Takeaway"]
+    out.append(
+        "- Streamer role: "
+        f"{data.get('streamerRoleActive', 'unknown')} (configured {data.get('streamerRoleConfigured', 'unknown')})"
+        f" | lock held {'yes' if data.get('streamerLockHeld') else 'no'}"
+    )
+    out.append(
+        "- Stream state: "
+        f"{streamer.get('operatorState', 'unknown')}"
+        f" | policy {streamer.get('failurePolicy') or 'none'}"
+        f" | connected {'yes' if streamer.get('connected') else 'no'}"
+    )
+    if streamer.get("operatorAction") and streamer.get("operatorAction") != "No operator action required.":
+        out.append(f"- Operator action: {streamer.get('operatorAction')}")
+    budget_lines = [line for line in (_budget_line("LEVELONE_EQUITIES"), _budget_line("CHART_EQUITY")) if line]
+    if budget_lines:
+        out.append("- Symbol budget: " + " | ".join(budget_lines))
+    out.append(
+        "- Fallbacks: "
+        f"yahoo {fallback_usage.get('yahoo', 0)} | shared_state {fallback_usage.get('shared_state', 0)}"
+        f" | primary source mix {', '.join(f'{k} {v}' for k, v in sorted(source_usage.items())) or 'none yet'}"
+    )
+    if latest_universe:
+        out.append(
+            "- Universe: "
+            f"{latest_universe.get('source', 'unknown')}"
+            f" | updated {latest_universe.get('updatedAt', 'unknown')}"
+        )
+    if ownership:
+        out.append(f"- Universe ownership: {ownership.get('refreshPolicy', 'n/a')}")
+    return "\n".join(out)
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Format local backtester wrapper output")
-    parser.add_argument("--mode", choices=("alert", "quick-check", "leader-baskets"), required=True)
+    parser.add_argument("--mode", choices=("alert", "quick-check", "leader-baskets", "market-data-ops"), required=True)
     parser.add_argument("--leader-basket-path")
     return parser.parse_args()
 
@@ -338,6 +407,9 @@ def main() -> None:
         return
     if args.mode == "leader-baskets":
         print(format_leader_baskets(raw))
+        return
+    if args.mode == "market-data-ops":
+        print(format_market_data_ops(raw))
         return
     print(format_quick_check(raw))
 

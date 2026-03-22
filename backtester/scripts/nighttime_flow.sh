@@ -10,6 +10,8 @@ NIGHTLY_LIMIT="${NIGHTLY_LIMIT:-20}"
 SKIP_LIVE_PREFILTER_REFRESH="${SKIP_LIVE_PREFILTER_REFRESH:-0}"
 REFRESH_SP500="${REFRESH_SP500:-0}"
 JSON_OUTPUT="${JSON_OUTPUT:-0}"
+MARKET_DATA_SERVICE_URL="${MARKET_DATA_SERVICE_URL:-http://localhost:3033}"
+RUN_MARKET_DATA_OPS="${RUN_MARKET_DATA_OPS:-1}"
 
 ARGS=(--limit "${NIGHTLY_LIMIT}")
 
@@ -32,6 +34,15 @@ echo "Running nightly discovery with limit=${NIGHTLY_LIMIT}"
   cd "${BACKTESTER_DIR}"
   uv run python nightly_discovery.py "${ARGS[@]}"
 )
+
+if [[ "${RUN_MARKET_DATA_OPS}" == "1" ]]; then
+  echo
+  echo "== Market data ops =="
+  if ! curl -fsS "${MARKET_DATA_SERVICE_URL}/market-data/ops" \
+    | (cd "${BACKTESTER_DIR}" && uv run python "${BACKTESTER_DIR}/scripts/local_output_formatter.py" --mode market-data-ops); then
+    printf '%s\n' "Market data ops" "" "- Unable to reach ${MARKET_DATA_SERVICE_URL}/market-data/ops"
+  fi
+fi
 
 source "${SCRIPT_DIR}/auto_commit_pr.sh"
 auto_commit_pr "nighttime" "${RUN_STAMP}" "${REPO_ROOT}"

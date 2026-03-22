@@ -678,8 +678,62 @@ describe("market-data routes", () => {
     expect(streamerMeta.failurePolicy).toBe("symbol_limit_reached");
     expect(streamerMeta.operatorState).toBe("subscription_budget_exceeded");
     expect(budget.LEVELONE_EQUITIES?.softCap).toBe(1);
-    expect(budget.LEVELONE_EQUITIES?.overSoftCap).toBe(true);
+    expect(budget.LEVELONE_EQUITIES?.overSoftCap).toBe(false);
     FailureWebSocket.failureCode = null;
+  });
+
+  it("prunes older requested symbols to stay within the streamer soft cap", async () => {
+    FakeWebSocket.createdCount = 0;
+    FakeWebSocket.sentRequests = [];
+    const service = new MarketDataService({
+      config: { ...TEST_CONFIG, SCHWAB_STREAMER_SYMBOL_SOFT_CAP: 2 },
+      websocketFactory: () => new FakeWebSocket(),
+      fetchImpl: async (input) => {
+        const url = String(input);
+        if (url.includes("/oauth/token")) {
+          return new Response(JSON.stringify({ access_token: "access-token", expires_in: 1800 }), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          });
+        }
+        if (url.includes("/trader/v1/userPreference")) {
+          return new Response(
+            JSON.stringify({
+              streamerInfo: {
+                streamerSocketUrl: "wss://streamer.example.test/ws",
+                schwabClientCustomerId: "customer-id",
+                schwabClientCorrelId: "correl-id",
+                schwabClientChannel: "N9",
+                schwabClientFunctionId: "APIAP",
+              },
+            }),
+            { status: 200, headers: { "content-type": "application/json" } },
+          );
+        }
+        return new Response("not found", { status: 404 });
+      },
+    });
+
+    await service.handleQuote(new Request("http://localhost/market-data/quote/AAPL"), "AAPL");
+    await service.handleQuote(new Request("http://localhost/market-data/quote/MSFT"), "MSFT");
+    await service.handleQuote(new Request("http://localhost/market-data/quote/NVDA"), "NVDA");
+
+    const health = await service.checkHealth();
+    const providers = (health.providers ?? {}) as Record<string, unknown>;
+    const streamerMeta = (providers.schwabStreamerMeta ?? {}) as Record<string, unknown>;
+    const budget = (streamerMeta.subscriptionBudget ?? {}) as Record<
+      string,
+      { requestedSymbols?: number; overSoftCap?: boolean; lastPrunedCount?: number }
+    >;
+    const equityCommands = FakeWebSocket.sentRequests
+      .filter((request) => request.service === "LEVELONE_EQUITIES")
+      .map((request) => `${request.command}:${request.keys ?? ""}`);
+
+    expect(budget.LEVELONE_EQUITIES?.requestedSymbols).toBe(2);
+    expect(budget.LEVELONE_EQUITIES?.overSoftCap).toBe(false);
+    expect(budget.LEVELONE_EQUITIES?.lastPrunedCount).toBe(1);
+    expect(equityCommands).toContain("UNSUBS:AAPL");
+    expect(equityCommands).toContain("ADD:NVDA");
   });
 
   it("reads streamer-backed quote state from the shared state file in follower mode", async () => {

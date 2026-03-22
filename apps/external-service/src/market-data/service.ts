@@ -153,6 +153,7 @@ export class MarketDataService {
   private leaderLockClient: PoolClient | null = null;
   private sharedStateListenerClient: PoolClient | null = null;
   private sharedStateCache: SharedStreamerState | null = null;
+  private sharedStateCacheMtimeMs: number | null = null;
   private runtimeReadyPromise: Promise<void> | null = null;
 
   constructor(config: MarketDataServiceConfig = {}) {
@@ -1086,8 +1087,16 @@ export class MarketDataService {
       return;
     }
     const client = await this.pool.connect();
-    client.on("notification", () => {
+    client.on("notification", (message) => {
       this.providerMetrics.lastSharedStateNotificationAt = new Date().toISOString();
+      const payload = parseSharedStateNotification(message.payload);
+      if (
+        payload?.updatedAt &&
+        this.sharedStateCache?.updatedAt &&
+        this.sharedStateCache.updatedAt >= payload.updatedAt
+      ) {
+        return;
+      }
       void this.refreshSharedStateCacheFromBackend();
     });
     await client.query("LISTEN market_data_streamer_state_changed");
@@ -1562,24 +1571,41 @@ export class MarketDataService {
           `,
           ["schwab_market_data", JSON.stringify(state)],
         );
-        await this.pool.query("SELECT pg_notify('market_data_streamer_state_changed', $1)", [state.updatedAt]);
+        await this.pool.query("SELECT pg_notify('market_data_streamer_state_changed', $1)", [
+          JSON.stringify({
+            updatedAt: state.updatedAt,
+            quoteCount: Object.keys(state.quotes).length,
+            chartCount: Object.keys(state.charts).length,
+          }),
+        ]);
       } catch (error) {
         this.logger.error("Unable to persist shared Schwab streamer state to Postgres", error);
       }
       this.sharedStateCache = state;
+      this.sharedStateCacheMtimeMs = null;
       return;
     }
     try {
       fs.mkdirSync(path.dirname(this.streamerSharedStatePath), { recursive: true });
       fs.writeFileSync(this.streamerSharedStatePath, JSON.stringify(state, null, 2));
       this.sharedStateCache = state;
+      this.sharedStateCacheMtimeMs = fs.statSync(this.streamerSharedStatePath).mtimeMs;
     } catch (error) {
       this.logger.error("Unable to persist shared Schwab streamer state", error);
     }
   }
 
   private async readSharedStreamerState(): Promise<SharedStreamerState | null> {
-    if (this.sharedStateCache) {
+    if (this.streamerSharedStateBackend === "file" && this.sharedStateCache) {
+      try {
+        const fileMtimeMs = fs.statSync(this.streamerSharedStatePath).mtimeMs;
+        if (this.sharedStateCacheMtimeMs != null && fileMtimeMs <= this.sharedStateCacheMtimeMs) {
+          return this.sharedStateCache;
+        }
+      } catch {
+        return this.sharedStateCache;
+      }
+    } else if (this.sharedStateCache) {
       return this.sharedStateCache;
     }
     if (this.streamerSharedStateBackend === "postgres") {
@@ -1599,6 +1625,11 @@ export class MarketDataService {
       }
     }
     this.sharedStateCache = readJsonFile<SharedStreamerState>(this.streamerSharedStatePath);
+    try {
+      this.sharedStateCacheMtimeMs = fs.statSync(this.streamerSharedStatePath).mtimeMs;
+    } catch {
+      this.sharedStateCacheMtimeMs = null;
+    }
     return this.sharedStateCache;
   }
 
@@ -1646,6 +1677,7 @@ export class MarketDataService {
         ["schwab_market_data"],
       );
       this.sharedStateCache = result.rows[0]?.payload ?? null;
+      this.sharedStateCacheMtimeMs = null;
     } catch (error) {
       this.logger.error("Unable to refresh shared Schwab streamer state cache", error);
     }
@@ -2001,6 +2033,18 @@ function spyDistanceScoresFromClose(close: number[]): number[] {
 
 function clamp(value: number, low: number, high: number): number {
   return Math.max(low, Math.min(high, value));
+}
+
+function parseSharedStateNotification(payload: string | undefined): { updatedAt?: string } | null {
+  if (!payload) {
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(payload) as { updatedAt?: string };
+    return parsed && typeof parsed === "object" ? parsed : null;
+  } catch {
+    return null;
+  }
 }
 
 function summarizeError(error: unknown): string {
