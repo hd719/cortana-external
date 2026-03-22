@@ -107,6 +107,9 @@ Notes:
 - `127.0.0.1` is the safe local callback host for Schwab.
 - The callback listener is HTTPS because Schwab requires `https://`.
 - The refresh token is persisted to `SCHWAB_TOKEN_PATH`.
+- A local self-signed cert/key now exists at:
+  - `/Users/hd/Developer/cortana-external/.certs/127.0.0.1.pem`
+  - `/Users/hd/Developer/cortana-external/.certs/127.0.0.1-key.pem`
 
 ## Streamer Recovery Basics
 

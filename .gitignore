@@ -5,6 +5,7 @@ tonal_data.*
 *_data_ts.json
 alpaca_keys.*
 .env
+.certs/
 .DS_Store
 fitness-services
 cortana-external

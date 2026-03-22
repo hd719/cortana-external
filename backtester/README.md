@@ -58,8 +58,8 @@ SCHWAB_CLIENT_ID=...
 SCHWAB_CLIENT_SECRET=...
 SCHWAB_REDIRECT_URL=https://127.0.0.1:8182/auth/schwab/callback
 EXTERNAL_SERVICE_TLS_PORT=8182
-EXTERNAL_SERVICE_TLS_CERT_PATH=/absolute/path/to/127.0.0.1.pem
-EXTERNAL_SERVICE_TLS_KEY_PATH=/absolute/path/to/127.0.0.1-key.pem
+EXTERNAL_SERVICE_TLS_CERT_PATH=/Users/hd/Developer/cortana-external/.certs/127.0.0.1.pem
+EXTERNAL_SERVICE_TLS_KEY_PATH=/Users/hd/Developer/cortana-external/.certs/127.0.0.1-key.pem
 ```
 
 Register this callback in the Schwab developer portal:
@@ -87,6 +87,10 @@ Notes:
 - `127.0.0.1` works better than `localhost` for Schwab callback registration
 - a self-signed local cert is fine for this flow; your browser may warn before redirecting to the local callback
 - the service persists the exchanged Schwab refresh token at `SCHWAB_TOKEN_PATH`
+- this repo now has a generated local dev cert/key at:
+  - `/Users/hd/Developer/cortana-external/.certs/127.0.0.1.pem`
+  - `/Users/hd/Developer/cortana-external/.certs/127.0.0.1-key.pem`
+  - and `.certs/` is gitignored
 
 Optional Polymarket context:
 
