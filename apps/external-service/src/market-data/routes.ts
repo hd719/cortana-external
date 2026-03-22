@@ -31,6 +31,12 @@ export function registerMarketDataRoutes(app: Hono, service: MarketDataService):
     return c.json(result.body, result.status as never);
   });
 
+  app.get("/market-data/futures/:symbol", async (c) => {
+    const compareWith = c.req.query("compare_with");
+    const result = await service.handleQuote(c.req.raw, `/${c.req.param("symbol")}`, compareWith);
+    return c.json(result.body, result.status as never);
+  });
+
   app.get("/market-data/snapshot/:symbol", async (c) => {
     const compareWith = c.req.query("compare_with");
     const result = await service.handleSnapshot(c.req.raw, c.req.param("symbol"), compareWith);

@@ -16,4 +16,5 @@ export function registerMarketDataRoutes(app: Hono, service: MarketDataService):
   registerRoutes(app, service);
 }
 
-export { MarketDataService, normalizeMarketSymbol } from "./service.js";
+export { MarketDataService } from "./service.js";
+export { normalizeMarketSymbol } from "./route-utils.js";

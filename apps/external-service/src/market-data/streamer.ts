@@ -1,7 +1,9 @@
 import type { AppLogger } from "../lib/logger.js";
-import type { MarketDataQuote, SchwabAccountActivityEvent } from "./types.js";
+import type { MarketDataFuturesQuote, MarketDataQuote, SchwabAccountActivityEvent } from "./types.js";
 import {
+  isSupportedFuturesSymbol,
   normalizeStreamerAccountActivityEvent,
+  normalizeStreamerFuturesQuote,
   normalizeStreamerChartEquity,
   normalizeStreamerEquityQuote,
   STREAMER_SERVICES,
@@ -22,6 +24,7 @@ export interface SchwabStreamerSessionOptions {
   accessTokenProvider: () => Promise<string>;
   preferencesProvider: () => Promise<SchwabStreamerPreferences>;
   subscriptionFields?: string;
+  futuresSubscriptionFields?: string;
   cacheSoftCap?: number;
   connectTimeoutMs?: number;
   quoteWaitTimeoutMs?: number;
@@ -50,8 +53,8 @@ export interface WebSocketLike {
 
 export type WebSocketFactory = (url: string) => WebSocketLike;
 
-interface CachedQuote {
-  quote: MarketDataQuote;
+interface CachedQuote<T> {
+  quote: T;
   receivedAt: number;
 }
 
@@ -132,6 +135,11 @@ interface SharedCachedChartPoint {
   receivedAt: string;
 }
 
+interface SharedCachedFuturesQuote {
+  quote: MarketDataFuturesQuote;
+  receivedAt: string;
+}
+
 interface CachedAccountActivityEvent {
   event: SchwabAccountActivityEvent;
   receivedAt: number;
@@ -170,12 +178,14 @@ export interface SchwabStreamerHealth {
   messageRatePerMinute: number;
   stale: boolean;
   recentAccountActivityEvents: SchwabAccountActivityEvent[];
+  recentFuturesQuotes: MarketDataFuturesQuote[];
 }
 
 export interface SharedStreamerState {
   updatedAt: string;
   health: SchwabStreamerHealth;
   quotes: Record<string, SharedCachedQuote>;
+  futuresQuotes: Record<string, SharedCachedFuturesQuote>;
   charts: Record<string, SharedCachedChartPoint>;
   recentAccountActivityEvents: SharedCachedAccountActivityEvent[];
 }
@@ -186,6 +196,7 @@ export class SchwabStreamerSession {
   private readonly accessTokenProvider: () => Promise<string>;
   private readonly preferencesProvider: () => Promise<SchwabStreamerPreferences>;
   private readonly equitySubscriptionFields: string;
+  private readonly futuresSubscriptionFields: string;
   private readonly chartSubscriptionFields: string;
   private readonly cacheSoftCap: number;
   private readonly connectTimeoutMs: number;
@@ -206,38 +217,46 @@ export class SchwabStreamerSession {
   private loginReject: ((error: Error) => void) | null = null;
   private readonly subscriptions: Record<StreamerServiceName, Map<string, SubscriptionEntry>> = {
     [STREAMER_SERVICES.LEVELONE_EQUITIES]: new Map(),
+    [STREAMER_SERVICES.LEVELONE_FUTURES]: new Map(),
     [STREAMER_SERVICES.CHART_EQUITY]: new Map(),
     [STREAMER_SERVICES.ACCT_ACTIVITY]: new Map(),
   };
   private readonly activeSubscriptions: Record<StreamerServiceName, Set<string>> = {
     [STREAMER_SERVICES.LEVELONE_EQUITIES]: new Set(),
+    [STREAMER_SERVICES.LEVELONE_FUTURES]: new Set(),
     [STREAMER_SERVICES.CHART_EQUITY]: new Set(),
     [STREAMER_SERVICES.ACCT_ACTIVITY]: new Set(),
   };
-  private readonly quoteCache = new Map<string, CachedQuote>();
+  private readonly quoteCache = new Map<string, CachedQuote<MarketDataQuote>>();
+  private readonly futuresCache = new Map<string, CachedQuote<MarketDataFuturesQuote>>();
   private readonly chartCache = new Map<string, CachedChartPoint>();
   private readonly accountActivityEvents: CachedAccountActivityEvent[] = [];
   private readonly pendingRequests = new Map<string, PendingRequestMeta>();
   private readonly pendingAcks = new Map<string, PendingAck>();
   private readonly quoteWaiters = new Map<string, Set<PendingDataWaiter<MarketDataQuote>>>();
+  private readonly futuresWaiters = new Map<string, Set<PendingDataWaiter<MarketDataFuturesQuote>>>();
   private readonly chartWaiters = new Map<string, Set<PendingDataWaiter<StreamerChartEquityPoint>>>();
   private readonly confirmedSubscriptions: Record<StreamerServiceName, Set<string>> = {
     [STREAMER_SERVICES.LEVELONE_EQUITIES]: new Set(),
+    [STREAMER_SERVICES.LEVELONE_FUTURES]: new Set(),
     [STREAMER_SERVICES.CHART_EQUITY]: new Set(),
     [STREAMER_SERVICES.ACCT_ACTIVITY]: new Set(),
   };
   private readonly confirmedFields: Record<StreamerServiceName, string | null> = {
     [STREAMER_SERVICES.LEVELONE_EQUITIES]: null,
+    [STREAMER_SERVICES.LEVELONE_FUTURES]: null,
     [STREAMER_SERVICES.CHART_EQUITY]: null,
     [STREAMER_SERVICES.ACCT_ACTIVITY]: null,
   };
   private readonly lastAckAtByService: Record<StreamerServiceName, number> = {
     [STREAMER_SERVICES.LEVELONE_EQUITIES]: 0,
+    [STREAMER_SERVICES.LEVELONE_FUTURES]: 0,
     [STREAMER_SERVICES.CHART_EQUITY]: 0,
     [STREAMER_SERVICES.ACCT_ACTIVITY]: 0,
   };
   private readonly serviceCommandChains: Record<StreamerServiceName, Promise<void>> = {
     [STREAMER_SERVICES.LEVELONE_EQUITIES]: Promise.resolve(),
+    [STREAMER_SERVICES.LEVELONE_FUTURES]: Promise.resolve(),
     [STREAMER_SERVICES.CHART_EQUITY]: Promise.resolve(),
     [STREAMER_SERVICES.ACCT_ACTIVITY]: Promise.resolve(),
   };
@@ -267,6 +286,7 @@ export class SchwabStreamerSession {
     this.accessTokenProvider = options.accessTokenProvider;
     this.preferencesProvider = options.preferencesProvider;
     this.equitySubscriptionFields = options.subscriptionFields ?? "0,1,2,3,8,19,20,32,34,42";
+    this.futuresSubscriptionFields = options.futuresSubscriptionFields ?? "0,1,2,3,8,19,20,32,34,42";
     this.chartSubscriptionFields = "0,1,2,3,4,5,6,7";
     this.cacheSoftCap = options.cacheSoftCap ?? 500;
     this.connectTimeoutMs = options.connectTimeoutMs ?? 5_000;
@@ -306,6 +326,20 @@ export class SchwabStreamerSession {
 
     await this.ensureConnectedAndSubscribed([normalized], []);
     return this.waitForFreshData(normalized, this.quoteWaiters, () => this.getFreshQuote(normalized));
+  }
+
+  async getFuturesQuote(symbol: string): Promise<MarketDataFuturesQuote | null> {
+    const normalized = this.normalizeFuturesRequestSymbol(symbol);
+    if (!normalized) {
+      return null;
+    }
+    const cached = this.getFreshFuturesQuote(normalized);
+    if (cached) {
+      return cached;
+    }
+
+    await this.ensureConnectedAndSubscribed([], [], [normalized]);
+    return this.waitForFreshData(normalized, this.futuresWaiters, () => this.getFreshFuturesQuote(normalized));
   }
 
   async getChartEquity(symbol: string): Promise<StreamerChartEquityPoint | null> {
@@ -372,11 +406,23 @@ export class SchwabStreamerSession {
       messageRatePerMinute: this.currentMessageRatePerMinute(),
       stale: this.isStale(),
       recentAccountActivityEvents: this.buildRecentAccountActivitySnapshot(),
+      recentFuturesQuotes: this.buildRecentFuturesSnapshot(),
     };
   }
 
   private getFreshQuote(symbol: string): MarketDataQuote | null {
     const cached = this.quoteCache.get(symbol);
+    if (!cached) {
+      return null;
+    }
+    if (Date.now() - cached.receivedAt > this.freshnessTtlMs) {
+      return null;
+    }
+    return cached.quote;
+  }
+
+  private getFreshFuturesQuote(symbol: string): MarketDataFuturesQuote | null {
+    const cached = this.futuresCache.get(symbol);
     if (!cached) {
       return null;
     }
@@ -397,11 +443,17 @@ export class SchwabStreamerSession {
     return cached.point;
   }
 
-  private async ensureConnectedAndSubscribed(equitySymbols: string[], chartSymbols: string[]): Promise<void> {
+  private async ensureConnectedAndSubscribed(
+    equitySymbols: string[],
+    chartSymbols: string[],
+    futuresSymbols: string[] = [],
+  ): Promise<void> {
     this.touchSubscriptions(STREAMER_SERVICES.LEVELONE_EQUITIES, equitySymbols);
+    this.touchSubscriptions(STREAMER_SERVICES.LEVELONE_FUTURES, futuresSymbols);
     this.touchSubscriptions(STREAMER_SERVICES.CHART_EQUITY, chartSymbols);
     await this.ensureConnected();
     await this.syncSubscriptions(STREAMER_SERVICES.LEVELONE_EQUITIES);
+    await this.syncSubscriptions(STREAMER_SERVICES.LEVELONE_FUTURES);
     await this.syncSubscriptions(STREAMER_SERVICES.CHART_EQUITY);
     if (this.accountActivityEnabled) {
       await this.syncSubscriptions(STREAMER_SERVICES.ACCT_ACTIVITY);
@@ -627,6 +679,14 @@ export class SchwabStreamerSession {
             this.resolveDataWaiters(this.quoteWaiters, normalized.symbol, normalized);
           }
         }
+      } else if (service === STREAMER_SERVICES.LEVELONE_FUTURES) {
+        for (const row of content) {
+          const normalized = normalizeStreamerFuturesQuote(row as Record<string, unknown>, Number(entry.timestamp ?? now));
+          if (normalized) {
+            this.storeFuturesQuote(normalized, now);
+            this.resolveDataWaiters(this.futuresWaiters, normalized.symbol, normalized);
+          }
+        }
       } else if (service === STREAMER_SERVICES.CHART_EQUITY) {
         for (const row of content) {
           const normalized = normalizeStreamerChartEquity(row as Record<string, unknown>);
@@ -667,6 +727,7 @@ export class SchwabStreamerSession {
       try {
         await this.ensureConnected();
         await this.syncSubscriptions(STREAMER_SERVICES.LEVELONE_EQUITIES);
+        await this.syncSubscriptions(STREAMER_SERVICES.LEVELONE_FUTURES);
         await this.syncSubscriptions(STREAMER_SERVICES.CHART_EQUITY);
         if (this.accountActivityEnabled) {
           await this.syncSubscriptions(STREAMER_SERVICES.ACCT_ACTIVITY);
@@ -680,6 +741,7 @@ export class SchwabStreamerSession {
       try {
         await this.ensureConnected();
         await this.syncSubscriptions(STREAMER_SERVICES.LEVELONE_EQUITIES);
+        await this.syncSubscriptions(STREAMER_SERVICES.LEVELONE_FUTURES);
         await this.syncSubscriptions(STREAMER_SERVICES.CHART_EQUITY);
         if (this.accountActivityEnabled) {
           await this.syncSubscriptions(STREAMER_SERVICES.ACCT_ACTIVITY);
@@ -771,6 +833,8 @@ export class SchwabStreamerSession {
     const fields =
       service === STREAMER_SERVICES.LEVELONE_EQUITIES
         ? this.equitySubscriptionFields
+        : service === STREAMER_SERVICES.LEVELONE_FUTURES
+          ? this.futuresSubscriptionFields
         : service === STREAMER_SERVICES.CHART_EQUITY
           ? this.chartSubscriptionFields
           : "0";
@@ -861,6 +925,7 @@ export class SchwabStreamerSession {
       this.pendingAcks.delete(requestId);
     }
     this.resolveAllDataWaiters(this.quoteWaiters);
+    this.resolveAllDataWaiters(this.futuresWaiters);
     this.resolveAllDataWaiters(this.chartWaiters);
     this.pendingRequests.clear();
     for (const active of Object.values(this.activeSubscriptions)) {
@@ -906,6 +971,11 @@ export class SchwabStreamerSession {
         stale += 1;
       }
     }
+    for (const value of this.futuresCache.values()) {
+      if (now - value.receivedAt > this.freshnessTtlMs) {
+        stale += 1;
+      }
+    }
     for (const value of this.chartCache.values()) {
       if (now - value.receivedAt > this.freshnessTtlMs) {
         stale += 1;
@@ -918,6 +988,12 @@ export class SchwabStreamerSession {
     this.quoteCache.delete(quote.symbol);
     this.quoteCache.set(quote.symbol, { quote, receivedAt });
     this.evictOverflow(this.quoteCache);
+  }
+
+  private storeFuturesQuote(quote: MarketDataFuturesQuote, receivedAt: number): void {
+    this.futuresCache.delete(quote.symbol);
+    this.futuresCache.set(quote.symbol, { quote, receivedAt });
+    this.evictOverflow(this.futuresCache);
   }
 
   private storeChart(point: StreamerChartEquityPoint, receivedAt: number): void {
@@ -951,6 +1027,11 @@ export class SchwabStreamerSession {
         this.quoteCache.delete(symbol);
       }
     }
+    for (const [symbol, cached] of this.futuresCache.entries()) {
+      if (now - cached.receivedAt > maxAgeMs) {
+        this.futuresCache.delete(symbol);
+      }
+    }
     for (const [symbol, cached] of this.chartCache.entries()) {
       if (now - cached.receivedAt > maxAgeMs) {
         this.chartCache.delete(symbol);
@@ -964,6 +1045,15 @@ export class SchwabStreamerSession {
     }
     const quotes = Object.fromEntries(
       [...this.quoteCache.entries()].map(([symbol, cached]) => [
+        symbol,
+        {
+          quote: cached.quote,
+          receivedAt: new Date(cached.receivedAt).toISOString(),
+        },
+      ]),
+    );
+    const futuresQuotes = Object.fromEntries(
+      [...this.futuresCache.entries()].map(([symbol, cached]) => [
         symbol,
         {
           quote: cached.quote,
@@ -988,6 +1078,7 @@ export class SchwabStreamerSession {
       updatedAt: new Date().toISOString(),
       health: this.getHealth(),
       quotes,
+      futuresQuotes,
       charts,
       recentAccountActivityEvents,
     });
@@ -1003,7 +1094,12 @@ export class SchwabStreamerSession {
         continue;
       }
       await this.queueServiceMutation(service, "VIEW", {
-        fields: service === STREAMER_SERVICES.LEVELONE_EQUITIES ? this.equitySubscriptionFields : this.chartSubscriptionFields,
+        fields:
+          service === STREAMER_SERVICES.LEVELONE_EQUITIES
+            ? this.equitySubscriptionFields
+            : service === STREAMER_SERVICES.LEVELONE_FUTURES
+              ? this.futuresSubscriptionFields
+              : this.chartSubscriptionFields,
       });
     }
     this.lastViewReconciliationAt = Date.now();
@@ -1042,6 +1138,8 @@ export class SchwabStreamerSession {
       const requestedFields =
         service === STREAMER_SERVICES.LEVELONE_EQUITIES
           ? this.equitySubscriptionFields
+          : service === STREAMER_SERVICES.LEVELONE_FUTURES
+            ? this.futuresSubscriptionFields
           : service === STREAMER_SERVICES.CHART_EQUITY
             ? this.chartSubscriptionFields
             : "0";
@@ -1081,6 +1179,10 @@ export class SchwabStreamerSession {
 
   private buildRecentAccountActivitySnapshot(): SchwabAccountActivityEvent[] {
     return this.accountActivityEvents.map((cached) => cached.event);
+  }
+
+  private buildRecentFuturesSnapshot(): MarketDataFuturesQuote[] {
+    return [...this.futuresCache.values()].map((cached) => cached.quote);
   }
 
   private subscriptionChunkSize(): number {
@@ -1279,6 +1381,15 @@ export class SchwabStreamerSession {
         waiter.resolve(null);
       }
     }
+  }
+
+  private normalizeFuturesRequestSymbol(symbol: string): string | null {
+    const normalized = symbol.trim().toUpperCase();
+    if (!normalized) {
+      return null;
+    }
+    const prefixed = normalized.startsWith("/") ? normalized : `/${normalized}`;
+    return isSupportedFuturesSymbol(prefixed) ? prefixed : null;
   }
 }
 

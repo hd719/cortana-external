@@ -7,8 +7,9 @@ import { describe, expect, it } from "vitest";
 
 import type { AppConfig } from "../config.js";
 import { registerMarketDataRoutes } from "../market-data/index.js";
-import { MarketDataService, normalizeMarketSymbol } from "../market-data/service.js";
-import type { WebSocketLike } from "../market-data/streamer.js";
+import { MarketDataService } from "../market-data/service.js";
+import { normalizeMarketSymbol } from "../market-data/route-utils.js";
+import { SchwabStreamerSession, type WebSocketLike } from "../market-data/streamer.js";
 
 const TEST_CONFIG: AppConfig = {
   PORT: 3033,
@@ -137,6 +138,44 @@ class FakeWebSocket implements WebSocketLike {
       });
       return;
     }
+    if (request.service === "LEVELONE_FUTURES" && (request.command === "SUBS" || request.command === "ADD")) {
+      const firstKey = request.parameters?.keys?.split(",")[0] ?? "/ES";
+      queueMicrotask(() => {
+        this.onmessage?.({
+          data: JSON.stringify({
+            response: [
+              {
+                service: "LEVELONE_FUTURES",
+                command: request.command,
+                requestid: request.requestid ?? "0",
+                content: { code: 0, msg: `${request.command} command succeeded` },
+              },
+            ],
+          }),
+        });
+      });
+      queueMicrotask(() => {
+        this.onmessage?.({
+          data: JSON.stringify({
+            data: [
+              {
+                service: "LEVELONE_FUTURES",
+                timestamp: 1_710_000_140_000,
+                command: request.command,
+                content: [
+                  {
+                    key: firstKey,
+                    "3": 5_200.25,
+                    "34": 1_710_000_140_000,
+                  },
+                ],
+              },
+            ],
+          }),
+        });
+      });
+      return;
+    }
     if (request.service === "LEVELONE_EQUITIES" && request.command === "UNSUBS") {
       queueMicrotask(() => {
         this.onmessage?.({
@@ -231,7 +270,10 @@ class FakeWebSocket implements WebSocketLike {
       });
       return;
     }
-    if ((request.service === "LEVELONE_EQUITIES" || request.service === "CHART_EQUITY") && request.command === "VIEW") {
+    if (
+      (request.service === "LEVELONE_EQUITIES" || request.service === "LEVELONE_FUTURES" || request.service === "CHART_EQUITY") &&
+      request.command === "VIEW"
+    ) {
       queueMicrotask(() => {
         this.onmessage?.({
           data: JSON.stringify({
@@ -370,6 +412,49 @@ describe("market-data routes", () => {
     expect(streamerMeta.messageRatePerMinute).toBeGreaterThan(0);
     expect(streamerMeta.reconnectFailureStreak).toBe(0);
     expect((streamerMeta.requestedSubscriptions as Record<string, number>).LEVELONE_EQUITIES).toBe(1);
+  });
+
+  it("captures a bounded futures quote cache in streamer health and shared state", async () => {
+    FakeWebSocket.createdCount = 0;
+    FakeWebSocket.sentRequests = [];
+    const snapshots: Array<Record<string, unknown>> = [];
+    const session = new SchwabStreamerSession({
+      logger: {
+        log() {},
+        printf() {},
+        error() {},
+      },
+      websocketFactory: () => new FakeWebSocket(),
+      accessTokenProvider: async () => "access-token",
+      preferencesProvider: async () => ({
+        streamerSocketUrl: "wss://streamer.example.test/ws",
+        schwabClientCustomerId: "customer-id",
+        schwabClientCorrelId: "correl-id",
+        schwabClientChannel: "N9",
+        schwabClientFunctionId: "APIAP",
+      }),
+      accountActivityEnabled: false,
+      stateSink: (state) => {
+        snapshots.push(state as unknown as Record<string, unknown>);
+      },
+    });
+
+    const quote = await session.getFuturesQuote("/ES");
+    const health = session.getHealth();
+    const latestSnapshot = (snapshots.at(-1) ?? {}) as Record<string, unknown>;
+    const recentFuturesQuotes = health.recentFuturesQuotes as unknown as Array<Record<string, unknown>>;
+    const storedFuturesQuotes = latestSnapshot.futuresQuotes as Record<string, { quote: Record<string, unknown> }>;
+
+    expect(quote?.symbol).toBe("/ES");
+    expect(quote?.rootSymbol).toBe("ES");
+    expect(quote?.price).toBe(5200.25);
+    expect(recentFuturesQuotes).toHaveLength(1);
+    expect(recentFuturesQuotes[0]?.symbol).toBe("/ES");
+    expect(recentFuturesQuotes[0]?.rootSymbol).toBe("ES");
+    expect(storedFuturesQuotes?.["/ES"]?.quote.symbol).toBe("/ES");
+    expect(storedFuturesQuotes?.["/ES"]?.quote.rootSymbol).toBe("ES");
+
+    session.close();
   });
 
   it("buffers normalized ACCT_ACTIVITY events in streamer health and shared state", async () => {

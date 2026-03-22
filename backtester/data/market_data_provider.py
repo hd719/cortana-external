@@ -37,6 +37,15 @@ class MarketHistoryResult:
     staleness_seconds: float = 0.0
 
 
+@dataclass
+class MarketQuoteResult:
+    quote: dict
+    source: str
+    status: str = "ok"
+    degraded_reason: str = ""
+    staleness_seconds: float = 0.0
+
+
 class MarketDataProvider:
     def __init__(
         self,
@@ -117,6 +126,48 @@ class MarketDataProvider:
             transient=bool(transient_failures) and not fatal_failures,
         )
 
+    def get_quote(self, symbol: str) -> MarketQuoteResult:
+        symbol = symbol.upper().strip()
+        providers_tried: list[str] = []
+        transient_failures: list[str] = []
+        fatal_failures: list[str] = []
+
+        for provider in self.providers:
+            providers_tried.append(provider)
+            try:
+                quote, metadata = self._fetch_quote_with_retries(provider, symbol)
+                source = str(metadata.get("source") or provider)
+                status = str(metadata.get("status") or "ok")
+                degraded_reason = str(metadata.get("degraded_reason") or metadata.get("degradedReason") or "")
+                staleness_seconds = float(metadata.get("staleness_seconds") or metadata.get("stalenessSeconds") or 0.0)
+                if status not in {"ok", "degraded"}:
+                    status = "ok"
+                if source == "service":
+                    source = provider
+                return MarketQuoteResult(
+                    quote=quote,
+                    source=source,
+                    status=status,
+                    degraded_reason=degraded_reason,
+                    staleness_seconds=staleness_seconds,
+                )
+            except MarketDataError as exc:
+                if exc.transient:
+                    transient_failures.append(f"{provider}: {exc}")
+                else:
+                    fatal_failures.append(f"{provider}: {exc}")
+
+        reason_chunks = []
+        if transient_failures:
+            reason_chunks.append("transient=" + "; ".join(transient_failures))
+        if fatal_failures:
+            reason_chunks.append("fatal=" + "; ".join(fatal_failures))
+        detail = " | ".join(reason_chunks) if reason_chunks else "no provider attempts recorded"
+        raise MarketDataError(
+            f"Failed to fetch quote for {symbol} from providers {','.join(providers_tried)}; {detail}",
+            transient=bool(transient_failures) and not fatal_failures,
+        )
+
     def _fetch_with_retries(self, provider: str, symbol: str, period: str, auto_adjust: bool = False) -> tuple[pd.DataFrame, dict]:
         if provider not in {"service", "schwab", "alpaca", "yahoo"}:
             raise MarketDataError(f"Unknown provider '{provider}'", transient=False)
@@ -128,6 +179,20 @@ class MarketDataProvider:
                 if provider in {"schwab", "alpaca", "yahoo"}:
                     return self._fetch_service_history(symbol, period, auto_adjust=auto_adjust, provider=provider)
                 raise MarketDataError(f"Unknown provider '{provider}'", transient=False)
+            except MarketDataError as exc:
+                if attempt >= self.max_retries or not exc.transient:
+                    raise
+                delay = self.backoff_base_seconds * (2**attempt) + random.uniform(0, self.backoff_jitter_seconds)
+                time.sleep(max(delay, 0))
+                attempt += 1
+
+    def _fetch_quote_with_retries(self, provider: str, symbol: str) -> tuple[dict, dict]:
+        if provider not in {"service", "schwab", "alpaca", "yahoo"}:
+            raise MarketDataError(f"Unknown provider '{provider}'", transient=False)
+        attempt = 0
+        while True:
+            try:
+                return self._fetch_service_quote(symbol, provider=None if provider == "service" else provider)
             except MarketDataError as exc:
                 if attempt >= self.max_retries or not exc.transient:
                     raise
@@ -173,6 +238,43 @@ class MarketDataProvider:
             "availability": payload.get("availability"),
         }
         return frame, metadata
+
+    def _fetch_service_quote(self, symbol: str, provider: str | None = None) -> tuple[dict, dict]:
+        if symbol.startswith("/"):
+            safe_symbol = quote(symbol.lstrip("/"), safe="")
+            url = f"{self.service_base_url}/market-data/futures/{safe_symbol}"
+        else:
+            safe_symbol = quote(symbol, safe="")
+            url = f"{self.service_base_url}/market-data/quote/{safe_symbol}"
+        params = {}
+        if provider and provider != "service":
+            params["provider"] = provider
+
+        try:
+            resp = requests.get(url, params=params, timeout=15)
+        except requests.RequestException as exc:
+            raise MarketDataError(f"market-data service quote request failed: {exc}", transient=True) from exc
+
+        if resp.status_code in {404, 429, 500, 502, 503, 504}:
+            raise MarketDataError(f"market-data service transient quote error {resp.status_code}", transient=True)
+        if resp.status_code != 200:
+            raise MarketDataError(f"market-data service quote error {resp.status_code}: {resp.text[:180]}", transient=False)
+
+        try:
+            payload = resp.json() or {}
+        except ValueError as exc:
+            raise MarketDataError(f"market-data service returned invalid JSON: {exc}", transient=True) from exc
+
+        data = payload.get("data")
+        if not isinstance(data, dict):
+            raise MarketDataError(f"market-data service returned invalid quote payload for {symbol}", transient=True)
+        metadata = {
+            "source": str(payload.get("source") or "service"),
+            "status": str(payload.get("status") or "ok"),
+            "degradedReason": str(payload.get("degradedReason") or payload.get("degraded_reason") or ""),
+            "stalenessSeconds": float(payload.get("stalenessSeconds") or payload.get("staleness_seconds") or 0.0),
+        }
+        return data, metadata
 
     def _fetch_alpaca_history(self, symbol: str, period: str, auto_adjust: bool = False) -> pd.DataFrame:
         frame, _ = self._fetch_service_history(symbol, period, auto_adjust=auto_adjust, provider="alpaca")

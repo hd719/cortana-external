@@ -13,15 +13,19 @@ Use the study guide when you want to understand the system conceptually:
 - [Backtester Study Guide](./docs/backtester-study-guide.md)
 - [Roadmap](./docs/roadmap.md)
 - [Session Handoff](./docs/session-handoff.md)
+- [Streamer Failure Modes Runbook](./docs/streamer-failure-modes-runbook.md)
+- [Scoring and Prediction Accuracy Reference](./docs/scoring-prediction-accuracy-reference.md)
 
 Other useful docs:
 - [Polymarket + backtester flow](./docs/polymarket-backtester-flow.md)
 - [Wave buildout overview](./docs/docs-wave-overview.md)
 - [Decision review loop](./docs/decision-review-loop.md)
 - [Scoring and calibration notes](./docs/scoring-calibration.md)
+- [Scoring and prediction accuracy reference](./docs/scoring-prediction-accuracy-reference.md)
 - [Uncertainty/confidence PRD](./docs/uncertainty-confidence-prd.md)
 - [Uncertainty runtime wiring](./docs/uncertainty-confidence-runtime-wiring.md)
 - [Market-data service reference](./docs/market-data-service-reference.md)
+- [Streamer failure modes runbook](./docs/streamer-failure-modes-runbook.md)
 
 ## Setup
 
@@ -161,7 +165,7 @@ Use this as the default operator cadence:
   - best for `pre-market`, `morning`, `midday`, or `late afternoon` spot checks
 - `./scripts/nighttime_flow.sh`
   - run after market close or overnight
-  - use it to refresh the next day’s inputs, rebuild leader buckets, print the current market-data ops state, and persist nightly research artifacts
+  - use it to refresh the next day’s inputs, rebuild leader buckets, print the current market-data ops state, settle logged prediction snapshots, and persist nightly research artifacts
 - `./scripts/backtest_flow.sh`
   - run when you want to test a strategy on past data instead of reading the live operator flow
   - best for idea validation, not live decisions

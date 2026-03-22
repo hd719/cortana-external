@@ -18,6 +18,15 @@ import {
   type HistoryInterval,
   type HistoryProvider,
 } from "./history-utils.js";
+import {
+  buildUnavailableCompare,
+  marketDataErrorResponse,
+  normalizeAlpacaBarLimit,
+  normalizeAlpacaDataUrl,
+  normalizeMarketSymbol,
+  parseBatchSymbols,
+  resolveQuery,
+} from "./route-utils.js";
 import { normalizeSchwabQuoteEnvelope, type SchwabQuoteEnvelope } from "./schwab-normalizers.js";
 import {
   SchwabStreamerSession,
@@ -25,6 +34,7 @@ import {
   type SharedStreamerState,
   type WebSocketFactory,
 } from "./streamer.js";
+import { UniverseArtifactManager, type UniverseAuditEntry } from "./universe-manager.js";
 import type {
   MarketDataComparison,
   MarketDataGenericPayload,
@@ -42,7 +52,6 @@ import type {
 } from "./types.js";
 import {
   dedupe,
-  extractUniverseSymbols,
   parseSharedStateNotification,
   parseUniverseSourceLadder,
   readJsonFile,
@@ -114,11 +123,6 @@ interface RiskRow {
   fear_greed: number;
 }
 
-interface UniverseSeedResult {
-  symbols: string[];
-  source: string;
-}
-
 interface ProviderMetrics {
   lastSuccessfulSchwabRestAt: string | null;
   lastSuccessfulYahooFallbackAt: string | null;
@@ -136,13 +140,6 @@ interface ProviderMetrics {
   yahooCircuitOpenUntil: string | null;
   sourceUsage: Record<string, number>;
   fallbackUsage: Record<string, number>;
-}
-
-interface UniverseAuditEntry {
-  refreshedAt: string;
-  source: string;
-  symbolCount: number;
-  sourceLadder: string[];
 }
 
 export class MarketDataService {
@@ -166,6 +163,7 @@ export class MarketDataService {
   private readonly streamerSharedStateBackend: "file" | "postgres";
   private readonly streamerSharedStatePath: string;
   private readonly streamerEnabled: boolean;
+  private readonly universeManager: UniverseArtifactManager;
   private streamer: SchwabStreamerSession | null = null;
   private readonly providerMetrics: ProviderMetrics = {
     lastSuccessfulSchwabRestAt: null,
@@ -263,6 +261,15 @@ export class MarketDataService {
     this.streamerEnabled = !["0", "false", "no", "off"].includes(
       this.config.SCHWAB_STREAMER_ENABLED.trim().toLowerCase(),
     );
+    this.universeManager = new UniverseArtifactManager({
+      cacheDir: this.cacheDir,
+      sourceLadder: this.universeSourceLadder,
+      remoteJsonUrl: this.universeRemoteJsonUrl,
+      localJsonPath: this.universeLocalJsonPath,
+      seedPath: this.universeSeedPath,
+      logger: this.logger,
+      fetchJson: this.fetchJson.bind(this),
+    });
     if (this.streamerEnabled && this.activeStreamerRole === "leader" && this.isSchwabConfigured()) {
       this.streamer = this.createStreamer(config.websocketFactory);
     }
@@ -870,18 +877,22 @@ export class MarketDataService {
   private async fetchPrimaryQuote(symbol: string): Promise<QuoteFetchResult> {
     await this.enforceStreamerFailurePolicy();
     const reasons: string[] = [];
+    const isFuturesSymbol = symbol.startsWith("/");
     if (this.isSchwabConfigured()) {
       try {
-        const streamed = await this.streamer?.getQuote(symbol);
+        const streamed = isFuturesSymbol ? await this.streamer?.getFuturesQuote(symbol) : await this.streamer?.getQuote(symbol);
         if (streamed?.price != null) {
           return { source: "schwab_streamer", status: "ok", stalenessSeconds: 0, quote: streamed };
         }
       } catch (error) {
         reasons.push(`Schwab streamer failed: ${summarizeError(error)}`);
       }
-      const shared = await this.readSharedStreamerQuote(symbol);
+      const shared = isFuturesSymbol ? await this.readSharedStreamerFuturesQuote(symbol) : await this.readSharedStreamerQuote(symbol);
       if (shared?.price != null) {
         return { source: "schwab_streamer_shared", status: "ok", stalenessSeconds: 0, quote: shared };
+      }
+      if (isFuturesSymbol) {
+        throw new Error(reasons[0] ?? `No live Schwab futures quote available for ${symbol}`);
       }
       if (this.shouldSkipSchwabRest()) {
         reasons.push(this.currentSchwabRestSkipReason());
@@ -912,10 +923,12 @@ export class MarketDataService {
     await this.enforceStreamerFailurePolicy();
     const quote = await this.fetchPrimaryQuote(symbol);
     const chartEquity =
-      (await this.streamer?.getChartEquity(symbol).catch(() => null)) ?? (await this.readSharedStreamerChart(symbol));
+      symbol.startsWith("/")
+        ? null
+        : (await this.streamer?.getChartEquity(symbol).catch(() => null)) ?? (await this.readSharedStreamerChart(symbol));
     const [metadata, fundamentals] = await Promise.all([
-      this.fetchPrimaryMetadata(symbol).catch(() => ({})),
-      this.fetchPrimaryFundamentals(symbol).then((result) => result.payload).catch(() => ({})),
+      symbol.startsWith("/") ? Promise.resolve({}) : this.fetchPrimaryMetadata(symbol).catch(() => ({})),
+      symbol.startsWith("/") ? Promise.resolve({}) : this.fetchPrimaryFundamentals(symbol).then((result) => result.payload).catch(() => ({})),
     ]);
     return {
       source: quote.source,
@@ -1666,83 +1679,9 @@ export class MarketDataService {
   }
 
   private async loadOrRefreshUniverseArtifact(forceRefresh: boolean): Promise<MarketDataUniverse> {
-    const artifactPath = path.join(this.cacheDir, "base-universe.json");
-    if (!forceRefresh) {
-      const cached = readJsonFile<MarketDataUniverse>(artifactPath);
-      const cachedAgeSeconds = cached?.updatedAt ? this.secondsSince(cached.updatedAt) : null;
-      if (cached?.updatedAt && cachedAgeSeconds != null && cachedAgeSeconds < 24 * 3600) {
-        return cached;
-      }
-    }
-
-    const seeded = await this.resolveUniverseSeed();
-    const payload: MarketDataUniverse = {
-      symbols: seeded.symbols,
-      source: seeded.source,
-      updatedAt: new Date().toISOString(),
-    };
-    fs.mkdirSync(path.dirname(artifactPath), { recursive: true });
-    fs.writeFileSync(artifactPath, JSON.stringify(payload, null, 2));
+    const payload = await this.universeManager.loadOrRefreshArtifact(forceRefresh);
     this.providerMetrics.lastSuccessfulUniverseRefreshAt = payload.updatedAt;
-    this.appendUniverseAudit({
-      refreshedAt: payload.updatedAt ?? new Date().toISOString(),
-      source: payload.source,
-      symbolCount: payload.symbols.length,
-      sourceLadder: this.universeSourceLadder,
-    });
     return payload;
-  }
-
-  private async resolveUniverseSeed(): Promise<UniverseSeedResult> {
-    const errors: string[] = [];
-    for (const source of this.universeSourceLadder) {
-      try {
-        if (source === "remote_json") {
-          return { symbols: await this.seedUniverseFromRemoteJson(), source: "remote_json" };
-        }
-        if (source === "local_json") {
-          return { symbols: await this.seedUniverseFromLocalJson(), source: "local_json" };
-        }
-        if (source === "python_seed") {
-          return { symbols: await this.seedUniverseFromPython(), source: "static_python_seed" };
-        }
-      } catch (error) {
-        const summary = summarizeError(error);
-        this.logger.error(`Universe seed source ${source} failed`, error);
-        errors.push(`${source}: ${summary}`);
-      }
-    }
-    throw new Error(`Unable to resolve universe seed (${errors.join("; ")})`);
-  }
-
-  private async seedUniverseFromPython(): Promise<string[]> {
-    const raw = await fs.promises.readFile(this.universeSeedPath, "utf8");
-    const start = raw.indexOf("SP500_TICKERS = [");
-    if (start < 0) {
-      throw new Error(`Unable to locate SP500_TICKERS in ${this.universeSeedPath}`);
-    }
-    const end = raw.indexOf("]\n\n# Growth", start);
-    const block = raw.slice(start, end > start ? end : undefined);
-    const matches = [...block.matchAll(/"([A-Z0-9.\-^]+)"/g)].map((match) => match[1].replaceAll(".", "-"));
-    return dedupe(matches);
-  }
-
-  private async seedUniverseFromRemoteJson(): Promise<string[]> {
-    if (!this.universeRemoteJsonUrl) {
-      throw new Error("MARKET_DATA_UNIVERSE_REMOTE_JSON_URL is not configured");
-    }
-    const payload = await this.fetchJson<unknown>(this.universeRemoteJsonUrl, {
-      headers: { accept: "application/json", "user-agent": YAHOO_USER_AGENT },
-    });
-    return extractUniverseSymbols(payload);
-  }
-
-  private async seedUniverseFromLocalJson(): Promise<string[]> {
-    if (!this.universeLocalJsonPath) {
-      throw new Error("MARKET_DATA_UNIVERSE_LOCAL_JSON_PATH is not configured");
-    }
-    const raw = await fs.promises.readFile(this.universeLocalJsonPath, "utf8");
-    return extractUniverseSymbols(JSON.parse(raw) as unknown);
   }
 
   private async buildRiskPayload(days: number): Promise<{
@@ -2128,6 +2067,23 @@ export class MarketDataService {
     return quote.quote;
   }
 
+  private async readSharedStreamerFuturesQuote(symbol: string): Promise<MarketDataQuote | null> {
+    if (this.activeStreamerRole !== "follower") {
+      return null;
+    }
+    const state = await this.readSharedStreamerState();
+    const quote = state?.futuresQuotes?.[symbol];
+    if (!quote?.receivedAt || !quote.quote) {
+      return null;
+    }
+    const ageSeconds = this.secondsSince(quote.receivedAt);
+    if (ageSeconds == null || ageSeconds > Math.round(this.config.SCHWAB_STREAMER_QUOTE_TTL_MS / 1000)) {
+      return null;
+    }
+    this.recordSharedStateFallbackSuccess();
+    return quote.quote;
+  }
+
   private async readSharedStreamerChart(symbol: string): Promise<Record<string, unknown> | null> {
     if (this.activeStreamerRole !== "follower") {
       return null;
@@ -2161,28 +2117,8 @@ export class MarketDataService {
     }
   }
 
-  private appendUniverseAudit(entry: UniverseAuditEntry): void {
-    try {
-      const auditPath = path.join(this.cacheDir, "base-universe-audit.jsonl");
-      fs.mkdirSync(path.dirname(auditPath), { recursive: true });
-      fs.appendFileSync(auditPath, `${JSON.stringify(entry)}\n`);
-    } catch (error) {
-      this.logger.error("Unable to append universe audit entry", error);
-    }
-  }
-
   private readUniverseAudit(limit: number): UniverseAuditEntry[] {
-    try {
-      const auditPath = path.join(this.cacheDir, "base-universe-audit.jsonl");
-      const lines = fs
-        .readFileSync(auditPath, "utf8")
-        .split(/\r?\n/)
-        .filter(Boolean)
-        .slice(-limit);
-      return lines.map((line) => JSON.parse(line) as UniverseAuditEntry).reverse();
-    } catch {
-      return [];
-    }
+    return this.universeManager.readAudit(limit);
   }
 
   private secondsSince(value: string | null | undefined): number | null {
@@ -2210,10 +2146,6 @@ export class MarketDataService {
   }
 }
 
-export function normalizeMarketSymbol(rawSymbol: string): string {
-  return String(rawSymbol).trim().toUpperCase();
-}
-
 function normalizeCompare(rawCompareWith: string | undefined): string | undefined {
   const candidate = rawCompareWith?.trim().toLowerCase();
   if (!candidate) {
@@ -2225,67 +2157,6 @@ function normalizeCompare(rawCompareWith: string | undefined): string | undefine
   return candidate;
 }
 
-function normalizeAlpacaDataUrl(rawUrl: string): string {
-  return rawUrl.trim().replace(/\/+$/, "") || "https://data.alpaca.markets";
-}
-
-function normalizeAlpacaBarLimit(period: string): number {
-  const candidate = period.trim().toLowerCase();
-  const mapping: Record<string, number> = {
-    "5d": 5,
-    "1mo": 22,
-    "3mo": 66,
-    "6mo": 132,
-    "1y": 252,
-    "2y": 504,
-    "5y": 1000,
-  };
-  return mapping[candidate] ?? 252;
-}
-
-function resolveQuery(url: string, key: string, defaultValue: string): string {
-  try {
-    const parsed = new URL(url);
-    return parsed.searchParams.get(key) ?? defaultValue;
-  } catch {
-    return defaultValue;
-  }
-}
-
-function parseBatchSymbols(url: string): string[] {
-  const raw = resolveQuery(url, "symbols", "");
-  return [
-    ...new Set(
-      raw
-        .split(",")
-        .map((value) => normalizeMarketSymbol(value))
-        .filter(Boolean),
-    ),
-  ];
-}
-
-function marketDataErrorResponse<T>(
-  message: string,
-  status: MarketDataStatus,
-  options: { reason: string },
-): MarketDataResponse<T> {
-  return {
-    source: "service",
-    status,
-    degradedReason: message,
-    stalenessSeconds: null,
-    data: { error: options.reason } as T,
-  };
-}
-
-function buildUnavailableCompare(source: string, message: string): MarketDataComparison {
-  return {
-    source,
-    available: false,
-    mismatchSummary: message,
-    stalenessSeconds: null,
-  };
-}
 
 function toNumberArray(value: unknown): Array<number | null> {
   if (!Array.isArray(value)) {

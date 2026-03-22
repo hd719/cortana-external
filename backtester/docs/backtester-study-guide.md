@@ -5,6 +5,9 @@ This is a plain-English learning doc for understanding the backtester from the g
 For the operating plan and next implementation phases, use:
 - [Roadmap](./roadmap.md)
 - [Session Handoff](./session-handoff.md)
+- [Market-data service reference](./market-data-service-reference.md)
+- [Streamer failure modes runbook](./streamer-failure-modes-runbook.md)
+- [Scoring and prediction accuracy reference](./scoring-prediction-accuracy-reference.md)
 
 The goal is to understand the system in the order it actually thinks:
 
@@ -333,6 +336,7 @@ When you run the local scripts, you are mostly seeing the result of this service
 - clearer source/fallback behavior
 - leader/follower and ops summaries
 - streamer health and symbol-budget visibility
+- pre-market futures context from Schwab `LEVELONE_FUTURES` for `/ES` and `/NQ`
 
 The compact operator reference now lives in [Market-data service reference](./market-data-service-reference.md).
 

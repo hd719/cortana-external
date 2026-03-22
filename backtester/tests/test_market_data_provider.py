@@ -93,3 +93,17 @@ def test_fallback_between_legacy_providers_defaults_to_service(tmp_path):
 
     assert calls == ["alpaca", "yahoo"]
     assert result.source == "yahoo"
+
+
+def test_quote_happy_path(tmp_path):
+    provider = MarketDataProvider(cache_dir=str(tmp_path), max_retries=0)
+    provider._fetch_service_quote = lambda symbol, provider=None: (  # type: ignore[method-assign]
+        {"symbol": "/ES", "price": 5200.25, "changePercent": 0.42},
+        {"source": "schwab_streamer", "status": "ok", "degradedReason": "", "stalenessSeconds": 0.0},
+    )
+
+    result = provider.get_quote("/ES")
+
+    assert result.source == "schwab_streamer"
+    assert result.quote["symbol"] == "/ES"
+    assert result.quote["price"] == 5200.25

@@ -23,6 +23,7 @@ from data.polymarket_context import build_alert_context_lines
 from data.universe import GROWTH_WATCHLIST
 from data.universe_selection import RankedUniverseSelector, UniverseSelectionResult
 from data.x_sentiment import XSentimentAnalyzer
+from evaluation.prediction_accuracy import persist_prediction_snapshot
 from evaluation.decision_review import render_decision_review
 from strategies.dip_buyer import DIPBUYER_CONFIG
 
@@ -87,6 +88,19 @@ def _all_names(records: list[dict], limit: int = 10) -> str:
     if len(names) <= limit:
         return ", ".join(names)
     return ", ".join(names[:limit]) + f" (+{len(names) - limit} more)"
+
+
+def _persist_predictions(*, market: object, records: list[dict]) -> None:
+    if os.getenv("PREDICTION_ACCURACY_ENABLED", "1") == "0":
+        return
+    try:
+        persist_prediction_snapshot(
+            strategy="dip_buyer",
+            market_regime=getattr(getattr(market, "regime", None), "value", "unknown"),
+            records=records,
+        )
+    except Exception:
+        return
 
 
 def _with_display_actions(records: list[dict], *, regime_value: str) -> list[dict]:
@@ -527,6 +541,8 @@ def format_alert(
             rejected.append({"symbol": symbol, "reason": reason})
 
     if not passed:
+        blocked = [{"symbol": s, "action": "NO_BUY", "score": 0, "reason": market.notes or "market correction gate"} for s in symbols[:limit]]
+        _persist_predictions(market=market, records=blocked)
         lines.append(f"Qualified setups: 0 of {len(symbols)} scanned | BUY 0 | WATCH 0")
         lines.append(f"Top leaders: {_top_names([{'symbol': s} for s in symbols], 3)}")
         lines.append(f"Final action: DO NOT BUY — market regime veto ({_dedupe_reason(market.notes or 'market correction gate')})")
@@ -535,6 +551,7 @@ def format_alert(
     ranked = sorted(passed, key=_trade_quality_sort_key)
     candidates = ranked[:limit]
     display_candidates = _with_display_actions(candidates, regime_value=regime_value)
+    _persist_predictions(market=market, records=display_candidates)
     buy_candidates = [c for c in display_candidates if c["action"] == "BUY"]
     watch_candidates = [c for c in display_candidates if c["action"] == "WATCH"]
     buy_count = len(buy_candidates)

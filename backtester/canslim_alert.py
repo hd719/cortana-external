@@ -24,6 +24,7 @@ from data.leader_baskets import load_leader_priority_symbols
 from data.polymarket_context import build_alert_context_lines
 from data.universe import GROWTH_WATCHLIST
 from data.universe_selection import RankedUniverseSelector, UniverseSelectionResult
+from evaluation.prediction_accuracy import persist_prediction_snapshot
 from evaluation.decision_review import render_decision_review
 
 
@@ -65,6 +66,19 @@ def _top_names(records: list[dict], limit: int = 3) -> str:
         if len(names) >= limit:
             break
     return ", ".join(names) if names else "none"
+
+
+def _persist_predictions(*, market: object, records: list[dict]) -> None:
+    if os.getenv("PREDICTION_ACCURACY_ENABLED", "1") == "0":
+        return
+    try:
+        persist_prediction_snapshot(
+            strategy="canslim",
+            market_regime=getattr(getattr(market, "regime", None), "value", "unknown"),
+            records=records,
+        )
+    except Exception:
+        return
 
 
 def _dedupe_reason(reason: str) -> str:
@@ -397,6 +411,8 @@ def format_alert(
         lines.append(f"Adverse regime: {stress['label']} ({float(stress['score']):.0f}) -- {stress['reason']}")
 
     if getattr(getattr(market, "regime", None), "value", "") == "correction":
+        blocked = [{"symbol": s, "action": "NO_BUY", "score": 0, "reason": market.notes or "market correction gate"} for s in symbols[:limit]]
+        _persist_predictions(market=market, records=blocked)
         lines.append(f"Scanned {len(symbols)} | market gate active | 0 BUY | 0 WATCH")
         lines.append(f"Top names considered: {_top_names([{'symbol': s} for s in symbols], 3)}")
         lines.append(f"Why no buys: {_dedupe_reason(market.notes or 'market correction gate')}")
@@ -473,6 +489,7 @@ def format_alert(
         phase_timings["analysis"] = time.perf_counter() - analyze_start
 
     if not passed:
+        _persist_predictions(market=market, records=rejected[:limit])
         lines.append(f"Scanned {len(symbols)} | 0 passed threshold | 0 BUY | 0 WATCH")
         lines.append(f"Top names considered: {_top_names([{'symbol': s} for s in symbols], 3)}")
         lines.append("Why no buys: no names cleared the CANSLIM threshold")
@@ -482,6 +499,7 @@ def format_alert(
 
     ranked = sorted(passed, key=_trade_quality_sort_key)
     candidates = ranked[:limit]
+    _persist_predictions(market=market, records=candidates)
 
     buy_count = sum(1 for c in candidates if c["action"] == "BUY")
     watch_count = sum(1 for c in candidates if c["action"] == "WATCH")

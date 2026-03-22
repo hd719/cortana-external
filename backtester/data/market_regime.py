@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
+from zoneinfo import ZoneInfo
 
 import numpy as np
 import pandas as pd
@@ -43,6 +44,7 @@ class MarketStatus:
     price_vs_21d_pct: float = 0.0
     price_vs_50d_pct: float = 0.0
     follow_through_active: bool = False
+    premarket_futures_summary: str = ""
 
     @staticmethod
     def _display_width(text: str) -> int:
@@ -91,9 +93,10 @@ class MarketStatus:
             f"Trend: {self.trend_direction}",
             f"Position Sizing: {self.position_sizing * 100:.0f}%",
             f"Regime Score: {self.regime_score:+d} | Drawdown: {self.drawdown_pct:.1f}% | 20d Return: {self.recent_return_pct:.1f}%",
-            "",
-            f"Notes: {self.notes}",
         ]
+        if self.premarket_futures_summary:
+            lines.append(f"Premarket futures: {self.premarket_futures_summary}")
+        lines.extend(["", f"Notes: {self.notes}"])
         if self.status == "degraded" and self.degraded_reason:
             lines.append(f"Degraded Reason: {self.degraded_reason}")
         if self.snapshot_age_seconds:
@@ -269,6 +272,44 @@ class MarketRegimeDetector:
             price_vs_50d_pct=0.0,
             follow_through_active=False,
         )
+
+    def _premarket_futures_summary(self) -> str:
+        now_et = datetime.now(ZoneInfo("America/New_York"))
+        if now_et.hour > 9 or (now_et.hour == 9 and now_et.minute >= 30):
+            return ""
+
+        futures_rows: list[tuple[str, float | None, float | None]] = []
+        for symbol in ("/ES", "/NQ"):
+            try:
+                payload = self.data_provider.get_quote(symbol).quote
+            except Exception:
+                continue
+            try:
+                change_pct = float(payload.get("changePercent")) if payload.get("changePercent") is not None else None
+            except (TypeError, ValueError):
+                change_pct = None
+            try:
+                price = float(payload.get("price")) if payload.get("price") is not None else None
+            except (TypeError, ValueError):
+                price = None
+            if price is None:
+                continue
+            futures_rows.append((symbol, change_pct, price))
+
+        if not futures_rows:
+            return ""
+
+        comparable_changes = [change for _, change, _ in futures_rows if change is not None]
+        supportive = comparable_changes and all(change >= 0.35 for change in comparable_changes)
+        weak = comparable_changes and all(change <= -0.35 for change in comparable_changes)
+        posture = "supportive" if supportive else "weak" if weak else "mixed"
+        detail = []
+        for symbol, change, price in futures_rows:
+            if change is None:
+                detail.append(f"{symbol} {price:.2f}")
+            else:
+                detail.append(f"{symbol} {change:+.2f}%")
+        return f"{posture} | " + " | ".join(detail)
 
     def fetch_data(self, days: int = 90) -> pd.DataFrame:
         try:
@@ -475,6 +516,7 @@ class MarketRegimeDetector:
             price_vs_21d_pct=scorecard.price_vs_21d_pct,
             price_vs_50d_pct=scorecard.price_vs_50d_pct,
             follow_through_active=scorecard.follow_through_active,
+            premarket_futures_summary=self._premarket_futures_summary(),
         )
         self._write_snapshot_cache(status)
         return status

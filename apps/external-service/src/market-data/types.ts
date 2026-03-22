@@ -55,6 +55,10 @@ export interface MarketDataQuote {
   securityStatus?: string;
 }
 
+export interface MarketDataFuturesQuote extends MarketDataQuote {
+  rootSymbol: string;
+}
+
 export interface SchwabAccountActivityEvent {
   service: "ACCT_ACTIVITY";
   receivedAt: string;

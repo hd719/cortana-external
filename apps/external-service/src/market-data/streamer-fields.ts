@@ -1,8 +1,9 @@
-import type { MarketDataQuote, SchwabAccountActivityEvent } from "./types.js";
+import type { MarketDataFuturesQuote, MarketDataQuote, SchwabAccountActivityEvent } from "./types.js";
 import type { StreamerChartEquityPoint } from "./streamer.js";
 
 export const STREAMER_SERVICES = {
   LEVELONE_EQUITIES: "LEVELONE_EQUITIES",
+  LEVELONE_FUTURES: "LEVELONE_FUTURES",
   CHART_EQUITY: "CHART_EQUITY",
   ACCT_ACTIVITY: "ACCT_ACTIVITY",
 } as const;
@@ -10,6 +11,17 @@ export const STREAMER_SERVICES = {
 export type StreamerServiceName = (typeof STREAMER_SERVICES)[keyof typeof STREAMER_SERVICES];
 
 export const LEVELONE_EQUITIES_FIELDS = {
+  symbol: ["key", "symbol"],
+  price: ["3", "2", "1"],
+  volume: ["8"],
+  week52High: ["19"],
+  week52Low: ["20"],
+  securityStatus: ["32"],
+  changePercent: ["42"],
+  timestamp: ["34", "35", "37"],
+} as const;
+
+export const LEVELONE_FUTURES_FIELDS = {
   symbol: ["key", "symbol"],
   price: ["3", "2", "1"],
   volume: ["8"],
@@ -41,6 +53,8 @@ export const ACCT_ACTIVITY_FIELDS = {
   timestamp: ["6", "timestamp", "eventTime", "time", "datetime"],
 } as const;
 
+const FUTURES_ROOT_SYMBOLS = new Set(["ES", "NQ", "YM", "RTY"]);
+
 export function normalizeStreamerEquityQuote(
   row: Record<string, unknown>,
   fallbackTimestamp: number,
@@ -67,6 +81,33 @@ export function normalizeStreamerEquityQuote(
   };
 }
 
+export function normalizeStreamerFuturesQuote(
+  row: Record<string, unknown>,
+  fallbackTimestamp: number,
+): MarketDataFuturesQuote | null {
+  const symbol = normalizeFuturesSymbol(firstString(row, LEVELONE_FUTURES_FIELDS.symbol)?.trim().toUpperCase() ?? "");
+  if (!symbol) {
+    return null;
+  }
+  const price = firstNumber(row, LEVELONE_FUTURES_FIELDS.price);
+  if (price == null) {
+    return null;
+  }
+  const timestampMs = firstNumber(row, LEVELONE_FUTURES_FIELDS.timestamp) ?? fallbackTimestamp;
+  return {
+    symbol,
+    rootSymbol: symbol.slice(1),
+    price,
+    volume: firstNumber(row, LEVELONE_FUTURES_FIELDS.volume) ?? undefined,
+    week52High: firstNumber(row, LEVELONE_FUTURES_FIELDS.week52High) ?? undefined,
+    week52Low: firstNumber(row, LEVELONE_FUTURES_FIELDS.week52Low) ?? undefined,
+    securityStatus: firstString(row, LEVELONE_FUTURES_FIELDS.securityStatus),
+    changePercent: firstNumber(row, LEVELONE_FUTURES_FIELDS.changePercent) ?? undefined,
+    timestamp: new Date(timestampMs).toISOString(),
+    currency: "USD",
+  };
+}
+
 export function normalizeStreamerChartEquity(row: Record<string, unknown>): StreamerChartEquityPoint | null {
   const symbol = firstString(row, CHART_EQUITY_FIELDS.symbol)?.trim().toUpperCase() ?? "";
   const open = firstNumber(row, CHART_EQUITY_FIELDS.open);
@@ -88,6 +129,22 @@ export function normalizeStreamerChartEquity(row: Record<string, unknown>): Stre
     sequence: firstNumber(row, CHART_EQUITY_FIELDS.sequence),
     chartTime: new Date(chartTimeMs).toISOString(),
   };
+}
+
+export function normalizeFuturesSymbol(symbol: string): string | null {
+  const normalized = symbol.trim().toUpperCase();
+  if (!normalized) {
+    return null;
+  }
+  const compact = normalized.startsWith("/") ? normalized.slice(1) : normalized;
+  if (!FUTURES_ROOT_SYMBOLS.has(compact)) {
+    return null;
+  }
+  return `/${compact}`;
+}
+
+export function isSupportedFuturesSymbol(symbol: string): boolean {
+  return normalizeFuturesSymbol(symbol) != null;
 }
 
 export function normalizeStreamerAccountActivityEvent(
