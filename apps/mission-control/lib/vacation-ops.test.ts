@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   computeNextSummaryAt,
+  deriveVacationPrepRepair,
   deriveVacationDisplayMode,
   formatVacationSystemLabel,
   formatVacationWindowLabel,
@@ -21,6 +22,46 @@ describe("vacation ops helpers", () => {
     expect(deriveVacationDisplayMode(null, { status: "completed" })).toBe("inactive");
     expect(deriveVacationDisplayMode(null, { status: "ready" })).toBe("ready");
     expect(deriveVacationDisplayMode({ status: "active" }, { status: "ready" })).toBe("active");
+  });
+
+  it("repairs prep windows after a completed green readiness run", () => {
+    expect(deriveVacationPrepRepair(
+      { id: 23, status: "prep" },
+      {
+        id: 60,
+        vacationWindowId: 23,
+        state: "completed",
+        readinessOutcome: "pass",
+        startedAt: "2026-04-30T17:43:34.146Z",
+        completedAt: "2026-04-30T17:43:56.595Z",
+      },
+      new Date("2026-04-30T17:44:00.000Z"),
+    )).toEqual({
+      nextWindowStatus: "ready",
+      cancelLatestRun: false,
+      note: "Recovered staged vacation window from completed readiness run 60.",
+      prepCompletedAt: "2026-04-30T17:43:56.595Z",
+    });
+  });
+
+  it("fails stale prep windows with a stuck readiness run", () => {
+    expect(deriveVacationPrepRepair(
+      { id: 23, status: "prep" },
+      {
+        id: 58,
+        vacationWindowId: 23,
+        state: "running",
+        readinessOutcome: null,
+        startedAt: "2026-04-30T17:00:00.000Z",
+        completedAt: null,
+      },
+      new Date("2026-04-30T17:20:01.000Z"),
+    )).toEqual({
+      nextWindowStatus: "failed",
+      cancelLatestRun: true,
+      note: "Cancelled stale readiness run 58 after staged preflight exceeded 15 minutes.",
+      prepCompletedAt: "2026-04-30T17:20:01.000Z",
+    });
   });
 
   it("computes the next summary time from the active window timezone", () => {

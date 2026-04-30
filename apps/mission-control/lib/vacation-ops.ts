@@ -21,6 +21,7 @@ const VACATION_CONFIG_PATH = path.join(CORTANA_ROOT, "config", "vacation-ops.jso
 const VACATION_TOOL_PATH = path.join(CORTANA_ROOT, "tools", "vacation", "vacation-ops.ts");
 const VACATION_MIRROR_PATH = path.join(process.env.HOME ?? "/Users/hd", ".openclaw", "state", "vacation-mode.json");
 const COMMAND_TIMEOUT_MS = 180_000;
+const STALE_PREP_MS = 15 * 60 * 1000;
 
 type JsonObject = Record<string, unknown>;
 
@@ -286,6 +287,59 @@ export function deriveVacationDisplayMode(
   return "inactive";
 }
 
+function sqlEscape(value: string): string {
+  return value.replace(/'/g, "''");
+}
+
+function parseMs(value: Date | string | null | undefined): number {
+  if (value == null) return 0;
+  if (value instanceof Date) return value.getTime();
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function readinessOutcomeToWindowStatus(outcome: string | null | undefined): "ready" | "failed" | null {
+  if (outcome === "pass" || outcome === "warn") return "ready";
+  if (outcome === "fail" || outcome === "no_go") return "failed";
+  return null;
+}
+
+export function deriveVacationPrepRepair(
+  latestWindow: Pick<VacationWindow, "id" | "status"> | null,
+  latestReadiness: Pick<VacationRun, "id" | "vacationWindowId" | "state" | "readinessOutcome" | "startedAt" | "completedAt"> | null,
+  now = new Date(),
+): {
+  nextWindowStatus: "ready" | "failed";
+  cancelLatestRun: boolean;
+  note: string;
+  prepCompletedAt: string;
+} | null {
+  if (!latestWindow || latestWindow.status !== "prep" || !latestReadiness || latestReadiness.vacationWindowId !== latestWindow.id) {
+    return null;
+  }
+
+  if (latestReadiness.state === "completed") {
+    const nextWindowStatus = readinessOutcomeToWindowStatus(latestReadiness.readinessOutcome);
+    if (!nextWindowStatus) return null;
+    return {
+      nextWindowStatus,
+      cancelLatestRun: false,
+      note: `Recovered staged vacation window from completed readiness run ${latestReadiness.id}.`,
+      prepCompletedAt: latestReadiness.completedAt ?? now.toISOString(),
+    };
+  }
+
+  if (latestReadiness.state !== "running") return null;
+  const startedAtMs = parseMs(latestReadiness.startedAt);
+  if (!startedAtMs || now.getTime() - startedAtMs < STALE_PREP_MS) return null;
+  return {
+    nextWindowStatus: "failed",
+    cancelLatestRun: true,
+    note: `Cancelled stale readiness run ${latestReadiness.id} after staged preflight exceeded 15 minutes.`,
+    prepCompletedAt: now.toISOString(),
+  };
+}
+
 function normalizeIso(value: Date | string | null | undefined): string | null {
   if (value == null) return null;
   if (value instanceof Date) return value.toISOString();
@@ -499,19 +553,81 @@ async function queryMany<T>(sql: string): Promise<T[]> {
   return prisma.$queryRawUnsafe<T[]>(sql);
 }
 
+async function reconcileVacationSnapshotState(
+  latestWindowRow: RawWindowRow | null,
+  latestReadinessRow: RawRunRow | null,
+): Promise<{ latestWindowRow: RawWindowRow | null; latestReadinessRow: RawRunRow | null }> {
+  const latestWindow = mapWindow(latestWindowRow);
+  const latestReadiness = mapRun(latestReadinessRow);
+  const repair = deriveVacationPrepRepair(latestWindow, latestReadiness);
+  if (!repair || !latestWindowRow) {
+    return { latestWindowRow, latestReadinessRow };
+  }
+
+  const note = sqlEscape(repair.note);
+  const prepCompletedAt = sqlEscape(repair.prepCompletedAt);
+
+  await prisma.$transaction(async (tx) => {
+    await tx.$queryRawUnsafe(`
+UPDATE cortana_vacation_windows
+SET status = '${repair.nextWindowStatus}',
+    prep_completed_at = COALESCE(prep_completed_at, '${prepCompletedAt}'),
+    updated_at = NOW()
+WHERE id = ${latestWindowRow.id}
+  AND status = 'prep';
+`);
+
+    const runningFilter = repair.cancelLatestRun
+      ? `id = ${latestReadinessRow?.id ?? 0}`
+      : `id <> ${latestReadinessRow?.id ?? 0}`;
+
+    await tx.$queryRawUnsafe(`
+UPDATE cortana_vacation_runs
+SET state = 'cancelled',
+    completed_at = COALESCE(completed_at, NOW()),
+    summary_payload = COALESCE(summary_payload, '{}'::jsonb) || jsonb_build_object('note', '${note}'),
+    summary_text = CASE
+      WHEN COALESCE(summary_text, '') = '' THEN '${note}'
+      ELSE summary_text
+    END
+WHERE vacation_window_id = ${latestWindowRow.id}
+  AND run_type = 'readiness'
+  AND state = 'running'
+  AND ${runningFilter};
+`);
+  });
+
+  const [repairedWindowRow, repairedReadinessRow] = await Promise.all([
+    queryFirst<RawWindowRow>(`SELECT * FROM cortana_vacation_windows WHERE id = ${latestWindowRow.id} LIMIT 1`),
+    queryFirst<RawRunRow>(`SELECT * FROM cortana_vacation_runs WHERE vacation_window_id = ${latestWindowRow.id} AND run_type = 'readiness' ORDER BY started_at DESC LIMIT 1`),
+  ]);
+
+  return {
+    latestWindowRow: repairedWindowRow ?? latestWindowRow,
+    latestReadinessRow: repairedReadinessRow ?? latestReadinessRow,
+  };
+}
+
 export async function getVacationOpsSnapshot(): Promise<VacationOpsSnapshot> {
   const config = readVacationConfig();
-  const [latestWindowRow, activeWindowRow] = await Promise.all([
+  let [latestWindowRow, activeWindowRow] = await Promise.all([
     queryFirst<RawWindowRow>(`SELECT * FROM cortana_vacation_windows ORDER BY updated_at DESC LIMIT 1`),
     queryFirst<RawWindowRow>(`SELECT * FROM cortana_vacation_windows WHERE status = 'active' ORDER BY start_at DESC LIMIT 1`),
   ]);
+
+  const initialRelevantWindowId = activeWindowRow?.id ?? latestWindowRow?.id ?? null;
+  let latestReadinessRow = initialRelevantWindowId
+    ? await queryFirst<RawRunRow>(`SELECT * FROM cortana_vacation_runs WHERE vacation_window_id = ${initialRelevantWindowId} AND run_type = 'readiness' ORDER BY started_at DESC LIMIT 1`)
+    : await queryFirst<RawRunRow>(`SELECT * FROM cortana_vacation_runs WHERE run_type = 'readiness' ORDER BY started_at DESC LIMIT 1`);
+
+  ({ latestWindowRow, latestReadinessRow } = await reconcileVacationSnapshotState(latestWindowRow, latestReadinessRow));
 
   const latestWindow = mapWindow(latestWindowRow);
   const activeWindow = mapWindow(activeWindowRow);
   const mirror = readVacationMirror();
 
   const relevantWindowId = activeWindow?.id ?? latestWindow?.id ?? null;
-  const latestReadinessRow = relevantWindowId
+  latestReadinessRow = relevantWindowId
     ? await queryFirst<RawRunRow>(`SELECT * FROM cortana_vacation_runs WHERE vacation_window_id = ${relevantWindowId} AND run_type = 'readiness' ORDER BY started_at DESC LIMIT 1`)
     : await queryFirst<RawRunRow>(`SELECT * FROM cortana_vacation_runs WHERE run_type = 'readiness' ORDER BY started_at DESC LIMIT 1`);
   const latestReadiness = mapRun(latestReadinessRow);
