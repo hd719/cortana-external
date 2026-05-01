@@ -90,6 +90,18 @@ export function getHeartbeatStatePath(): string {
   return runtimeHeartbeatPath;
 }
 
+export function getHeartbeatRuntimeSessionPath(): string {
+  const explicit = readEnvPath("HEARTBEAT_RUNTIME_SESSION_FILE");
+  if (explicit) return explicit;
+
+  const homeDir = process.env.HOME?.trim() || "/Users/hd";
+  return path.join(homeDir, ".openclaw", "agents", "main", "sessions", "sessions.json");
+}
+
+export function getHeartbeatRuntimeSessionKey(): string {
+  return readEnvPath("HEARTBEAT_RUNTIME_SESSION_KEY") ?? "agent:main:main";
+}
+
 export function getTelegramUsageHandlerPath(): string {
   return readEnvPath("TELEGRAM_USAGE_HANDLER_PATH") ?? path.join(getCortanaSourceRepo(), "skills", "telegram-usage", "handler.ts");
 }

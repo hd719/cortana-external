@@ -1,5 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { normalizeTimestamp, getStatus, resolveLatestHeartbeat } from "@/app/api/heartbeat-status/route";
+import {
+  normalizeTimestamp,
+  getStatus,
+  readRuntimeHeartbeatSignalFromSessions,
+  resolveLatestHeartbeat,
+} from "@/app/api/heartbeat-status/route";
 
 describe("normalizeTimestamp", () => {
   it("converts seconds timestamps to milliseconds", () => {
@@ -29,6 +34,22 @@ describe("resolveLatestHeartbeat", () => {
           subagent_watchdog: { lastChecked: fresh / 1000 },
         },
       })
+    ).toBe(fresh);
+  });
+
+  it("uses the OpenClaw runtime session when canonical heartbeat state is stale", () => {
+    const stale = 1_700_000_000_000;
+    const fresh = 1_700_000_360_000;
+    expect(
+      resolveLatestHeartbeat(
+        {
+          lastHeartbeat: stale,
+          lastChecks: {
+            cron_delivery: { lastChecked: stale / 1000 },
+          },
+        },
+        { timestampMs: fresh, source: "openclawSessions.agent:main:main" }
+      )
     ).toBe(fresh);
   });
 });
@@ -65,5 +86,26 @@ describe("getStatus", () => {
 
   it("returns unknown for null age", () => {
     expect(getStatus(null)).toBe("unknown");
+  });
+});
+
+describe("readRuntimeHeartbeatSignalFromSessions", () => {
+  it("extracts the main OpenClaw session updatedAt timestamp", () => {
+    const raw = JSON.stringify({
+      "agent:main:main": { updatedAt: 1_700_000_360_000 },
+    });
+
+    expect(readRuntimeHeartbeatSignalFromSessions(raw, "agent:main:main", 1_700_000_400_000)).toEqual({
+      timestampMs: 1_700_000_360_000,
+      source: "openclawSessions.agent:main:main",
+    });
+  });
+
+  it("ignores implausible future runtime timestamps", () => {
+    const raw = JSON.stringify({
+      "agent:main:main": { updatedAt: 1_700_001_000_000 },
+    });
+
+    expect(readRuntimeHeartbeatSignalFromSessions(raw, "agent:main:main", 1_700_000_000_000)).toBeNull();
   });
 });
