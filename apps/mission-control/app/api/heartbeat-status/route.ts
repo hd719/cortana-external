@@ -1,6 +1,10 @@
 import { readFile } from "node:fs/promises";
 import { NextResponse } from "next/server";
-import { getHeartbeatStatePath } from "@/lib/runtime-paths";
+import {
+  getHeartbeatRuntimeSessionKey,
+  getHeartbeatRuntimeSessionPath,
+  getHeartbeatStatePath,
+} from "@/lib/runtime-paths";
 
 export type HeartbeatStatus = "healthy" | "stale" | "missed" | "quiet" | "unknown";
 
@@ -21,25 +25,52 @@ type HeartbeatState = {
   lastChecks?: Record<string, { lastChecked?: unknown }>;
 };
 
+type RuntimeHeartbeatSignal = {
+  timestampMs: number;
+  source: string;
+};
+
 export function normalizeTimestamp(raw: unknown): number | null {
   if (typeof raw !== "number" || !Number.isFinite(raw)) return null;
   return raw < 1_000_000_000_000 ? raw * 1000 : raw;
 }
 
-export function resolveLatestHeartbeat(parsed: HeartbeatState): number | null {
+export function resolveLatestHeartbeat(parsed: HeartbeatState, runtimeSignal: RuntimeHeartbeatSignal | null = null): number | null {
   const direct = normalizeTimestamp(parsed.lastHeartbeat);
-  let fromChecks: number | null = null;
+  let latest: number | null = runtimeSignal?.timestampMs ?? null;
+
+  if (direct != null && (latest == null || direct > latest)) latest = direct;
 
   if (parsed.lastChecks && typeof parsed.lastChecks === "object") {
     for (const check of Object.values(parsed.lastChecks)) {
       const ts = normalizeTimestamp(check?.lastChecked);
-      if (ts != null && (fromChecks == null || ts > fromChecks)) fromChecks = ts;
+      if (ts != null && (latest == null || ts > latest)) latest = ts;
     }
   }
 
-  if (direct == null) return fromChecks;
-  if (fromChecks == null) return direct;
-  return Math.max(direct, fromChecks);
+  return latest;
+}
+
+export function readRuntimeHeartbeatSignalFromSessions(
+  raw: string,
+  sessionKey = "agent:main:main",
+  nowMs = Date.now()
+): RuntimeHeartbeatSignal | null {
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+    const session = (parsed as Record<string, unknown>)[sessionKey];
+    if (!session || typeof session !== "object" || Array.isArray(session)) return null;
+
+    const updatedAt = (session as Record<string, unknown>).updatedAt;
+    if (typeof updatedAt !== "number" || !Number.isFinite(updatedAt)) return null;
+    const timestampMs = Math.trunc(updatedAt);
+    if (timestampMs <= 0 || timestampMs > nowMs + 5 * 60 * 1000) return null;
+
+    return { timestampMs, source: `openclawSessions.${sessionKey}` };
+  } catch {
+    return null;
+  }
 }
 
 export function getStatus(ageMs: number | null): HeartbeatStatus {
@@ -53,40 +84,44 @@ export function getStatus(ageMs: number | null): HeartbeatStatus {
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
+async function readRuntimeHeartbeatSignal(): Promise<RuntimeHeartbeatSignal | null> {
+  try {
+    const raw = await readFile(getHeartbeatRuntimeSessionPath(), "utf8");
+    return readRuntimeHeartbeatSignalFromSessions(raw, getHeartbeatRuntimeSessionKey());
+  } catch {
+    return null;
+  }
+}
+
+function heartbeatResponse(lastHeartbeat: number | null, source: string | null, ok: boolean) {
+  const ageMs = lastHeartbeat == null ? null : Math.max(0, Date.now() - lastHeartbeat);
+  return NextResponse.json(
+    {
+      ok,
+      lastHeartbeat,
+      ageMs,
+      status: getStatus(ageMs),
+      source,
+    },
+    {
+      status: 200,
+      headers: {
+        "cache-control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+      },
+    }
+  );
+}
+
 export async function GET() {
+  const runtimeSignal = await readRuntimeHeartbeatSignal();
   try {
     const raw = await readFile(getHeartbeatStatePath(), "utf8");
     const parsed = JSON.parse(raw) as HeartbeatState;
-    const lastHeartbeat = resolveLatestHeartbeat(parsed);
-    const ageMs = lastHeartbeat == null ? null : Math.max(0, Date.now() - lastHeartbeat);
-
-    return NextResponse.json(
-      {
-        ok: true,
-        lastHeartbeat,
-        ageMs,
-        status: getStatus(ageMs),
-      },
-      {
-        headers: {
-          "cache-control": "no-store, no-cache, must-revalidate, proxy-revalidate",
-        },
-      }
-    );
+    const lastHeartbeat = resolveLatestHeartbeat(parsed, runtimeSignal);
+    const source = lastHeartbeat === runtimeSignal?.timestampMs ? runtimeSignal.source : "heartbeat-state";
+    return heartbeatResponse(lastHeartbeat, source, true);
   } catch {
-    return NextResponse.json(
-      {
-        ok: false,
-        lastHeartbeat: null,
-        ageMs: null,
-        status: "unknown",
-      },
-      {
-        status: 200,
-        headers: {
-          "cache-control": "no-store, no-cache, must-revalidate, proxy-revalidate",
-        },
-      }
-    );
+    if (runtimeSignal) return heartbeatResponse(runtimeSignal.timestampMs, runtimeSignal.source, true);
+    return heartbeatResponse(null, null, false);
   }
 }
