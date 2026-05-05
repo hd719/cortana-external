@@ -7,6 +7,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useLayoutEffect, useState } from "react";
 import {
   Brain,
+  Activity,
   ChevronLeft,
   ChevronRight,
   ClipboardList,
@@ -29,6 +30,7 @@ const COOKIE_KEY = "mc-sidebar-collapsed";
 
 const links = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/autonomy", label: "Autonomy", icon: Activity },
   { href: "/sessions", label: "Sessions", icon: MessageSquareText },
   { href: "/services", label: "Services", icon: PlugZap },
   { href: "/trading-ops", label: "Trading Ops", icon: Landmark },
