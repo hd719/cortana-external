@@ -10,6 +10,15 @@ export const runtime = "nodejs";
 const DATE_FILE_REGEX = /^\d{4}-\d{2}-\d{2}\.md$/;
 const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 
+type MemoryFile = {
+  date: string;
+  path: string;
+};
+
+function uniquePaths(paths: string[]): string[] {
+  return [...new Set(paths)];
+}
+
 async function walkArchive(dir: string): Promise<string[]> {
   let entries: Dirent[] = [];
   try {
@@ -31,22 +40,55 @@ async function walkArchive(dir: string): Promise<string[]> {
   return nested.flat();
 }
 
-async function getMemoryFiles() {
-  const memoryRoot = path.join(os.homedir(), "openclaw", "memory");
-  const archiveRoot = path.join(memoryRoot, "archive");
+function getMemoryRoots() {
+  const home = os.homedir();
+  const runtimeDailyRoot =
+    process.env.OPENCLAW_DAILY_MEMORY_DIR ?? path.join(home, ".openclaw", "memory", "daily");
+  const runtimeMemoryRoot = process.env.OPENCLAW_MEMORY_DIR ?? path.join(home, ".openclaw", "memory");
+  const legacyMemoryRoot = process.env.OPENCLAW_LEGACY_MEMORY_DIR ?? path.join(home, "openclaw", "memory");
 
-  let dailyEntries: Dirent[] = [];
+  return {
+    dailyRoots: uniquePaths([runtimeDailyRoot, legacyMemoryRoot]),
+    archiveRoots: uniquePaths([
+      path.join(runtimeDailyRoot, "archive"),
+      path.join(runtimeMemoryRoot, "archive"),
+      path.join(legacyMemoryRoot, "archive"),
+    ]),
+  };
+}
+
+async function readDatedFiles(root: string): Promise<MemoryFile[]> {
+  let entries: Dirent[] = [];
   try {
-    dailyEntries = await fs.readdir(memoryRoot, { withFileTypes: true });
+    entries = await fs.readdir(root, { withFileTypes: true });
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
+    throw error;
   }
 
-  const dailyFiles = dailyEntries
+  return entries
     .filter((entry) => entry.isFile() && DATE_FILE_REGEX.test(entry.name))
-    .map((entry) => path.join(memoryRoot, entry.name));
+    .map((entry) => ({
+      date: path.basename(entry.name, ".md"),
+      path: path.join(root, entry.name),
+    }));
+}
 
-  const archiveFiles = await walkArchive(archiveRoot);
+async function getMemoryFiles() {
+  const { dailyRoots, archiveRoots } = getMemoryRoots();
+
+  const dailyFiles = (await Promise.all(dailyRoots.map((root) => readDatedFiles(root)))).flat();
+
+  const archiveFiles = (
+    await Promise.all(
+      archiveRoots.map(async (root) =>
+        (await walkArchive(root)).map((filePath) => ({
+          date: path.basename(filePath, ".md"),
+          path: filePath,
+        }))
+      )
+    )
+  ).flat();
 
   return { dailyFiles, archiveFiles };
 }
@@ -64,27 +106,18 @@ export async function GET(request: Request) {
     const allFiles = [...dailyFiles, ...archiveFiles];
 
     const dates = Array.from(
-      new Set(allFiles.map((filePath) => path.basename(filePath, ".md")))
+      new Set(allFiles.map((file) => file.date))
     ).sort((a, b) => b.localeCompare(a));
 
     if (!date) {
       return NextResponse.json({ dates });
     }
 
-    const dailyPath = path.join(os.homedir(), "openclaw", "memory", `${date}.md`);
-
     let content: string | undefined;
+    const match = allFiles.find((file) => file.date === date);
 
-    try {
-      content = await fs.readFile(dailyPath, "utf8");
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-      const archiveMatch = archiveFiles.find(
-        (filePath) => path.basename(filePath, ".md") === date
-      );
-      if (archiveMatch) {
-        content = await fs.readFile(archiveMatch, "utf8");
-      }
+    if (match) {
+      content = await fs.readFile(match.path, "utf8");
     }
 
     return NextResponse.json(content ? { dates, content } : { dates });
