@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useState } from "react";
 import { Activity, AlertTriangle, ArrowRight, CheckCircle2, Clock3, RefreshCcw, ShieldAlert } from "lucide-react";
 import type { AutonomyOpsSnapshot, AutonomyOpsArtifact } from "@/lib/autonomy-ops";
 import type { HumanRequiredAction } from "@/lib/human-required-actions";
@@ -22,10 +22,9 @@ type HumanActionsResponse = {
   error?: string;
 };
 
-type RefreshResponse = AutonomyOpsSnapshot & {
-  refreshedAt?: string;
-  staleData?: AutonomyOpsSnapshot | AutonomyOpsArtifact;
-};
+type RefreshResponse =
+  | (AutonomyOpsSnapshot & { refreshedAt?: string })
+  | { ok: false; stale: true; error?: string; staleData?: AutonomyOpsSnapshot; refreshedAt?: string };
 
 const tone: Record<string, string> = {
   live: "border-emerald-500/40 bg-emerald-500/5 text-emerald-700",
@@ -136,37 +135,46 @@ export function AutonomyClient({ initialSnapshot, initialHumanActions, initialHu
   const [humanActions, setHumanActions] = useState(initialHumanActions);
   const [humanActionsError, setHumanActionsError] = useState(initialHumanActionsError);
   const [refreshError, setRefreshError] = useState<string | null>(null);
-  const [isPending, startTransition] = useTransition();
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const data = snapshot.ok ? snapshot.data : null;
   const state = data?.operatorState ?? "attention";
 
-  const refresh = () => {
-    startTransition(async () => {
-      setRefreshError(null);
-      try {
-        const [autonomyResponse, humanResponse] = await Promise.all([
-          fetch("/api/autonomy-ops/refresh", { method: "POST", cache: "no-store" }),
-          fetch("/api/human-required-actions", { cache: "no-store" }),
-        ]);
-        const autonomyPayload = (await autonomyResponse.json()) as RefreshResponse;
-        const humanPayload = (await humanResponse.json()) as HumanActionsResponse;
-        if (!autonomyResponse.ok && !autonomyPayload.ok) {
-          setRefreshError(autonomyPayload.error ?? "Autonomy refresh failed.");
+  const refresh = async () => {
+    if (isRefreshing) return;
+    setIsRefreshing(true);
+    setRefreshError(null);
+    try {
+      const [autonomyResponse, humanResponse] = await Promise.all([
+        fetch("/api/autonomy-ops/refresh", { method: "POST", cache: "no-store" }),
+        fetch("/api/human-required-actions", { cache: "no-store" }),
+      ]);
+      const autonomyPayload = (await autonomyResponse.json()) as RefreshResponse;
+      const humanPayload = (await humanResponse.json()) as HumanActionsResponse;
+      if (autonomyPayload.ok) {
+        if (!autonomyResponse.ok) {
+          setRefreshError("Autonomy refresh failed.");
         }
-        if ("ok" in autonomyPayload && (autonomyPayload.ok || !autonomyResponse.ok)) {
+        setSnapshot(autonomyPayload);
+      } else {
+        setRefreshError(autonomyPayload.error ?? "Autonomy refresh failed.");
+        if ("artifactPath" in autonomyPayload) {
           setSnapshot(autonomyPayload);
+        } else if (autonomyPayload.staleData) {
+          setSnapshot(autonomyPayload.staleData);
         }
-        if (humanPayload.ok) {
-          setHumanActions(humanPayload.items);
-          setHumanActionsError(null);
-        } else {
-          setHumanActions([]);
-          setHumanActionsError(humanPayload.error ?? "Queue unavailable.");
-        }
-      } catch (error) {
-        setRefreshError(error instanceof Error ? error.message : String(error));
       }
-    });
+      if (humanPayload.ok) {
+        setHumanActions(humanPayload.items);
+        setHumanActionsError(null);
+      } else {
+        setHumanActions([]);
+        setHumanActionsError(humanPayload.error ?? "Queue unavailable.");
+      }
+    } catch (error) {
+      setRefreshError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setIsRefreshing(false);
+    }
   };
 
   const humanRequiredHref = useMemo(() => (
@@ -185,8 +193,8 @@ export function AutonomyClient({ initialSnapshot, initialHumanActions, initialHu
           <Link href="/api/autonomy-ops" className="rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring">
             <Badge variant="outline" className={tone[state]}>{state.toUpperCase()}</Badge>
           </Link>
-          <Button type="button" size="sm" variant="outline" onClick={refresh} disabled={isPending}>
-            <RefreshCcw className={isPending ? "animate-spin" : ""} />
+          <Button type="button" size="sm" variant="outline" onClick={refresh} disabled={isRefreshing}>
+            <RefreshCcw className={isRefreshing ? "animate-spin" : ""} />
             Refresh
           </Button>
         </div>
@@ -198,11 +206,20 @@ export function AutonomyClient({ initialSnapshot, initialHumanActions, initialHu
           <CardContent className="text-sm text-muted-foreground">
             <div>{snapshot.error}</div>
             <div className="mt-3">
-              <Button type="button" size="sm" variant="outline" onClick={refresh} disabled={isPending}>
-                <RefreshCcw className={isPending ? "animate-spin" : ""} />
+              <Button type="button" size="sm" variant="outline" onClick={refresh} disabled={isRefreshing}>
+                <RefreshCcw className={isRefreshing ? "animate-spin" : ""} />
                 Retry refresh
               </Button>
             </div>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {isRefreshing ? (
+        <Card className="border-blue-500/30 bg-blue-500/5" aria-live="polite">
+          <CardContent className="flex items-center gap-2 p-3 text-sm text-muted-foreground">
+            <RefreshCcw className="h-4 w-4 animate-spin" />
+            Refreshing autonomy artifact and human-required actions. This can take several seconds.
           </CardContent>
         </Card>
       ) : null}

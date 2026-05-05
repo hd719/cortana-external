@@ -83,6 +83,16 @@ const humanAction: HumanRequiredAction = {
   detectionCount: 1,
 };
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}
+
 describe("AutonomyClient", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
@@ -128,5 +138,37 @@ describe("AutonomyClient", () => {
     });
     await waitFor(() => expect(screen.getByRole("link", { name: "LIVE" })).toBeInTheDocument());
     expect(screen.getByText("No open human-required actions.")).toBeInTheDocument();
+  });
+
+  it("keeps the tab responsive while a slow autonomy refresh is pending", async () => {
+    const autonomyRefresh = deferred<Response>();
+    const fetchMock = vi.fn((url: string) => {
+      if (url === "/api/autonomy-ops/refresh") {
+        return autonomyRefresh.promise;
+      }
+      if (url === "/api/human-required-actions") {
+        return Promise.resolve(new Response(JSON.stringify({ ok: true, items: [] }), { status: 200, headers: { "content-type": "application/json" } }));
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<AutonomyClient initialSnapshot={snapshot} initialHumanActions={[humanAction]} initialHumanActionsError={null} />);
+
+    const refreshButton = screen.getByRole("button", { name: /^refresh$/i });
+    fireEvent.click(refreshButton);
+
+    expect(await screen.findByText(/Refreshing autonomy artifact/i)).toBeInTheDocument();
+    expect(refreshButton).toBeDisabled();
+    expect(screen.getByRole("link", { name: /Schwab login required/i })).toHaveAttribute("href", "/services");
+
+    autonomyRefresh.resolve(new Response(JSON.stringify({
+      ...snapshot,
+      data: { ...snapshot.data, operatorState: "live", counts: { ...snapshot.data.counts, autoRemediated: 3 } },
+    }), { status: 200, headers: { "content-type": "application/json" } }));
+
+    await waitFor(() => expect(refreshButton).not.toBeDisabled());
+    expect(screen.queryByText(/Refreshing autonomy artifact/i)).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "LIVE" })).toBeInTheDocument();
   });
 });
