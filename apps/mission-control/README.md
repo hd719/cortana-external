@@ -106,6 +106,9 @@ That path rewrites the LaunchAgent to a direct `next start` entrypoint, clears s
 - `GET /api/feedback/:id` — fetch single feedback item and action history
 - `PATCH /api/feedback/:id` — update workflow and remediation fields (`status`, `owner`, `remediationStatus`, `remediationNotes`, `resolvedBy`)
 - `GET /api/task-board` — task board slices (ready, blocked, due, pillar rollups, recent outcomes)
+- `GET /api/autonomy-ops` — cached OpenClaw autonomy read model from `~/.openclaw/reports/autonomy-ops/latest.json`
+- `POST /api/autonomy-ops/refresh` — allowlisted local refresh of the autonomy artifact writer
+- `GET /api/human-required-actions` — open Cortana human-required queue items for read-only display
 - `GET /api/live` — SSE stream for near-live UI refresh ticks
 - `GET /api/codex/sessions` — list visible Codex sessions grouped by local workspace/project
 - `POST /api/codex/sessions` — create a new Codex thread and stream the first turn back into Mission Control
@@ -124,6 +127,7 @@ That path rewrites the LaunchAgent to a direct `next start` entrypoint, clears s
 - `/` — Dashboard with stats, agent health widgets, runs table, and alerts feed
 - `/trading-ops` — latest-run truth, live tape, streamer health, watchlists, system health, deep dive, and Polymarket boards
 - `/task-board` — Task board cards (Ready now, Blocked, Due soon/Overdue, By pillar, and Recent execution log)
+- `/autonomy` — OpenClaw Autonomy Ops posture, stale sources, auto-fixed lanes, blockers, and human-required actions
 - `/agents` — Agent overview
 - `/sessions` — Codex session workspace with project-grouped thread rail, transcript view, inspector, and reply/start controls
 - `/approvals` — Approvals inbox with Mission Control review flow, Telegram deep links, and resume/execution controls
