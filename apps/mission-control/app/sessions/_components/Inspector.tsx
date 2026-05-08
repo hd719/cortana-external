@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import { useEffect, useRef } from "react";
-import { Archive, Check, Copy, Trash2, X } from "lucide-react";
+import { Archive, Check, Copy, PencilLine, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useFocusTrap } from "./useFocusTrap";
@@ -26,6 +26,7 @@ type InspectorProps = {
   onClose: () => void;
   activeCodexSession: CodexSession | CodexSessionDetail | null;
   codexMutationPending: CodexMutationKind | null;
+  onRenameCodexSession: () => void;
   onArchiveCodexSession: () => void;
   onDeleteCodexSession: () => void;
   onCopySessionId?: () => void;
@@ -47,6 +48,7 @@ export function Inspector({
   onClose,
   activeCodexSession,
   codexMutationPending,
+  onRenameCodexSession,
   onArchiveCodexSession,
   onDeleteCodexSession,
   onCopySessionId,
@@ -171,6 +173,7 @@ export function Inspector({
             <SessionBody
               activeCodexSession={activeCodexSession}
               codexMutationPending={codexMutationPending}
+              onRenameCodexSession={onRenameCodexSession}
               onArchiveCodexSession={onArchiveCodexSession}
               onDeleteCodexSession={onDeleteCodexSession}
               onCopySessionId={onCopySessionId}
@@ -207,6 +210,7 @@ function Row({ label, value }: { label: string; value: ReactNode }) {
 function SessionBody({
   activeCodexSession,
   codexMutationPending,
+  onRenameCodexSession,
   onArchiveCodexSession,
   onDeleteCodexSession,
   onCopySessionId,
@@ -215,6 +219,7 @@ function SessionBody({
 }: {
   activeCodexSession: CodexSession | CodexSessionDetail | null;
   codexMutationPending: CodexMutationKind | null;
+  onRenameCodexSession: () => void;
   onArchiveCodexSession: () => void;
   onDeleteCodexSession: () => void;
   onCopySessionId?: () => void;
@@ -281,6 +286,17 @@ function SessionBody({
       </Section>
 
       <section className="mb-4 flex flex-col gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => onRenameCodexSession()}
+          disabled={!canAct}
+          className="h-9 justify-start rounded-xl"
+        >
+          <PencilLine className="mr-2 h-4 w-4" />
+          Rename thread
+        </Button>
         <Button
           type="button"
           variant="outline"

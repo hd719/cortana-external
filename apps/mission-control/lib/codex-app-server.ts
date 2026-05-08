@@ -332,6 +332,15 @@ class CodexAppServerClient {
     });
   }
 
+  async renameThread(threadId: string, name: string) {
+    await this.ensureInitialized();
+    await this.resumeThread(threadId);
+    await this.request("thread/name/set", {
+      threadId,
+      name,
+    });
+  }
+
   async streamTurn(options: {
     threadId: string;
     prompt: string;
@@ -488,4 +497,9 @@ export async function replyToCodexThread(
 export async function backfillCodexThreadName(threadId: string, prompt: string) {
   const client = getClient();
   await client.setThreadName(threadId, prompt);
+}
+
+export async function renameCodexThread(threadId: string, name: string) {
+  const client = getClient();
+  await client.renameThread(threadId, name);
 }

@@ -7,6 +7,7 @@ import {
   Loader2,
   PanelLeftClose,
   PanelLeftOpen,
+  PencilLine,
   Star,
   StarOff,
   Plus,
@@ -53,6 +54,7 @@ type SessionListProps = {
   provisionalCodexSession: CodexSession | null;
   activeCodexThreadId: string | null;
   setSelectedCodexSessionId: (sessionId: string | null) => void;
+  onRenameSession?: (session: CodexSession) => void;
   onArchiveSession?: (sessionId: string) => void;
   onDeleteSession?: (sessionId: string) => void;
   formatInt: (value: number) => string;
@@ -175,6 +177,7 @@ export function SessionList({
   provisionalCodexSession,
   activeCodexThreadId,
   setSelectedCodexSessionId,
+  onRenameSession,
   onArchiveSession,
   onDeleteSession,
   formatInt,
@@ -338,17 +341,19 @@ export function SessionList({
 
   const handleActionClick = (
     event: MouseEvent<HTMLButtonElement>,
-    sessionId: string,
-    action: "archive" | "delete" | "pin",
+    session: CodexSession,
+    action: "archive" | "delete" | "pin" | "rename",
   ) => {
     event.stopPropagation();
     event.preventDefault();
     if (action === "archive") {
-      onArchiveSession?.(sessionId);
+      onArchiveSession?.(session.sessionId);
     } else if (action === "delete") {
-      onDeleteSession?.(sessionId);
+      onDeleteSession?.(session.sessionId);
     } else if (action === "pin") {
-      togglePinned(sessionId);
+      togglePinned(session.sessionId);
+    } else if (action === "rename") {
+      onRenameSession?.(session);
     }
   };
 
@@ -365,7 +370,7 @@ export function SessionList({
       session.lastMessagePreview?.trim() ||
       (session.cwd ? session.cwd.split("/").filter(Boolean).slice(-1)[0] ?? "" : "") ||
       "No transcript preview yet";
-    const hasActions = Boolean(onArchiveSession || onDeleteSession);
+    const hasActions = Boolean(onRenameSession || onArchiveSession || onDeleteSession);
     const pinned = session.sessionId ? pinnedIds.has(session.sessionId) : false;
     const unread = !selected && isUnread(session);
     const absoluteTimestamp = formatTimestamp ? formatTimestamp(session.updatedAt) : undefined;
@@ -437,7 +442,7 @@ export function SessionList({
               {session.sessionId ? (
                 <button
                   type="button"
-                  onClick={(event) => handleActionClick(event, session.sessionId, "pin")}
+                  onClick={(event) => handleActionClick(event, session, "pin")}
                   aria-label={pinned ? "Unpin thread" : "Pin thread"}
                   title={pinned ? "Unpin thread" : "Pin thread"}
                   className={cn(
@@ -452,10 +457,22 @@ export function SessionList({
                   )}
                 </button>
               ) : null}
+              {onRenameSession ? (
+                <button
+                  type="button"
+                  onClick={(event) => handleActionClick(event, session, "rename")}
+                  aria-label="Rename thread"
+                  title="Rename thread"
+                  className="flex size-6 items-center justify-center rounded-md text-muted-foreground hover:bg-background hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/60 dark:hover:bg-muted/40"
+                  disabled={codexMutationPending != null}
+                >
+                  <PencilLine className="h-3.5 w-3.5" />
+                </button>
+              ) : null}
               {onArchiveSession ? (
                 <button
                   type="button"
-                  onClick={(event) => handleActionClick(event, session.sessionId, "archive")}
+                  onClick={(event) => handleActionClick(event, session, "archive")}
                   aria-label="Archive thread"
                   title="Archive thread"
                   className="flex size-6 items-center justify-center rounded-md text-muted-foreground hover:bg-background hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/60 dark:hover:bg-muted/40"
@@ -467,7 +484,7 @@ export function SessionList({
               {onDeleteSession ? (
                 <button
                   type="button"
-                  onClick={(event) => handleActionClick(event, session.sessionId, "delete")}
+                  onClick={(event) => handleActionClick(event, session, "delete")}
                   aria-label="Delete thread"
                   title="Delete thread"
                   className="flex size-6 items-center justify-center rounded-md text-muted-foreground hover:bg-background hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/60 dark:hover:bg-muted/40"

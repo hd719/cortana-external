@@ -70,6 +70,11 @@ const basePagination = {
   rangeEnd: 1,
 };
 
+type SessionPatchBody = {
+  action?: string;
+  threadName?: string;
+};
+
 function jsonResponse(payload: unknown, status = 200) {
   return {
     ok: status >= 200 && status < 300,
@@ -105,6 +110,7 @@ function createDeferred<T>() {
 function installFetchMock(options?: {
   onSessionsGet?: (callCount: number) => Promise<Response> | Response;
   onSessionDetailGet?: (sessionId: string, callCount: number) => Promise<Response> | Response;
+  onSessionPatch?: (sessionId: string, body: SessionPatchBody) => Promise<Response> | Response;
   onReplyPost?: () => Promise<Response> | Response;
   onSessionDelete?: (sessionId: string) => Promise<Response> | Response;
   onStream?: () => Promise<Response> | Response;
@@ -159,6 +165,21 @@ function installFetchMock(options?: {
         const detail = sessionId === "session-2" ? secondSessionDetail : baseSessionDetail;
         return jsonResponse({ session: detail, pagination: basePagination });
       }
+    }
+
+    if (url.startsWith("/api/codex/sessions/") && method === "PATCH") {
+      const sessionId = url.match(/\/api\/codex\/sessions\/([^?]+)/)?.[1] ?? null;
+      const parsedBody = init?.body && typeof init.body === "string"
+        ? JSON.parse(init.body) as SessionPatchBody
+        : {};
+      const body: SessionPatchBody = {
+        action: typeof parsedBody.action === "string" ? parsedBody.action : undefined,
+        threadName: typeof parsedBody.threadName === "string" ? parsedBody.threadName : undefined,
+      };
+      if (sessionId && options?.onSessionPatch) {
+        return options.onSessionPatch(sessionId, body);
+      }
+      return jsonResponse({ ok: true, sessionId, action: body.action });
     }
 
     if (url === "/api/codex/sessions/session-1/messages" && method === "POST") {
@@ -369,6 +390,65 @@ describe("SessionsPage reply composer", () => {
     fireEvent.click(screen.getByRole("button", { name: "Open thread Verify repo purpose" }));
     expect(await screen.findByRole("heading", { name: "Verify repo purpose" })).toBeInTheDocument();
     expect(fetchState.getSessionDetailGetCalls("session-1")).toBe(1);
+  });
+
+  it("renames a visible thread from the sidebar", async () => {
+    let currentSession = { ...baseSession };
+    let currentDetail = { ...baseSessionDetail };
+    const patchBodies: SessionPatchBody[] = [];
+
+    installFetchMock({
+      onSessionsGet: () =>
+        jsonResponse({
+          sessions: [currentSession],
+          groups: [
+            {
+              id: CWD,
+              label: "cortana-external",
+              rootPath: CWD,
+              isActive: true,
+              isCollapsed: false,
+              sessions: [currentSession],
+            },
+          ],
+          latestUpdatedAt: currentSession.updatedAt,
+          totalMatchedSessions: 1,
+          totalVisibleSessions: 1,
+        }),
+      onSessionDetailGet: () => jsonResponse({ session: currentDetail, pagination: basePagination }),
+      onSessionPatch: (sessionId, body) => {
+        patchBodies.push(body);
+        const threadName = String(body.threadName);
+        currentSession = { ...currentSession, threadName };
+        currentDetail = { ...currentDetail, threadName };
+        return jsonResponse({
+          ok: true,
+          sessionId,
+          action: "rename",
+          session: currentDetail,
+        });
+      },
+    });
+
+    render(<SessionsPage />);
+
+    expect(await screen.findByRole("heading", { name: "Verify repo purpose" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Rename thread" }));
+    const input = await screen.findByLabelText("Thread name");
+    fireEvent.change(input, { target: { value: "Mission Control rename work" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { name: "Mission Control rename work" })).toBeInTheDocument();
+    });
+    expect(patchBodies).toEqual([
+      {
+        action: "rename",
+        threadName: "Mission Control rename work",
+      },
+    ]);
+    expect(screen.queryByRole("dialog", { name: "Rename thread" })).not.toBeInTheDocument();
   });
 
   it("ignores stale transcript responses after a faster thread switch", async () => {

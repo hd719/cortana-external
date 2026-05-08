@@ -87,4 +87,4 @@ export type WorkspaceOption = {
   cwd: string;
 };
 
-export type CodexMutationKind = "create" | "reply" | "archive" | "delete";
+export type CodexMutationKind = "create" | "reply" | "archive" | "delete" | "rename";

@@ -2,9 +2,12 @@ import { NextResponse } from "next/server";
 
 import {
   archiveCodexWorkspaceSession,
+  codexRunErrorStatus,
   deleteCodexWorkspaceSession,
   getCodexSessionPage,
+  renameCodexWorkspaceSession,
 } from "@/lib/codex-session-workspace";
+import { CodexRunError } from "@/lib/codex-runs";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -28,6 +31,7 @@ export async function GET(
 
 type MutateSessionBody = {
   action?: string;
+  threadName?: string;
 };
 
 export async function PATCH(
@@ -37,15 +41,27 @@ export async function PATCH(
   const { sessionId } = await context.params;
 
   try {
-    const body = (await request.json()) as MutateSessionBody;
-    if (body.action !== "archive") {
-      return NextResponse.json({ error: "Unsupported session action" }, { status: 400 });
+    const parsedBody = (await request.json()) as MutateSessionBody;
+    const body: MutateSessionBody = {
+      action: typeof parsedBody.action === "string" ? parsedBody.action : undefined,
+      threadName: typeof parsedBody.threadName === "string" ? parsedBody.threadName : undefined,
+    };
+    if (body.action === "archive") {
+      return NextResponse.json(await archiveCodexWorkspaceSession(sessionId));
     }
 
-    return NextResponse.json(await archiveCodexWorkspaceSession(sessionId));
+    if (body.action === "rename") {
+      return NextResponse.json(await renameCodexWorkspaceSession(sessionId, body.threadName));
+    }
+
+    return NextResponse.json({ error: "Unsupported session action" }, { status: 400 });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Failed to archive Codex session";
-    const status = message.includes("not found") ? 404 : 500;
+    const message = error instanceof Error ? error.message : "Failed to update Codex session";
+    const status = error instanceof CodexRunError
+      ? codexRunErrorStatus(error)
+      : message.includes("not found")
+        ? 404
+        : 500;
     return NextResponse.json({ error: message }, { status });
   }
 }

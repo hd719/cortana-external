@@ -2,6 +2,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const codexMocks = vi.hoisted(() => ({
   getVisibleCodexSessionDetail: vi.fn(),
+  renameCodexThread: vi.fn(),
+  syncCodexMirrorThreadFromSession: vi.fn(),
+  upsertCodexSessionIndexEntry: vi.fn(),
   archiveCodexSession: vi.fn(),
   deleteCodexSession: vi.fn(),
 }));
@@ -11,8 +14,17 @@ vi.mock("@/lib/codex-session-access", () => ({
 }));
 
 vi.mock("@/lib/codex-sessions", () => ({
+  upsertCodexSessionIndexEntry: codexMocks.upsertCodexSessionIndexEntry,
   archiveCodexSession: codexMocks.archiveCodexSession,
   deleteCodexSession: codexMocks.deleteCodexSession,
+}));
+
+vi.mock("@/lib/codex-app-server", () => ({
+  renameCodexThread: codexMocks.renameCodexThread,
+}));
+
+vi.mock("@/lib/codex-mirror", () => ({
+  syncCodexMirrorThreadFromSession: codexMocks.syncCodexMirrorThreadFromSession,
 }));
 
 import { DELETE, GET, PATCH } from "@/app/api/codex/sessions/[sessionId]/route";
@@ -147,6 +159,81 @@ describe("PATCH /api/codex/sessions/[sessionId]", () => {
     expect(response.status).toBe(200);
     expect(codexMocks.archiveCodexSession).toHaveBeenCalledWith("abc");
     expect(payload).toEqual({ ok: true, sessionId: "abc", action: "archive" });
+  });
+
+  it("renames a session", async () => {
+    codexMocks.getVisibleCodexSessionDetail.mockResolvedValueOnce({
+      sessionId: "abc",
+      threadName: "Old title",
+      updatedAt: 123,
+      cwd: "/Users/hd/Developer/cortana-external",
+      model: "gpt-5.4",
+      source: "exec",
+      cliVersion: "0.121.0",
+      lastMessagePreview: "Latest",
+      transcriptPath: "/tmp/session.jsonl",
+      events: [],
+    });
+
+    const response = await PATCH(
+      new Request("http://localhost/api/codex/sessions/abc", {
+        method: "PATCH",
+        body: JSON.stringify({ action: "rename", threadName: "  Better   title  " }),
+      }),
+      {
+        params: Promise.resolve({ sessionId: "abc" }),
+      },
+    );
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(codexMocks.renameCodexThread).toHaveBeenCalledWith("abc", "Better title");
+    expect(codexMocks.upsertCodexSessionIndexEntry).toHaveBeenCalledWith({
+      id: "abc",
+      threadName: "Better title",
+      updatedAt: 123,
+    });
+    expect(codexMocks.syncCodexMirrorThreadFromSession).toHaveBeenCalledWith(
+      expect.objectContaining({ sessionId: "abc", threadName: "Better title" }),
+    );
+    expect(payload).toEqual({
+      ok: true,
+      sessionId: "abc",
+      action: "rename",
+      session: expect.objectContaining({ sessionId: "abc", threadName: "Better title" }),
+    });
+  });
+
+  it("rejects an empty rename title", async () => {
+    const response = await PATCH(
+      new Request("http://localhost/api/codex/sessions/abc", {
+        method: "PATCH",
+        body: JSON.stringify({ action: "rename", threadName: "   " }),
+      }),
+      {
+        params: Promise.resolve({ sessionId: "abc" }),
+      },
+    );
+
+    expect(response.status).toBe(400);
+    expect(codexMocks.renameCodexThread).not.toHaveBeenCalled();
+  });
+
+  it("returns 404 when renaming a missing session", async () => {
+    codexMocks.getVisibleCodexSessionDetail.mockResolvedValueOnce(null);
+
+    const response = await PATCH(
+      new Request("http://localhost/api/codex/sessions/abc", {
+        method: "PATCH",
+        body: JSON.stringify({ action: "rename", threadName: "Better title" }),
+      }),
+      {
+        params: Promise.resolve({ sessionId: "abc" }),
+      },
+    );
+
+    expect(response.status).toBe(404);
+    expect(codexMocks.renameCodexThread).not.toHaveBeenCalled();
   });
 
   it("rejects unsupported actions", async () => {
