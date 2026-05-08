@@ -436,7 +436,13 @@ describe("SessionsPage reply composer", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Rename thread" }));
     const input = await screen.findByLabelText("Thread name");
+    await waitFor(() => expect(input).toHaveFocus());
+    fireEvent.change(input, { target: { value: "M" } });
+    expect(input).toHaveFocus();
+    fireEvent.change(input, { target: { value: "Mission" } });
+    expect(input).toHaveFocus();
     fireEvent.change(input, { target: { value: "Mission Control rename work" } });
+    expect(input).toHaveFocus();
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => {

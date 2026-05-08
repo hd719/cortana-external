@@ -6,6 +6,7 @@ import { formatInt } from "@/lib/format-utils";
 import { ChatPane } from "./_components/ChatPane";
 import { ConfirmDialog } from "./_components/ConfirmDialog";
 import { Inspector } from "./_components/Inspector";
+import { RenameThreadDialog } from "./_components/RenameThreadDialog";
 import { SessionList } from "./_components/SessionList";
 import { Toaster, ToastProvider } from "./_components/Toast";
 import { useFocusTrap } from "./_components/useFocusTrap";
@@ -409,17 +410,13 @@ export default function SessionsPage() {
     | null
   >(null);
   const [renameAction, setRenameAction] = useState<RenameAction | null>(null);
-  const [renameThreadName, setRenameThreadName] = useState("");
   const [railCollapsed, setRailCollapsed] = useState(false);
   const [focusSearchSignal, setFocusSearchSignal] = useState(0);
   const [shortcutsHelpOpen, setShortcutsHelpOpen] = useState(false);
   const [lastOpenedAt, setLastOpenedAt] = useState<Record<string, number>>({});
   const helpDialogRef = useRef<HTMLDivElement | null>(null);
-  const renameDialogRef = useRef<HTMLFormElement | null>(null);
-  const renameInputRef = useRef<HTMLInputElement | null>(null);
 
   useFocusTrap(helpDialogRef, shortcutsHelpOpen);
-  useFocusTrap(renameDialogRef, renameAction !== null);
 
   // Hydrate rail collapsed + last-opened maps from localStorage once on mount.
   useEffect(() => {
@@ -500,28 +497,6 @@ export default function SessionsPage() {
   useEffect(() => {
     selectedCodexSessionIdRef.current = selectedCodexSessionId;
   }, [selectedCodexSessionId]);
-
-  useEffect(() => {
-    if (!renameAction) return;
-
-    const focusTimer = window.setTimeout(() => {
-      renameInputRef.current?.focus();
-      renameInputRef.current?.select();
-    }, 10);
-
-    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        setRenameAction(null);
-      }
-    };
-
-    document.addEventListener("keydown", handleKeyDown);
-    return () => {
-      window.clearTimeout(focusTimer);
-      document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [renameAction]);
 
   async function fetchCodexSessions() {
     const response = await fetch("/api/codex/sessions", { cache: "no-store" });
@@ -1057,13 +1032,6 @@ export default function SessionsPage() {
       : null).label;
   const selectedCreateWorkspace = getWorkspaceOption(newCodexWorkspaceKey);
   const canOpenInfo = Boolean(activeCodexSession) || activeCodexSession == null;
-  const normalizedRenameThreadName = renameThreadName.replace(/\s+/g, " ").trim();
-  const renameUnchanged =
-    Boolean(renameAction) && normalizedRenameThreadName === renameAction?.currentTitle;
-  const renameDisabled =
-    codexMutationPending === "rename" ||
-    !normalizedRenameThreadName ||
-    renameUnchanged;
 
   function applyRenamedCodexSession(sessionId: string, renamedSession: CodexSession | CodexSessionDetail) {
     const patch = {
@@ -1442,7 +1410,6 @@ export default function SessionsPage() {
     if (!session?.sessionId) return;
     const currentTitle = getCodexSessionTitle(session);
     setRenameAction({ sessionId: session.sessionId, currentTitle });
-    setRenameThreadName(currentTitle);
     setCodexMutationError(null);
   }
 
@@ -1732,64 +1699,14 @@ export default function SessionsPage() {
         getCodexSessionTitle={getCodexSessionTitle}
       />
       {renameAction ? (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="rename-thread-heading"
-          className="fixed inset-0 z-50 flex items-center justify-center px-4"
-        >
-          <button
-            type="button"
-            aria-label="Cancel rename"
-            onClick={() => setRenameAction(null)}
-            className="absolute inset-0 cursor-default bg-foreground/30 backdrop-blur-sm"
-          />
-          <form
-            ref={renameDialogRef}
-            onSubmit={(event) => {
-              event.preventDefault();
-              if (!renameDisabled) {
-                void renameCodexSessionById(renameAction.sessionId, renameThreadName);
-              }
-            }}
-            className="relative z-10 w-full max-w-sm rounded-2xl border border-border/60 bg-card p-6 shadow-xl"
-          >
-            <h2
-              id="rename-thread-heading"
-              className="text-base font-semibold tracking-tight text-foreground"
-            >
-              Rename thread
-            </h2>
-            <label className="mt-4 block text-xs font-medium text-muted-foreground" htmlFor="rename-thread-name">
-              Thread name
-            </label>
-            <input
-              ref={renameInputRef}
-              id="rename-thread-name"
-              type="text"
-              value={renameThreadName}
-              onChange={(event) => setRenameThreadName(event.target.value)}
-              maxLength={120}
-              className="mt-2 h-10 w-full rounded-xl border border-border/60 bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground focus-visible:border-blue-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/30 dark:border-border/40"
-            />
-            <div className="mt-5 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setRenameAction(null)}
-                className="inline-flex h-9 items-center rounded-xl border border-border/60 bg-background px-4 text-sm font-medium text-foreground hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/60 dark:border-border/40"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={renameDisabled}
-                className="inline-flex h-9 items-center rounded-xl bg-blue-600 px-4 text-sm font-medium text-white hover:bg-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/60 disabled:pointer-events-none disabled:opacity-50 dark:bg-blue-500 dark:hover:bg-blue-600"
-              >
-                {codexMutationPending === "rename" ? "Saving..." : "Save"}
-              </button>
-            </div>
-          </form>
-        </div>
+        <RenameThreadDialog
+          key={renameAction.sessionId}
+          sessionId={renameAction.sessionId}
+          currentTitle={renameAction.currentTitle}
+          pending={codexMutationPending === "rename"}
+          onCancel={() => setRenameAction(null)}
+          onSave={(sessionId, threadName) => void renameCodexSessionById(sessionId, threadName)}
+        />
       ) : null}
       <ConfirmDialog
         open={confirmAction !== null}
