@@ -4,12 +4,15 @@ import {
   startCreateCodexRun,
   startReplyCodexRun,
 } from "@/lib/codex-runs";
+import { renameCodexThread } from "@/lib/codex-app-server";
+import { syncCodexMirrorThreadFromSession } from "@/lib/codex-mirror";
 import { getVisibleCodexSessionDetail, listVisibleCodexSessions } from "@/lib/codex-session-access";
-import { archiveCodexSession, deleteCodexSession } from "@/lib/codex-sessions";
+import { archiveCodexSession, deleteCodexSession, upsertCodexSessionIndexEntry } from "@/lib/codex-sessions";
 
 const DEFAULT_LIMIT = 20;
 const DEFAULT_EVENT_PAGE_SIZE = 60;
 const MAX_EVENT_PAGE_SIZE = 200;
+export const MAX_CODEX_THREAD_NAME_LENGTH = 120;
 
 export type CodexSessionRunRequest = {
   prompt?: string;
@@ -44,6 +47,35 @@ function requirePrompt(prompt: string | undefined) {
     throw new CodexRunError("invalid_request", "Prompt is required");
   }
   return trimmed;
+}
+
+export function normalizeCodexThreadName(value: unknown) {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const normalized = value.replace(/\s+/g, " ").trim();
+  if (!normalized) {
+    return null;
+  }
+
+  return normalized;
+}
+
+function requireCodexThreadName(value: unknown) {
+  const normalized = normalizeCodexThreadName(value);
+  if (!normalized) {
+    throw new CodexRunError("invalid_request", "Thread name is required");
+  }
+
+  if (typeof value === "string" && value.replace(/\s+/g, " ").trim().length > MAX_CODEX_THREAD_NAME_LENGTH) {
+    throw new CodexRunError(
+      "invalid_request",
+      `Thread name must be ${MAX_CODEX_THREAD_NAME_LENGTH} characters or fewer`,
+    );
+  }
+
+  return normalized;
 }
 
 const withActiveRunState = <T extends { sessionId: string }>(
@@ -118,6 +150,37 @@ export async function replyToCodexSession(sessionId: string, body: CodexSessionR
 export async function archiveCodexWorkspaceSession(sessionId: string) {
   await archiveCodexSession(sessionId);
   return { ok: true, sessionId, action: "archive" as const };
+}
+
+export async function renameCodexWorkspaceSession(sessionId: string, threadName: unknown) {
+  const normalizedThreadName = requireCodexThreadName(threadName);
+  const existing = await getVisibleCodexSessionDetail(sessionId);
+  if (!existing) {
+    throw new CodexRunError("not_found", `Codex session ${sessionId} not found`);
+  }
+
+  await renameCodexThread(sessionId, normalizedThreadName);
+
+  const updatedSession = {
+    ...existing,
+    threadName: normalizedThreadName,
+  };
+
+  await Promise.all([
+    upsertCodexSessionIndexEntry({
+      id: sessionId,
+      threadName: normalizedThreadName,
+      updatedAt: existing.updatedAt ?? Date.now(),
+    }),
+    syncCodexMirrorThreadFromSession(updatedSession),
+  ]);
+
+  return {
+    ok: true,
+    sessionId,
+    action: "rename" as const,
+    session: updatedSession,
+  };
 }
 
 export async function deleteCodexWorkspaceSession(sessionId: string) {

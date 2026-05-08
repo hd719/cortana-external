@@ -11,6 +11,7 @@ import { Toaster, ToastProvider } from "./_components/Toast";
 import { useFocusTrap } from "./_components/useFocusTrap";
 import type {
   CodexRunErrorCode,
+  CodexMutationKind,
   CodexRunStartResponse,
   CodexSession,
   CodexSessionDetail,
@@ -359,6 +360,16 @@ type CachedCodexSessionDetail = {
   loadedAt: number;
 };
 
+type RenameAction = {
+  sessionId: string;
+  currentTitle: string;
+};
+
+type RenameCodexSessionResponse = {
+  session?: CodexSessionDetail;
+  error?: string;
+};
+
 export default function SessionsPage() {
   const transcriptViewportRef = useRef<HTMLDivElement | null>(null);
   const transcriptScrollActionRef = useRef<"bottom" | "preserve" | null>(null);
@@ -385,7 +396,7 @@ export default function SessionsPage() {
   const [replyPrompt, setReplyPrompt] = useState("");
   const [replyComposerError, setReplyComposerError] = useState<string | null>(null);
   const [copiedSessionId, setCopiedSessionId] = useState<string | null>(null);
-  const [codexMutationPending, setCodexMutationPending] = useState<"create" | "reply" | "archive" | "delete" | null>(null);
+  const [codexMutationPending, setCodexMutationPending] = useState<CodexMutationKind | null>(null);
   const [codexMutationError, setCodexMutationError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [inspectorOpen, setInspectorOpen] = useState(false);
@@ -397,13 +408,18 @@ export default function SessionsPage() {
     | { kind: "delete"; sessionId: string }
     | null
   >(null);
+  const [renameAction, setRenameAction] = useState<RenameAction | null>(null);
+  const [renameThreadName, setRenameThreadName] = useState("");
   const [railCollapsed, setRailCollapsed] = useState(false);
   const [focusSearchSignal, setFocusSearchSignal] = useState(0);
   const [shortcutsHelpOpen, setShortcutsHelpOpen] = useState(false);
   const [lastOpenedAt, setLastOpenedAt] = useState<Record<string, number>>({});
   const helpDialogRef = useRef<HTMLDivElement | null>(null);
+  const renameDialogRef = useRef<HTMLFormElement | null>(null);
+  const renameInputRef = useRef<HTMLInputElement | null>(null);
 
   useFocusTrap(helpDialogRef, shortcutsHelpOpen);
+  useFocusTrap(renameDialogRef, renameAction !== null);
 
   // Hydrate rail collapsed + last-opened maps from localStorage once on mount.
   useEffect(() => {
@@ -484,6 +500,28 @@ export default function SessionsPage() {
   useEffect(() => {
     selectedCodexSessionIdRef.current = selectedCodexSessionId;
   }, [selectedCodexSessionId]);
+
+  useEffect(() => {
+    if (!renameAction) return;
+
+    const focusTimer = window.setTimeout(() => {
+      renameInputRef.current?.focus();
+      renameInputRef.current?.select();
+    }, 10);
+
+    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setRenameAction(null);
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.clearTimeout(focusTimer);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [renameAction]);
 
   async function fetchCodexSessions() {
     const response = await fetch("/api/codex/sessions", { cache: "no-store" });
@@ -1019,6 +1057,55 @@ export default function SessionsPage() {
       : null).label;
   const selectedCreateWorkspace = getWorkspaceOption(newCodexWorkspaceKey);
   const canOpenInfo = Boolean(activeCodexSession) || activeCodexSession == null;
+  const normalizedRenameThreadName = renameThreadName.replace(/\s+/g, " ").trim();
+  const renameUnchanged =
+    Boolean(renameAction) && normalizedRenameThreadName === renameAction?.currentTitle;
+  const renameDisabled =
+    codexMutationPending === "rename" ||
+    !normalizedRenameThreadName ||
+    renameUnchanged;
+
+  function applyRenamedCodexSession(sessionId: string, renamedSession: CodexSession | CodexSessionDetail) {
+    const patch = {
+      ...renamedSession,
+      threadName: renamedSession.threadName,
+    };
+
+    setCodexSessions((current) =>
+      current.map((session) =>
+        session.sessionId === sessionId ? { ...session, ...patch } : session,
+      ),
+    );
+    setCodexSessionGroups((current) =>
+      current.map((group) => ({
+        ...group,
+        sessions: group.sessions.map((session) =>
+          session.sessionId === sessionId ? { ...session, ...patch } : session,
+        ),
+      })),
+    );
+    setSelectedCodexSession((current) =>
+      current?.sessionId === sessionId ? { ...current, ...patch } : current,
+    );
+    setProvisionalCodexSession((current) =>
+      current?.sessionId === sessionId ? { ...current, ...patch } : current,
+    );
+    setCodexSessionDetailCache((current) => {
+      const cached = current[sessionId];
+      if (!cached) return current;
+      return {
+        ...current,
+        [sessionId]: {
+          ...cached,
+          session: {
+            ...cached.session,
+            ...patch,
+          },
+          loadedAt: Date.now(),
+        },
+      };
+    });
+  }
 
   async function handleCreateCodexSession() {
     const prompt = newCodexPrompt.trim();
@@ -1351,6 +1438,48 @@ export default function SessionsPage() {
     }
   }
 
+  function requestRenameSession(session: CodexSession | CodexSessionDetail | null | undefined) {
+    if (!session?.sessionId) return;
+    const currentTitle = getCodexSessionTitle(session);
+    setRenameAction({ sessionId: session.sessionId, currentTitle });
+    setRenameThreadName(currentTitle);
+    setCodexMutationError(null);
+  }
+
+  async function renameCodexSessionById(sessionId: string, threadName: string) {
+    if (!sessionId) return;
+
+    const normalizedThreadName = threadName.replace(/\s+/g, " ").trim();
+    if (!normalizedThreadName) {
+      setCodexMutationError("Thread name is required");
+      return;
+    }
+
+    setCodexMutationPending("rename");
+    setCodexMutationError(null);
+    try {
+      const response = await fetch(`/api/codex/sessions/${sessionId}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ action: "rename", threadName: normalizedThreadName }),
+      });
+      const payload = (await response.json()) as RenameCodexSessionResponse;
+      if (!response.ok || !payload.session) {
+        throw new Error(payload.error ?? "Failed to rename Codex session");
+      }
+
+      applyRenamedCodexSession(sessionId, payload.session);
+      setRenameAction(null);
+      await refreshCodexSessions(sessionId, payload.session);
+    } catch (err) {
+      setCodexMutationError(err instanceof Error ? err.message : "Failed to rename Codex session");
+    } finally {
+      setCodexMutationPending(null);
+    }
+  }
+
   function handleArchiveActiveSession() {
     const sessionId = activeCodexSession?.sessionId;
     if (!sessionId) return;
@@ -1361,6 +1490,10 @@ export default function SessionsPage() {
     const sessionId = activeCodexSession?.sessionId;
     if (!sessionId) return;
     setConfirmAction({ kind: "delete", sessionId });
+  }
+
+  function handleRenameActiveSession() {
+    requestRenameSession(activeCodexSession);
   }
 
   function requestArchiveSession(sessionId: string) {
@@ -1458,6 +1591,7 @@ export default function SessionsPage() {
             provisionalCodexSession={provisionalCodexSession}
             activeCodexThreadId={activeCodexThreadId}
             setSelectedCodexSessionId={handleSelectCodexSession}
+            onRenameSession={requestRenameSession}
             onArchiveSession={requestArchiveSession}
             onDeleteSession={requestDeleteSession}
             formatInt={formatInt}
@@ -1559,6 +1693,7 @@ export default function SessionsPage() {
             provisionalCodexSession={provisionalCodexSession}
             activeCodexThreadId={activeCodexThreadId}
             setSelectedCodexSessionId={handleSelectCodexSession}
+            onRenameSession={requestRenameSession}
             onArchiveSession={requestArchiveSession}
             onDeleteSession={requestDeleteSession}
             formatInt={formatInt}
@@ -1581,6 +1716,7 @@ export default function SessionsPage() {
         onClose={() => setInspectorOpen(false)}
         activeCodexSession={activeCodexSession}
         codexMutationPending={codexMutationPending}
+        onRenameCodexSession={handleRenameActiveSession}
         onArchiveCodexSession={handleArchiveActiveSession}
         onDeleteCodexSession={handleDeleteActiveSession}
         onCopySessionId={() => void handleCopySessionId()}
@@ -1595,6 +1731,66 @@ export default function SessionsPage() {
         formatRelativeTimestamp={formatRelativeTimestamp}
         getCodexSessionTitle={getCodexSessionTitle}
       />
+      {renameAction ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="rename-thread-heading"
+          className="fixed inset-0 z-50 flex items-center justify-center px-4"
+        >
+          <button
+            type="button"
+            aria-label="Cancel rename"
+            onClick={() => setRenameAction(null)}
+            className="absolute inset-0 cursor-default bg-foreground/30 backdrop-blur-sm"
+          />
+          <form
+            ref={renameDialogRef}
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (!renameDisabled) {
+                void renameCodexSessionById(renameAction.sessionId, renameThreadName);
+              }
+            }}
+            className="relative z-10 w-full max-w-sm rounded-2xl border border-border/60 bg-card p-6 shadow-xl"
+          >
+            <h2
+              id="rename-thread-heading"
+              className="text-base font-semibold tracking-tight text-foreground"
+            >
+              Rename thread
+            </h2>
+            <label className="mt-4 block text-xs font-medium text-muted-foreground" htmlFor="rename-thread-name">
+              Thread name
+            </label>
+            <input
+              ref={renameInputRef}
+              id="rename-thread-name"
+              type="text"
+              value={renameThreadName}
+              onChange={(event) => setRenameThreadName(event.target.value)}
+              maxLength={120}
+              className="mt-2 h-10 w-full rounded-xl border border-border/60 bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground focus-visible:border-blue-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/30 dark:border-border/40"
+            />
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setRenameAction(null)}
+                className="inline-flex h-9 items-center rounded-xl border border-border/60 bg-background px-4 text-sm font-medium text-foreground hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/60 dark:border-border/40"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={renameDisabled}
+                className="inline-flex h-9 items-center rounded-xl bg-blue-600 px-4 text-sm font-medium text-white hover:bg-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/60 disabled:pointer-events-none disabled:opacity-50 dark:bg-blue-500 dark:hover:bg-blue-600"
+              >
+                {codexMutationPending === "rename" ? "Saving..." : "Save"}
+              </button>
+            </div>
+          </form>
+        </div>
+      ) : null}
       <ConfirmDialog
         open={confirmAction !== null}
         title={confirmAction?.kind === "delete" ? "Delete thread?" : "Archive thread?"}
