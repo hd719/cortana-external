@@ -56,6 +56,39 @@ describe("parseCodexSessionIndex", () => {
       },
     ]);
   });
+
+  it("deduplicates repeated ids and keeps the newest timestamp", () => {
+    const raw = [
+      JSON.stringify({
+        id: "duplicate",
+        thread_name: "OpenClaw - Debug",
+        updated_at: "2026-05-08T15:07:09.162Z",
+      }),
+      JSON.stringify({
+        id: "other",
+        thread_name: "Other session",
+        updated_at: "2026-05-08T15:08:00.000Z",
+      }),
+      JSON.stringify({
+        id: "duplicate",
+        thread_name: "OpenClaw - Debug",
+        updated_at: "2026-05-08T15:10:28.136Z",
+      }),
+    ].join("\n");
+
+    expect(parseCodexSessionIndex(raw)).toEqual([
+      {
+        id: "duplicate",
+        threadName: "OpenClaw - Debug",
+        updatedAt: Date.parse("2026-05-08T15:10:28.136Z"),
+      },
+      {
+        id: "other",
+        threadName: "Other session",
+        updatedAt: Date.parse("2026-05-08T15:08:00.000Z"),
+      },
+    ]);
+  });
 });
 
 describe("upsertCodexSessionIndexEntry", () => {
