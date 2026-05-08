@@ -146,7 +146,7 @@ function parseJsonLine(rawLine: string): Record<string, unknown> | null {
 }
 
 export function parseCodexSessionIndex(raw: string): SessionIndexEntry[] {
-  return raw
+  const sortedEntries = raw
     .split(/\r?\n/)
     .map(parseJsonLine)
     .flatMap((record) => {
@@ -163,6 +163,25 @@ export function parseCodexSessionIndex(raw: string): SessionIndexEntry[] {
         },
       ];
     })
+    .sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
+
+  const entriesById = new Map<string, SessionIndexEntry>();
+  for (const entry of sortedEntries) {
+    const existing = entriesById.get(entry.id);
+    if (!existing) {
+      entriesById.set(entry.id, entry);
+      continue;
+    }
+
+    if (!existing.threadName && entry.threadName) {
+      entriesById.set(entry.id, {
+        ...existing,
+        threadName: entry.threadName,
+      });
+    }
+  }
+
+  return [...entriesById.values()]
     .sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
 }
 
