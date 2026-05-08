@@ -31,7 +31,6 @@ export function RenameThreadDialog({
   useEffect(() => {
     const focusTimer = window.setTimeout(() => {
       inputRef.current?.focus();
-      inputRef.current?.select();
     }, 10);
 
     const handleKeyDown = (event: globalThis.KeyboardEvent) => {
