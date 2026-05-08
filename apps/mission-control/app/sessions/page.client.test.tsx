@@ -70,6 +70,11 @@ const basePagination = {
   rangeEnd: 1,
 };
 
+type SessionPatchBody = {
+  action?: string;
+  threadName?: string;
+};
+
 function jsonResponse(payload: unknown, status = 200) {
   return {
     ok: status >= 200 && status < 300,
@@ -105,7 +110,7 @@ function createDeferred<T>() {
 function installFetchMock(options?: {
   onSessionsGet?: (callCount: number) => Promise<Response> | Response;
   onSessionDetailGet?: (sessionId: string, callCount: number) => Promise<Response> | Response;
-  onSessionPatch?: (sessionId: string, body: Record<string, unknown>) => Promise<Response> | Response;
+  onSessionPatch?: (sessionId: string, body: SessionPatchBody) => Promise<Response> | Response;
   onReplyPost?: () => Promise<Response> | Response;
   onSessionDelete?: (sessionId: string) => Promise<Response> | Response;
   onStream?: () => Promise<Response> | Response;
@@ -164,9 +169,13 @@ function installFetchMock(options?: {
 
     if (url.startsWith("/api/codex/sessions/") && method === "PATCH") {
       const sessionId = url.match(/\/api\/codex\/sessions\/([^?]+)/)?.[1] ?? null;
-      const body = init?.body && typeof init.body === "string"
-        ? JSON.parse(init.body) as Record<string, unknown>
+      const parsedBody = init?.body && typeof init.body === "string"
+        ? JSON.parse(init.body) as SessionPatchBody
         : {};
+      const body: SessionPatchBody = {
+        action: typeof parsedBody.action === "string" ? parsedBody.action : undefined,
+        threadName: typeof parsedBody.threadName === "string" ? parsedBody.threadName : undefined,
+      };
       if (sessionId && options?.onSessionPatch) {
         return options.onSessionPatch(sessionId, body);
       }
@@ -386,7 +395,7 @@ describe("SessionsPage reply composer", () => {
   it("renames a visible thread from the sidebar", async () => {
     let currentSession = { ...baseSession };
     let currentDetail = { ...baseSessionDetail };
-    const patchBodies: Record<string, unknown>[] = [];
+    const patchBodies: SessionPatchBody[] = [];
 
     installFetchMock({
       onSessionsGet: () =>

@@ -49,7 +49,7 @@ function requirePrompt(prompt: string | undefined) {
   return trimmed;
 }
 
-export function normalizeCodexThreadName(value: unknown) {
+export function normalizeCodexThreadName(value: string | null | undefined) {
   if (typeof value !== "string") {
     return null;
   }
@@ -62,7 +62,7 @@ export function normalizeCodexThreadName(value: unknown) {
   return normalized;
 }
 
-function requireCodexThreadName(value: unknown) {
+function requireCodexThreadName(value: string | null | undefined) {
   const normalized = normalizeCodexThreadName(value);
   if (!normalized) {
     throw new CodexRunError("invalid_request", "Thread name is required");
@@ -152,7 +152,7 @@ export async function archiveCodexWorkspaceSession(sessionId: string) {
   return { ok: true, sessionId, action: "archive" as const };
 }
 
-export async function renameCodexWorkspaceSession(sessionId: string, threadName: unknown) {
+export async function renameCodexWorkspaceSession(sessionId: string, threadName: string | null | undefined) {
   const normalizedThreadName = requireCodexThreadName(threadName);
   const existing = await getVisibleCodexSessionDetail(sessionId);
   if (!existing) {

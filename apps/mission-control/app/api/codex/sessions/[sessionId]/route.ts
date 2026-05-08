@@ -31,7 +31,7 @@ export async function GET(
 
 type MutateSessionBody = {
   action?: string;
-  threadName?: unknown;
+  threadName?: string;
 };
 
 export async function PATCH(
@@ -41,7 +41,11 @@ export async function PATCH(
   const { sessionId } = await context.params;
 
   try {
-    const body = (await request.json()) as MutateSessionBody;
+    const parsedBody = (await request.json()) as MutateSessionBody;
+    const body: MutateSessionBody = {
+      action: typeof parsedBody.action === "string" ? parsedBody.action : undefined,
+      threadName: typeof parsedBody.threadName === "string" ? parsedBody.threadName : undefined,
+    };
     if (body.action === "archive") {
       return NextResponse.json(await archiveCodexWorkspaceSession(sessionId));
     }
