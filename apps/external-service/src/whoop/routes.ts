@@ -1,10 +1,11 @@
 import { Hono } from "hono";
 import { jsonErrorResponse } from "../lib/cached-connector.js";
 import { WhoopService } from "./service.js";
+import { createWhoopWebhookRouter, type WhoopWebhookRouteOptions } from "./webhook-routes.js";
 
 const STALE_WARNING = '110 - "Serving stale Whoop cache after token refresh failure"';
 
-export function createWhoopRouter(service: WhoopService): Hono {
+export function createWhoopRouter(service: WhoopService, webhookOptions?: WhoopWebhookRouteOptions): Hono {
   const router = new Hono();
 
   router.get("/auth/url", (c) => c.json({ url: service.getAuthUrl() }));
@@ -82,6 +83,10 @@ export function createWhoopRouter(service: WhoopService): Hono {
       return jsonErrorResponse(error);
     }
   });
+
+  if (webhookOptions) {
+    router.route("/", createWhoopWebhookRouter(webhookOptions));
+  }
 
   return router;
 }

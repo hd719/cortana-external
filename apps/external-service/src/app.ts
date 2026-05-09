@@ -8,10 +8,11 @@ import { buildAggregateHealth } from "./health.js";
 import { createLogger } from "./lib/logger.js";
 import { createPolymarketService, registerPolymarketRoutes, type PolymarketService } from "./polymarket/index.js";
 import { createTonalService, registerTonalRoutes, type TonalService } from "./tonal/index.js";
-import { createWhoopService, registerWhoopRoutes, type WhoopService } from "./whoop/index.js";
+import { createWhoopService, createWhoopWebhookRuntime, registerWhoopRoutes, type WhoopService, type WhoopWebhookRuntime } from "./whoop/index.js";
 
 export interface ExternalServices {
   whoop: WhoopService;
+  whoopWebhook?: WhoopWebhookRuntime | null;
   tonal: TonalService;
   alpaca: AlpacaService;
   appleHealth: AppleHealthService;
@@ -37,8 +38,10 @@ function createHealthSignal(timeoutMs: number): { signal: AbortSignal; cancel: (
 
 export function createExternalServices(): ExternalServices {
   const config = getConfig();
+  const whoop = createWhoopService(config);
   return {
-    whoop: createWhoopService(config),
+    whoop,
+    whoopWebhook: createWhoopWebhookRuntime(config, whoop),
     tonal: createTonalService(config),
     alpaca: createAlpacaService({ logger: createLogger("alpaca") }),
     appleHealth: createAppleHealthService(config),
@@ -53,7 +56,7 @@ export function createApplication(services: ExternalServices = createExternalSer
 } {
   const app = new Hono();
 
-  registerWhoopRoutes(app, services.whoop);
+  registerWhoopRoutes(app, services.whoop, services.whoopWebhook);
   registerTonalRoutes(app, services.tonal);
   registerAlpacaRoutes(app, services.alpaca);
   registerAppleHealthRoutes(app, services.appleHealth);

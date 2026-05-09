@@ -121,6 +121,72 @@ model TradingRunState {
   @@map("mc_trading_runs")
 }
 
+model WhoopWebhookEvent {
+  id                    String   @id @default(uuid()) @db.Uuid
+  traceId               String   @unique @map("trace_id")
+  whoopUserId           String   @map("whoop_user_id")
+  eventType             String   @map("event_type")
+  resourceId            String   @map("resource_id")
+  status                String   @default("queued")
+  receivedAt            DateTime @default(now()) @map("received_at")
+  processAfter          DateTime? @map("process_after")
+  processingStartedAt   DateTime? @map("processing_started_at")
+  processedAt           DateTime? @map("processed_at")
+  attemptCount          Int      @default(0) @map("attempt_count")
+  lastError             String?  @map("last_error")
+  coalescedIntoTraceId  String?  @map("coalesced_into_trace_id")
+  signatureValid        Boolean  @default(true) @map("signature_valid")
+  payloadCompact        Json     @default("{}") @map("payload_compact")
+  rawPayload            Json?    @map("raw_payload")
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+
+  @@index([status, processAfter, receivedAt])
+  @@index([eventType, resourceId, receivedAt(sort: Desc)])
+  @@index([receivedAt(sort: Desc)])
+  @@map("whoop_webhook_events")
+}
+
+model WhoopEventAnalysis {
+  id                    String   @id @default(uuid()) @db.Uuid
+  traceId               String   @unique @map("trace_id")
+  schemaVersion         String   @default("whoop_event_analysis.v1") @map("schema_version")
+  source                String
+  artifact              Json
+  notificationCandidate Boolean  @default(false) @map("notification_candidate")
+  notificationStatus    String   @default("no_reply") @map("notification_status")
+  spartanSessionKey     String?  @map("spartan_session_key")
+  telegramMessageId     String?  @map("telegram_message_id")
+  notifiedAt            DateTime? @map("notified_at")
+  error                 String?
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+
+  @@index([source, createdAt(sort: Desc)])
+  @@index([notificationStatus, createdAt(sort: Desc)])
+  @@map("whoop_event_analysis")
+}
+
+model WhoopActivityLog {
+  id           String   @id @default(uuid()) @db.Uuid
+  triggerKey   String   @unique @map("trigger_key")
+  source       String
+  activityType String   @map("activity_type")
+  resourceId   String?  @map("resource_id")
+  status       String
+  traceId      String?  @map("trace_id")
+  analysisId   String?  @map("analysis_id") @db.Uuid
+  summary      String?
+  metadata     Json     @default("{}")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@index([createdAt(sort: Desc)])
+  @@index([source, createdAt(sort: Desc)])
+  @@index([status, createdAt(sort: Desc)])
+  @@map("whoop_activity_log")
+}
+
 model CortanaEpic {
   id          Int           @id @default(autoincrement())
   title       String

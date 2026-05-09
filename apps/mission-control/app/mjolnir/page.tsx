@@ -9,6 +9,8 @@ import { StrengthProfile } from "@/components/mjolnir/strength-profile";
 import { RecoveryRingAnimated } from "@/components/mjolnir/recovery-ring";
 import { AnimatedValue } from "@/components/mjolnir/animated-value";
 import { TrendChartRecharts, RecoverySleepOverlay, VolumeProgressionChart } from "@/components/mjolnir/trend-chart";
+import { WhoopLiveEventsPanel } from "@/components/mjolnir/whoop-live-events-panel";
+import type { WhoopLiveEventsResponse } from "@/lib/whoop-live-events";
 
 export const dynamic = "force-dynamic";
 
@@ -214,12 +216,26 @@ async function getProgramData(): Promise<ProgramResponse> {
   }
 }
 
+async function getWhoopLiveEvents(): Promise<WhoopLiveEventsResponse> {
+  try {
+    const baseUrl = `http://localhost:${process.env.PORT || "3000"}`;
+    const response = await fetch(`${baseUrl}/api/mjolnir/whoop-events?limit=20`, { method: "GET", cache: "no-store" });
+    if (!response.ok) {
+      return { events: [], warning: `WHOOP Live Events unavailable (${response.status})` };
+    }
+    return (await response.json()) as WhoopLiveEventsResponse;
+  } catch {
+    return { events: [], warning: "WHOOP Live Events unavailable" };
+  }
+}
+
 /* ── page ── */
 
 export default async function FitnessPage() {
-  const [response, programResponse] = await Promise.all([
+  const [response, programResponse, whoopLiveEvents] = await Promise.all([
     getFitnessData(),
     getProgramData(),
+    getWhoopLiveEvents(),
   ]);
 
   if (response.status !== "ok") {
@@ -300,6 +316,10 @@ export default async function FitnessPage() {
         {/* Right: Today's Activity */}
         <ActivityCard workouts={data.workouts} />
       </section>
+      </Animate>
+
+      <Animate delay={0.16}>
+      <WhoopLiveEventsPanel events={whoopLiveEvents.events} warning={whoopLiveEvents.warning} />
       </Animate>
 
       {/* ═══ 3. TRAINING BLOCK ═══ */}

@@ -28,6 +28,7 @@ export class ExternalServiceLifecycleSupervisor {
   async startup(): Promise<void> {
     await this.runStep("market-data startup", () => this.services.marketData.startup());
     await this.runStep("whoop warmup", () => this.services.whoop.warmup());
+    this.services.whoopWebhook?.processor.start();
     const tonalWarmup = withTimeout(20_000);
     try {
       await this.runStep("tonal warmup", () => this.services.tonal.warmup(tonalWarmup.signal));
@@ -64,6 +65,8 @@ export class ExternalServiceLifecycleSupervisor {
     await this.services.marketData.shutdown().catch((error) => {
       this.loggers.shutdown.error("market-data shutdown failed", error);
     });
+    this.services.whoopWebhook?.processor.stop();
+    await this.services.whoopWebhook?.store.close();
   }
 
   private async refreshWhoop(): Promise<void> {
