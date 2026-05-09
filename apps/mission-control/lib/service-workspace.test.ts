@@ -143,4 +143,32 @@ describe("lib/service-workspace", () => {
     expect(data.files.find((file) => file.id === "external")?.exists).toBe(true);
     expect(data.files.find((file) => file.id === "missionControl")?.exists).toBe(true);
   });
+
+  it("models the WHOOP streaming config section for external-service env", async () => {
+    tempRoot = await mkdtemp(path.join(os.tmpdir(), "mc-services-workspace-"));
+    await mkdir(path.join(tempRoot, ".git"));
+    await mkdir(path.join(tempRoot, "apps", "mission-control"), { recursive: true });
+    await writeFile(path.join(tempRoot, ".env"), "WHOOP_WEBHOOK_ENABLED=true\n", "utf8");
+
+    const data = await updateServicesWorkspaceData([], { rootDir: tempRoot });
+    const section = data.sections.find((item) => item.id === "whoop-streaming");
+
+    expect(section?.label).toBe("WHOOP Streaming");
+    expect(section?.fileId).toBe("external");
+    expect(section?.fields.map((field) => field.key)).toEqual([
+      "WHOOP_WEBHOOK_ENABLED",
+      "WHOOP_WEBHOOK_PUBLIC_URL",
+      "WHOOP_WEBHOOK_SECRET",
+      "CORTANA_DATABASE_URL",
+      "WHOOP_WEBHOOK_REPLAY_WINDOW_SECONDS",
+      "WHOOP_WEBHOOK_RAW_RETENTION_DAYS",
+      "WHOOP_WEBHOOK_COALESCE_WINDOW_MS",
+      "WHOOP_WEBHOOK_PROCESSOR_INTERVAL_MS",
+      "WHOOP_WEBHOOK_PROCESS_BATCH_SIZE",
+      "WHOOP_WEBHOOK_BODY_LIMIT_BYTES",
+      "WHOOP_LIVE_EVENT_TELEGRAM_ENABLED",
+      "WHOOP_LIVE_EVENT_TELEGRAM_ACCOUNT_ID",
+    ]);
+    expect(section?.fields.find((field) => field.key === "WHOOP_WEBHOOK_ENABLED")?.currentValue).toBe("true");
+  });
 });
