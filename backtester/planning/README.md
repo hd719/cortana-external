@@ -212,11 +212,11 @@ Covers:
 - broker boundary and execution audit trail
 
 
-### W15. Market Lab V0 Forward-Looking Trust Reviews
+### Market Lab V0 Forward-Looking Trust Reviews
 
-- PRD: [15-market-lab-v0-forward-looking-trust-reviews.md](/Users/hd/Developer/cortana-external/backtester/planning/PRDs/15-market-lab-v0-forward-looking-trust-reviews.md)
+- PRD: [market-lab-v0-forward-looking-trust-reviews.md](/Users/hd/Developer/cortana-external/backtester/planning/PRDs/market-lab-v0-forward-looking-trust-reviews.md)
 
-Status: draft PRD for review.
+Status: new application draft PRD for review. Not a numbered backtester workstream.
 
 Covers:
 - new isolated Market Lab product direction
@@ -243,9 +243,8 @@ Execution order:
 12. W12 Backtester V5 Evidence-Gated Operator Evaluation
 13. W13 Mission Control Advisor Cockpit And Telegram Actions
 14. W14 Supervised Real Execution Readiness
-15. W15 Market Lab V0 Forward-Looking Trust Reviews
 
-This order is deliberate:
+This order is deliberate for the numbered backtester workstreams:
 - W1 makes the system truthful and stable
 - W2 creates the measurement loop
 - W3 turns signals into lifecycle decisions
@@ -260,7 +259,8 @@ This order is deliberate:
 - W12 stays blocked until W11 evidence proves the system is ready for post-hardening feature work
 - W13 turns the proven evidence into a usable advisor cockpit and alerting product
 - W14 defines the guarded path from advisor recommendations to supervised real execution
-- W15 starts a cleaner Market Lab product surface for forward-looking trust reviews before alerts or execution candidates
+
+Market Lab V0 is intentionally listed separately above because it is a new application direction, not W15 or a continuation of the old backtester sequence.
 
 ## Authoring Rules
 
