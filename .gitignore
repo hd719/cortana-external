@@ -49,3 +49,6 @@ var/market-intel/polymarket/latest-report.json
 var/market-intel/polymarket/latest-verbose.txt
 var/market-intel/polymarket/latest-watchlist.json
 var/market-intel/polymarket/latest.json
+
+# Market Lab local build metadata
+market_lab/*.egg-info/
