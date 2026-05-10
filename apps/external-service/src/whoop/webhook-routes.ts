@@ -22,7 +22,6 @@ export interface WhoopWebhookRouteOptions {
   logger?: AppLogger;
 }
 
-const REQUIRED_STRING_FIELDS = ["user_id", "id", "type", "trace_id"] as const;
 const DEFAULT_LOGGER = createLogger("whoop-webhook-ingress");
 
 function safeLogValue(value: unknown): string | null {
@@ -70,6 +69,21 @@ async function recordWebhookAttempt(store: WhoopWebhookStore, logger: AppLogger,
   }
 }
 
+function normalizeIdentifier(value: unknown): string | null {
+  if (typeof value === "string" && value.trim()) {
+    return value;
+  }
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return String(value);
+  }
+  return null;
+}
+
+function requireStringField(record: Record<string, unknown>, field: "type" | "trace_id"): string | null {
+  const value = record[field];
+  return typeof value === "string" && value.trim() ? value : null;
+}
+
 function parsePayload(rawBody: string): { payload?: WhoopWebhookPayload; error?: string; raw?: Record<string, unknown> } {
   let parsed: unknown;
   try {
@@ -83,18 +97,32 @@ function parsePayload(rawBody: string): { payload?: WhoopWebhookPayload; error?:
   }
 
   const record = parsed as Record<string, unknown>;
-  for (const field of REQUIRED_STRING_FIELDS) {
-    if (typeof record[field] !== "string" || !record[field].trim()) {
-      return { error: `missing ${field}` };
-    }
+  const userId = normalizeIdentifier(record.user_id);
+  if (!userId) {
+    return { error: "missing user_id", raw: record };
+  }
+
+  const resourceId = normalizeIdentifier(record.id);
+  if (!resourceId) {
+    return { error: "missing id", raw: record };
+  }
+
+  const eventType = requireStringField(record, "type");
+  if (!eventType) {
+    return { error: "missing type", raw: record };
+  }
+
+  const traceId = requireStringField(record, "trace_id");
+  if (!traceId) {
+    return { error: "missing trace_id", raw: record };
   }
 
   return {
     payload: {
-      user_id: String(record.user_id),
-      id: String(record.id),
-      type: String(record.type),
-      trace_id: String(record.trace_id),
+      user_id: userId,
+      id: resourceId,
+      type: eventType,
+      trace_id: traceId,
     },
     raw: record,
   };

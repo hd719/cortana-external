@@ -144,6 +144,39 @@ describe("WHOOP webhook route", () => {
     }));
   });
 
+  it("accepts the documented WHOOP v2 payload shape with numeric user ids", async () => {
+    const store = fakeStore({ status: "queued", event: eventRow({ whoopUserId: "11202988" }) });
+    const app = createWhoopWebhookRouter({
+      enabled: true,
+      secret: SECRET,
+      replayWindowSeconds: 300,
+      bodyLimitBytes: 65_536,
+      coalesceWindowMs: 0,
+      store,
+      logger: captureLogger(),
+      now: () => NOW,
+    });
+    const body = {
+      user_id: 11202988,
+      id: "8e593caf-0d60-43a9-b9c5-7c732ec65fe5",
+      type: "workout.updated",
+      trace_id: "trace-cycling",
+    };
+
+    const response = await app.request(signedRequest(body));
+
+    expect(response.status).toBe(200);
+    expect(store.enqueueWebhookEvent).toHaveBeenCalledWith(expect.objectContaining({
+      payload: {
+        user_id: "11202988",
+        id: "8e593caf-0d60-43a9-b9c5-7c732ec65fe5",
+        type: "workout.updated",
+        trace_id: "trace-cycling",
+      },
+      rawPayload: body,
+    }));
+  });
+
   it("rejects invalid signatures without enqueueing", async () => {
     const store = fakeStore({ status: "queued", event: eventRow() });
     const logMessages: string[] = [];
