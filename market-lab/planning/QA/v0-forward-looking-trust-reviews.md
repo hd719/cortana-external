@@ -25,6 +25,7 @@ This QA plan validates:
 3. TradingAgents second-opinion handling without bypassing hard blockers
 4. outcome settlement using raw P/L and alpha vs SPY
 5. debuggability through events, logs, CLI commands, and tests
+6. CLI and Mission Control parity, so terminal-created and UI-created runs share the same source-of-truth artifacts
 
 ---
 
@@ -74,6 +75,9 @@ Out of scope:
 | Settlement | Blocked/uncertain review underperforms SPY | Settlement score is `good_avoid`. |
 | Settlement | Settle before due date | Window remains `not_due` or `pending`. |
 | Logs | Python exception occurs | `logs.txt` and run error message contain debuggable failure info. |
+| CLI run | Run `AAPL` from terminal | CLI creates the same run/artifact shape as Mission Control. |
+| CLI show | Inspect a UI-created run | CLI shows the same verdict, artifact path, and settlement status as Mission Control. |
+| CLI aliases | Use optional documented aliases/scripts | Aliases delegate to the canonical `uv run --project market_lab ...` commands. |
 | Sidebar | Mission Control nav | Market Lab appears separately from Trading Ops. |
 | Non-goals | V0 review completes | No broker, paper-trade, Telegram, or execution artifact is produced. |
 
@@ -106,6 +110,8 @@ Suggested test cases:
 - Settlement alpha calculation is exact for symbol and SPY fixtures.
 - Mission Control route rejects shell-like symbol input.
 - UI renders facts and interpretation in separate regions.
+- CLI `run --json` returns machine-readable output containing `run_id`, `status`, and artifact path.
+- CLI `show` and Mission Control route return the same verdict and settlement state for the same run fixture.
 
 ---
 
@@ -194,6 +200,32 @@ uv run --project market_lab python -m market_lab.cli settle <run_id>
 Success:
 
 - CLI output explains run state, artifact path, events, logs, and settlement status without requiring UI access.
+- CLI output matches the same run state shown in Mission Control.
+
+---
+
+### Scenario 5 - Create From CLI, Review In Mission Control
+
+Setup:
+
+- Market-data service is healthy.
+- TradingAgents adapter is configured or fake-adapter mode is available.
+
+Checks:
+
+```bash
+uv run --project market_lab python -m market_lab.cli run AAPL --json
+uv run --project market_lab python -m market_lab.cli show <run_id>
+```
+
+- Open Mission Control Market Lab.
+- Load the run created by the CLI.
+- Compare Mission Control verdict, reasons, artifact path, events, and settlement windows to CLI output.
+
+Success:
+
+- Mission Control can render a CLI-created run without a special import step.
+- CLI-created and UI-created runs are indistinguishable at the artifact/API boundary.
 
 ---
 
@@ -205,7 +237,9 @@ The release is QA-complete when all of the following are true:
 - Mission Control tests pass with `npx vitest run` from `apps/mission-control`.
 - Mission Control builds with `pnpm build`.
 - One live or fake-adapter Market Lab run can be started from Mission Control.
+- One live or fake-adapter Market Lab run can be started from CLI.
 - `review.json` is the source of truth for the rendered verdict.
+- CLI `show/events/settle` and Mission Control read the same `review.json`, `events.jsonl`, logs, and SQLite rows.
 - Events and logs are persisted for both successful and failed runs.
 - Stale market-hours price data is blocked.
 - Off-hours latest price basis is labeled clearly.
@@ -232,5 +266,8 @@ The release is QA-complete when all of the following are true:
 - [ ] Degraded and fallback states verified
 - [ ] Out-of-scope paths remain out of scope
 - [ ] No execution, paper trading, or Telegram behavior added
+- [ ] CLI start-review path verified
+- [ ] CLI-created run renders in Mission Control
+- [ ] UI-created run is inspectable from CLI
 - [ ] CLI debugging path verified
 - [ ] Market Lab remains framed as a new application, not W15

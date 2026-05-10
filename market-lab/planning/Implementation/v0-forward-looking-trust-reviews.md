@@ -24,7 +24,8 @@
 | V5 - Outcome Settlement | V2, V3 | Start after V3 |
 | V6 - Mission Control API Bridge | V1, V2 | Start after V2 |
 | V7 - Mission Control Market Lab UI | V6 | Start after V6 |
-| V8 - Runtime Wiring And QA Closeout | V4, V5, V6, V7 | Start after all core verticals |
+| V8 - CLI Ergonomics And Runtime Wiring | V4, V5, V6 | Start after V6 |
+| V9 - QA Closeout | V7, V8 | Start after all core verticals |
 
 ---
 
@@ -33,7 +34,7 @@
 ```text
 Sprint 1: V1 + V2 + V3
 Sprint 2: V4 + V5 + V6
-Sprint 3: V7 + V8
+Sprint 3: V7 + V8 + V9
 ```
 
 V1-V3 prove that the engine can create understandable artifacts from deterministic data. V4 adds TradingAgents only after the artifact/check boundaries exist. V6-V7 then expose the stable contract to Mission Control.
@@ -53,6 +54,7 @@ V1-V3 prove that the engine can create understandable artifacts from determinist
 - Create `market_lab/pyproject.toml` using `uv` with Python 3.13+ or 3.12+ based on repo compatibility; include `pydantic`, `requests`, `python-dateutil`, and `pytest` dev dependency.
 - Create `market_lab/market_lab/models.py` with Pydantic models for `ReviewArtifact`, `RunRecord`, `TimelineEvent`, `PriceFacts`, `OptionalEvidence`, `Interpretation`, `SettlementWindow`, and `TrustVerdict`.
 - Create `market_lab/market_lab/cli.py` with placeholder commands: `run`, `show`, `events`, `settle`, `settle-due`.
+- Treat the CLI as a first-class product interface, not just a debug fallback. Mission Control and terminal usage must call the same engine and produce the same artifact contract.
 - Create `market_lab/README.md` explaining how to read and debug the module.
 - Add `market_lab/tests/test_models.py` covering valid/invalid artifact contracts.
 
@@ -208,18 +210,50 @@ V1-V3 prove that the engine can create understandable artifacts from determinist
 
 ---
 
-### Vertical 8 - Runtime Wiring And QA Closeout
+### Vertical 8 - CLI Ergonomics And Runtime Wiring
 
-**cortana-external: prove the full vertical path and keep old backtester untouched.**
+**cortana-external: make terminal usage easy while keeping `uv` as the canonical command.**
 
-*Dependencies: V4, V5, V6, V7*
+*Dependencies: V4, V5, V6*
 
 #### Jira
 
+- Document canonical CLI commands in `market_lab/README.md`:
+  - `uv run --project market_lab python -m market_lab.cli run AAPL`
+  - `uv run --project market_lab python -m market_lab.cli show <run_id>`
+  - `uv run --project market_lab python -m market_lab.cli events <run_id>`
+  - `uv run --project market_lab python -m market_lab.cli settle <run_id>`
+  - `uv run --project market_lab python -m market_lab.cli settle-due`
+- Add optional convenience scripts or package commands that still delegate to the canonical `uv run --project market_lab ...` commands.
+- Add optional Mac mini shell aliases to the docs only, not as required hidden setup: `mlab-run`, `mlab-show`, `mlab-events`, `mlab-settle`, and `mlab-settle-due`.
+- Ensure `run AAPL --json` returns machine-readable output that Mission Control can consume.
+- Ensure non-json CLI output remains readable for Hamel when run manually.
 - Add a Market Lab smoke command to documentation, not launchd, for v0.
+
+#### Testing
+
+- `uv run --project market_lab python -m market_lab.cli --help`
+- `uv run --project market_lab python -m market_lab.cli run AAPL --json`
+- `uv run --project market_lab python -m market_lab.cli show <run_id>`
+- `uv run --project market_lab python -m market_lab.cli events <run_id>`
+- `uv run --project market_lab python -m market_lab.cli settle <run_id>`
+- Optional aliases/scripts produce the same output shape as the canonical `uv` commands.
+
+---
+
+### Vertical 9 - QA Closeout
+
+**cortana-external: prove the full vertical path and keep old backtester untouched.**
+
+*Dependencies: V7, V8*
+
+#### Jira
+
 - Run one local manual review on the Mac mini with a known symbol when TradingAgents keys are configured.
 - Verify `.cache/market_lab/runs/<run_id>/` contains `review.json`, `events.jsonl`, `tradingagents.md`, and `logs.txt`.
 - Verify Mission Control page and API read the same Trust Verdict as `review.json`.
+- Verify CLI `show`, `events`, and `settle` read the same run created by Mission Control.
+- Verify Mission Control can read a run created from the CLI.
 - Document any required local environment variables in `market_lab/README.md`.
 
 #### Testing
@@ -228,6 +262,7 @@ V1-V3 prove that the engine can create understandable artifacts from determinist
 - `cd apps/mission-control && npx vitest run`
 - `cd apps/mission-control && pnpm build`
 - Manual one-symbol review from Mission Control if provider keys are configured.
+- Manual one-symbol review from CLI if provider keys are configured.
 
 ---
 
@@ -263,7 +298,7 @@ The UI should render API responses and artifacts, not reach directly into Python
 - Trust Verdict calculation
 - 1D/5D/20D settlement math
 - Mission Control Market Lab APIs and page
-- CLI debugging commands
+- first-class CLI commands and optional aliases/scripts
 
 ### External Dependencies
 
