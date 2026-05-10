@@ -35,6 +35,25 @@ Mission Control /market-lab
 
 ### Order Of Operations For An AAPL Review
 
+Simplified product flow:
+
+```mermaid
+flowchart TD
+  A["Hamel enters AAPL<br/>in Mission Control"] --> B["Market Lab API<br/>creates a run"]
+  B --> C["Python runner<br/>collects AAPL and SPY facts"]
+  C --> D{"Is live evidence usable?"}
+  D -->|"No, stale or missing"| E["Write blocked review.json<br/>with exact reason"]
+  D -->|"Yes, fresh or labeled off-hours"| F["Run deterministic checks<br/>and TradingAgents review"]
+  F --> G["Write review.json<br/>trusted, uncertain, or blocked"]
+  E --> H["Mission Control reads artifacts<br/>and renders the review"]
+  G --> H
+  H --> I["Hamel reviews facts,<br/>interpretation, logs, and timeline"]
+  I --> J["Later settlement checks<br/>AAPL vs SPY close prices"]
+  J --> K["Outcome updates raw P/L,<br/>SPY return, and alpha"]
+```
+
+Detailed system flow:
+
 ```mermaid
 sequenceDiagram
   autonumber
