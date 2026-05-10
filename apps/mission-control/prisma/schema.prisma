@@ -147,6 +147,25 @@ model WhoopWebhookEvent {
   @@map("whoop_webhook_events")
 }
 
+model WhoopWebhookIngressAudit {
+  id                String   @id @default(uuid()) @db.Uuid
+  receivedAt        DateTime @default(now()) @map("received_at")
+  status            String
+  reason            String?
+  eventType         String?  @map("event_type")
+  traceId           String?  @map("trace_id")
+  resourceId        String?  @map("resource_id")
+  bodyBytes         Int      @default(0) @map("body_bytes")
+  signaturePresent  Boolean  @default(false) @map("signature_present")
+  timestampPresent  Boolean  @default(false) @map("timestamp_present")
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  @@index([receivedAt(sort: Desc)])
+  @@index([status, receivedAt(sort: Desc)])
+  @@index([traceId])
+  @@map("whoop_webhook_ingress_audit")
+}
+
 model WhoopEventAnalysis {
   id                    String   @id @default(uuid()) @db.Uuid
   traceId               String   @unique @map("trace_id")

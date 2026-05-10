@@ -1,7 +1,10 @@
 import { Pool, type QueryResultRow } from "pg";
+import { PrismaClient, type WhoopWebhookIngressAudit as PrismaWhoopWebhookIngressAudit } from "@prisma/client";
 
 import type {
   WhoopLiveEventArtifact,
+  WhoopWebhookIngressAuditInput,
+  WhoopWebhookIngressAuditRow,
   WhoopNotificationStatus,
   WhoopWebhookEnqueueResult,
   WhoopWebhookEventRow,
@@ -50,13 +53,39 @@ function truncateError(error: string): string {
   return error.slice(0, 2000);
 }
 
+function truncateAuditValue(value: string | null): string | null {
+  return value ? value.slice(0, 200) : null;
+}
+
+function mapIngressAuditRow(row: PrismaWhoopWebhookIngressAudit): WhoopWebhookIngressAuditRow {
+  return {
+    id: row.id,
+    receivedAt: row.receivedAt,
+    status: row.status === "accepted" ? "accepted" : "rejected",
+    reason: row.reason,
+    eventType: row.eventType,
+    traceId: row.traceId,
+    resourceId: row.resourceId,
+    bodyBytes: row.bodyBytes,
+    signaturePresent: row.signaturePresent,
+    timestampPresent: row.timestampPresent,
+  };
+}
+
 export class PostgresWhoopWebhookStore implements WhoopWebhookStore {
   private readonly pool: Pool;
+  private readonly prisma: PrismaClient;
   private readonly ownsPool: boolean;
+  private readonly ownsPrisma: boolean;
 
-  constructor(connectionString: string, pool?: Pool) {
+  constructor(connectionString: string, pool?: Pool, prisma?: PrismaClient) {
     this.pool = pool ?? new Pool({ connectionString });
+    this.prisma = prisma ?? new PrismaClient({
+      datasources: { db: { url: connectionString } },
+      log: process.env.NODE_ENV === "development" ? ["warn", "error"] : ["error"],
+    });
     this.ownsPool = !pool;
+    this.ownsPrisma = !prisma;
   }
 
   async enqueueWebhookEvent(input: {
@@ -274,6 +303,11 @@ export class PostgresWhoopWebhookStore implements WhoopWebhookStore {
     noReply: number;
     oldestQueuedAt: string | null;
     latestFailure: string | null;
+    ingressAccepted24h: number;
+    ingressRejected24h: number;
+    latestRejectedIngressAt: string | null;
+    latestRejectedIngressReason: string | null;
+    recentIngressAttempts: WhoopWebhookIngressAuditRow[];
   }> {
     const eventCounts = await this.pool.query(
       `
@@ -302,6 +336,30 @@ export class PostgresWhoopWebhookStore implements WhoopWebhookStore {
     );
     const eventRow = eventCounts.rows[0] ?? {};
     const notificationRow = notificationCounts.rows[0] ?? {};
+    const last24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const [ingressAccepted24h, ingressRejected24h, latestRejectedIngress, recentIngressAttempts] = await Promise.all([
+      this.prisma.whoopWebhookIngressAudit.count({
+        where: {
+          status: "accepted",
+          receivedAt: { gte: last24h },
+        },
+      }),
+      this.prisma.whoopWebhookIngressAudit.count({
+        where: {
+          status: "rejected",
+          receivedAt: { gte: last24h },
+        },
+      }),
+      this.prisma.whoopWebhookIngressAudit.findFirst({
+        where: { status: "rejected" },
+        orderBy: { receivedAt: "desc" },
+        select: { receivedAt: true, reason: true },
+      }),
+      this.prisma.whoopWebhookIngressAudit.findMany({
+        orderBy: { receivedAt: "desc" },
+        take: 10,
+      }),
+    ]);
     const oldestQueuedAt = eventRow.oldest_queued_at
       ? (eventRow.oldest_queued_at instanceof Date ? eventRow.oldest_queued_at : new Date(String(eventRow.oldest_queued_at))).toISOString()
       : null;
@@ -314,7 +372,28 @@ export class PostgresWhoopWebhookStore implements WhoopWebhookStore {
       noReply: Number(notificationRow.no_reply ?? 0),
       oldestQueuedAt,
       latestFailure: eventRow.latest_failure == null ? null : String(eventRow.latest_failure),
+      ingressAccepted24h,
+      ingressRejected24h,
+      latestRejectedIngressAt: latestRejectedIngress?.receivedAt.toISOString() ?? null,
+      latestRejectedIngressReason: latestRejectedIngress?.reason ?? null,
+      recentIngressAttempts: recentIngressAttempts.map(mapIngressAuditRow),
     };
+  }
+
+  async recordIngressAttempt(input: WhoopWebhookIngressAuditInput): Promise<void> {
+    await this.prisma.whoopWebhookIngressAudit.create({
+      data: {
+        receivedAt: input.receivedAt,
+        status: input.status,
+        reason: truncateAuditValue(input.reason),
+        eventType: truncateAuditValue(input.eventType),
+        traceId: truncateAuditValue(input.traceId),
+        resourceId: truncateAuditValue(input.resourceId),
+        bodyBytes: input.bodyBytes,
+        signaturePresent: input.signaturePresent,
+        timestampPresent: input.timestampPresent,
+      },
+    });
   }
 
   async trimRawPayloads(retentionDays: number): Promise<void> {
@@ -332,6 +411,9 @@ export class PostgresWhoopWebhookStore implements WhoopWebhookStore {
   async close(): Promise<void> {
     if (this.ownsPool) {
       await this.pool.end();
+    }
+    if (this.ownsPrisma) {
+      await this.prisma.$disconnect();
     }
   }
 

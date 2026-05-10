@@ -19,6 +19,9 @@ importers:
       '@hono/node-server':
         specifier: ^1.19.6
         version: 1.19.9(hono@4.12.3)
+      '@prisma/client':
+        specifier: ^5.22.0
+        version: 5.22.0(prisma@5.22.0)
       dotenv:
         specifier: ^17.2.3
         version: 17.3.1

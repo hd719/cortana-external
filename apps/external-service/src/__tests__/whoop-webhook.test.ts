@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
+import type { AppLogger } from "../lib/logger.js";
 import { createWhoopWebhookRouter } from "../whoop/webhook-routes.js";
 import { computeWhoopWebhookSignature, verifyWhoopWebhookSignature } from "../whoop/webhook-signature.js";
 import type { WhoopWebhookEnqueueResult, WhoopWebhookEventRow, WhoopWebhookStore } from "../whoop/webhook-types.js";
@@ -33,8 +34,30 @@ function fakeStore(result: WhoopWebhookEnqueueResult): WhoopWebhookStore {
     recordAnalysis: vi.fn(async () => {}),
     markEventProcessed: vi.fn(async () => {}),
     markEventFailed: vi.fn(async () => {}),
-    getOpsStatus: vi.fn(async () => ({ queued: 0, processing: 0, failed: 0, sent: 0, noReply: 0, oldestQueuedAt: null, latestFailure: null })),
+    getOpsStatus: vi.fn(async () => ({
+      queued: 0,
+      processing: 0,
+      failed: 0,
+      sent: 0,
+      noReply: 0,
+      oldestQueuedAt: null,
+      latestFailure: null,
+      ingressAccepted24h: 0,
+      ingressRejected24h: 0,
+      latestRejectedIngressAt: null,
+      latestRejectedIngressReason: null,
+      recentIngressAttempts: [],
+    })),
+    recordIngressAttempt: vi.fn(async () => {}),
     trimRawPayloads: vi.fn(async () => {}),
+  };
+}
+
+function captureLogger(messages: string[] = []): AppLogger {
+  return {
+    log: vi.fn((message: string) => messages.push(message)),
+    printf: vi.fn(),
+    error: vi.fn(),
   };
 }
 
@@ -84,6 +107,7 @@ describe("WHOOP webhook route", () => {
   it("stores a valid signed event and triggers immediate processing when coalescing is disabled", async () => {
     const store = fakeStore({ status: "queued", event: eventRow() });
     const processor = { processDueEvents: vi.fn(async () => 1) };
+    const logMessages: string[] = [];
     const app = createWhoopWebhookRouter({
       enabled: true,
       secret: SECRET,
@@ -92,6 +116,7 @@ describe("WHOOP webhook route", () => {
       coalesceWindowMs: 0,
       store,
       processor,
+      logger: captureLogger(logMessages),
       now: () => NOW,
     });
     const body = { user_id: "user-1", id: "workout-1", type: "workout.updated", trace_id: "trace-1" };
@@ -106,10 +131,22 @@ describe("WHOOP webhook route", () => {
       processAfter: NOW,
     }));
     expect(processor.processDueEvents).toHaveBeenCalledTimes(1);
+    expect(logMessages).toEqual([
+      expect.stringContaining('"status":"accepted"'),
+    ]);
+    expect(store.recordIngressAttempt).toHaveBeenCalledWith(expect.objectContaining({
+      status: "accepted",
+      reason: "queued",
+      traceId: "trace-1",
+      resourceId: "workout-1",
+      signaturePresent: true,
+      timestampPresent: true,
+    }));
   });
 
   it("rejects invalid signatures without enqueueing", async () => {
     const store = fakeStore({ status: "queued", event: eventRow() });
+    const logMessages: string[] = [];
     const app = createWhoopWebhookRouter({
       enabled: true,
       secret: SECRET,
@@ -117,6 +154,7 @@ describe("WHOOP webhook route", () => {
       bodyLimitBytes: 65_536,
       coalesceWindowMs: 0,
       store,
+      logger: captureLogger(logMessages),
       now: () => NOW,
     });
 
@@ -127,5 +165,17 @@ describe("WHOOP webhook route", () => {
 
     expect(response.status).toBe(401);
     expect(store.enqueueWebhookEvent).not.toHaveBeenCalled();
+    expect(logMessages).toEqual([
+      expect.stringContaining('"status":"rejected"'),
+    ]);
+    expect(logMessages[0]).toContain('"reason":"invalid_signature"');
+    expect(store.recordIngressAttempt).toHaveBeenCalledWith(expect.objectContaining({
+      status: "rejected",
+      reason: "invalid_signature",
+      traceId: "trace-1",
+      resourceId: "workout-1",
+      signaturePresent: true,
+      timestampPresent: true,
+    }));
   });
 });

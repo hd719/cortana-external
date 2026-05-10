@@ -50,6 +50,22 @@ export interface WhoopWebhookEnqueueResult {
   event: WhoopWebhookEventRow;
 }
 
+export interface WhoopWebhookIngressAuditInput {
+  receivedAt: Date;
+  status: "accepted" | "rejected";
+  reason: string | null;
+  eventType: string | null;
+  traceId: string | null;
+  resourceId: string | null;
+  bodyBytes: number;
+  signaturePresent: boolean;
+  timestampPresent: boolean;
+}
+
+export interface WhoopWebhookIngressAuditRow extends WhoopWebhookIngressAuditInput {
+  id: string;
+}
+
 export interface WhoopLiveEventArtifact {
   schema_version: "whoop_event_analysis.v1";
   source: "webhook";
@@ -121,7 +137,13 @@ export interface WhoopWebhookStore {
     noReply: number;
     oldestQueuedAt: string | null;
     latestFailure: string | null;
+    ingressAccepted24h: number;
+    ingressRejected24h: number;
+    latestRejectedIngressAt: string | null;
+    latestRejectedIngressReason: string | null;
+    recentIngressAttempts: WhoopWebhookIngressAuditRow[];
   }>;
+  recordIngressAttempt(input: WhoopWebhookIngressAuditInput): Promise<void>;
   trimRawPayloads(retentionDays: number): Promise<void>;
   close?(): Promise<void>;
 }
