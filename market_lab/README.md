@@ -9,6 +9,7 @@ Canonical commands:
 ```bash
 uv run --project market_lab python -m market_lab.cli run AAPL
 uv run --project market_lab python -m market_lab.cli run AAPL --json
+uv run --project market_lab python -m market_lab.cli list --json
 uv run --project market_lab python -m market_lab.cli show <run_id>
 uv run --project market_lab python -m market_lab.cli events <run_id>
 uv run --project market_lab python -m market_lab.cli settle <run_id>
@@ -19,6 +20,7 @@ Optional local aliases:
 
 ```bash
 alias mlab-run='uv run --project market_lab python -m market_lab.cli run'
+alias mlab-list='uv run --project market_lab python -m market_lab.cli list'
 alias mlab-show='uv run --project market_lab python -m market_lab.cli show'
 alias mlab-events='uv run --project market_lab python -m market_lab.cli events'
 alias mlab-settle='uv run --project market_lab python -m market_lab.cli settle'

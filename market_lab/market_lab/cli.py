@@ -45,6 +45,11 @@ def show_command(args: argparse.Namespace) -> None:
     emit(payload, as_json=args.json)
 
 
+def list_command(args: argparse.Namespace) -> None:
+    runs = MarketLabStore().list_runs(limit=args.limit)
+    emit({"runs": [run.model_dump(mode="json") for run in runs]}, as_json=args.json)
+
+
 def events_command(args: argparse.Namespace) -> None:
     events = MarketLabStore().read_events(args.run_id)
     emit(events, as_json=args.json)
@@ -73,6 +78,11 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("symbol")
     run.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
     run.set_defaults(func=run_command)
+
+    list_runs = sub.add_parser("list", help="List recent runs.")
+    list_runs.add_argument("--limit", type=int, default=50)
+    list_runs.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
+    list_runs.set_defaults(func=list_command)
 
     show = sub.add_parser("show", help="Show a run and review artifact.")
     show.add_argument("run_id")
