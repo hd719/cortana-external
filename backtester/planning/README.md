@@ -215,8 +215,11 @@ Covers:
 ### Market Lab V0 Forward-Looking Trust Reviews
 
 - PRD: [market-lab-v0-forward-looking-trust-reviews.md](/Users/hd/Developer/cortana-external/backtester/planning/PRDs/market-lab-v0-forward-looking-trust-reviews.md)
+- Tech Spec: [market-lab-v0-forward-looking-trust-reviews.md](/Users/hd/Developer/cortana-external/backtester/planning/TechSpecs/market-lab-v0-forward-looking-trust-reviews.md)
+- Implementation Plan: [market-lab-v0-forward-looking-trust-reviews.md](/Users/hd/Developer/cortana-external/backtester/planning/Implementation/market-lab-v0-forward-looking-trust-reviews.md)
+- QA Plan: [market-lab-v0-forward-looking-trust-reviews.md](/Users/hd/Developer/cortana-external/backtester/planning/QA/market-lab-v0-forward-looking-trust-reviews.md)
 
-Status: new application draft PRD for review. Not a numbered backtester workstream.
+Status: new application planning draft for review. Not a numbered backtester workstream.
 
 Covers:
 - new isolated Market Lab product direction
@@ -224,6 +227,7 @@ Covers:
 - TradingAgents as a second-opinion research lane
 - Trust Verdict artifacts with facts separated from interpretation
 - passive 1D/5D/20D outcome tracking with raw P/L and alpha vs SPY
+- production-shaped Python that remains explainable and debuggable
 
 ## Recommended Order
 
