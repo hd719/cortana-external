@@ -1,6 +1,6 @@
 # QA Plan - Market Lab V0 Forward-Looking Trust Reviews
 
-**Document Status:** Draft
+**Document Status:** Passed for PR #336
 
 ## Team
 
@@ -26,6 +26,46 @@ This QA plan validates:
 4. outcome settlement using raw P/L and alpha vs SPY
 5. debuggability through events, logs, CLI commands, and tests
 6. CLI and Mission Control parity, so terminal-created and UI-created runs share the same source-of-truth artifacts
+
+---
+
+## V0 QA Result
+
+Status: Passed.
+
+Validated on branch `codex/market-lab-v0-implementation-20260510`.
+
+Representative live smoke run:
+
+- run id: `mlab_20260511T000803Z_AAPL`
+- created through Mission Control API
+- loaded through Mission Control detail/events APIs
+- settled through Mission Control settle API
+- inspected through CLI with `uv run --project market_lab python -m market_lab.cli show mlab_20260511T000803Z_AAPL --json`
+
+Automated validation completed:
+
+- `uv run --project market_lab pytest market_lab/tests` — 18 passed
+- `cd apps/mission-control && npx vitest run` — 112 files / 483 tests passed
+- `cd apps/mission-control && pnpm build` — passed
+- `pnpm market-lab -- list --limit 1 --json` — passed
+- `git diff --check` — passed
+
+Live E2E validation completed on temporary dev server `127.0.0.1:3100`:
+
+- `GET /market-lab` returned 200
+- `GET /api/market-lab/runs?limit=1` returned recent runs
+- `POST /api/market-lab/runs` created an AAPL run
+- `GET /api/market-lab/runs/:runId` returned matching artifact data
+- `GET /api/market-lab/runs/:runId/events` returned queued/running/done timeline
+- `POST /api/market-lab/runs/:runId/settle` returned not-due settlement windows
+- CLI `show` read the same run created through Mission Control
+
+Known V0 constraints:
+
+- real TradingAgents execution still requires `MARKET_LAB_TRADINGAGENTS_COMMAND`
+- fake TradingAgents mode is the supported smoke-test path
+- settlement windows remain `not_due` until their due dates
 
 ---
 

@@ -1,6 +1,6 @@
 # Implementation Plan - Market Lab V0 Forward-Looking Trust Reviews
 
-**Document Status:** Draft
+**Document Status:** Implemented in PR #336
 
 ## Team
 
@@ -15,17 +15,31 @@
 
 ## Dependency Map
 
-| Vertical | Dependencies | Can Start? |
-|----------|-------------|------------|
-| V1 - Python Project Skeleton And Contracts | Approved PRD/Tech Spec | Start Now |
-| V2 - Storage And Artifact Writes | V1 | Start after V1 |
-| V3 - Market Data Facts And Checks | V1, V2 | Start after V1/V2 |
-| V4 - TradingAgents Adapter And Verdict | V1, V2, V3 | Start after V3 |
-| V5 - Outcome Settlement | V2, V3 | Start after V3 |
-| V6 - Mission Control API Bridge | V1, V2 | Start after V2 |
-| V7 - Mission Control Market Lab UI | V6 | Start after V6 |
-| V8 - CLI Ergonomics And Runtime Wiring | V4, V5, V6 | Start after V6 |
-| V9 - QA Closeout | V7, V8 | Start after all core verticals |
+| Vertical | Dependencies | Status |
+|----------|-------------|--------|
+| V1 - Python Project Skeleton And Contracts | Approved PRD/Tech Spec | Done |
+| V2 - Storage And Artifact Writes | V1 | Done |
+| V3 - Market Data Facts And Checks | V1, V2 | Done |
+| V4 - TradingAgents Adapter And Verdict | V1, V2, V3 | Done |
+| V5 - Outcome Settlement | V2, V3 | Done |
+| V6 - Mission Control API Bridge | V1, V2 | Done |
+| V7 - Mission Control Market Lab UI | V6 | Done |
+| V8 - CLI Ergonomics And Runtime Wiring | V4, V5, V6 | Done |
+| V9 - QA Closeout | V7, V8 | Done |
+
+Implementation branch: `codex/market-lab-v0-implementation-20260510`
+
+PR: #336
+
+Completion snapshot:
+
+- `market_lab/` package created with readable typed Python modules.
+- `market_lab.cli` supports `run`, `list`, `show`, `events`, `settle`, and `settle-due`.
+- `pnpm market-lab -- ...` delegates to the canonical `uv run --project market_lab python -m market_lab.cli ...` command.
+- Mission Control invokes the Python CLI with an argument array, not shell string interpolation.
+- Mission Control `/market-lab` renders recent runs, verdicts, facts, timeline, TradingAgents status, checks, settlements, and artifact paths.
+- TradingAgents real execution is intentionally behind `MARKET_LAB_TRADINGAGENTS_COMMAND`; fake mode is available with `MARKET_LAB_FAKE_TRADINGAGENTS=1`.
+- V0 remains review-only: no broker, paper-trading, Telegram, or old-backtester execution path.
 
 ---
 

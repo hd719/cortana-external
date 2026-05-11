@@ -1,6 +1,6 @@
 # Technical Specification - Market Lab V0 Forward-Looking Trust Reviews
 
-**Document Status:** Draft
+**Document Status:** Implemented in PR #336
 
 ## Team
 
