@@ -1,6 +1,9 @@
 {
   "name": "cortana-external",
   "private": true,
+  "scripts": {
+    "market-lab": "uv run --project market_lab python -m market_lab.cli"
+  },
   "pnpm": {
     "overrides": {
       "minimatch": "^10.2.1"

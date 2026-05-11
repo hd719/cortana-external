@@ -25,6 +25,7 @@ type RunDetail = {
     price_facts?: { price?: number; timestamp?: string; source?: string; price_basis?: string } | null;
     spy_facts?: { price?: number; timestamp?: string; source?: string; price_basis?: string } | null;
     tradingagents?: { status?: string; summary?: string };
+    artifact_paths?: { review?: string; events?: string; logs?: string; tradingagents?: string | null };
     checks?: Array<{ code?: string; severity?: string; message?: string }>;
     settlements?: Array<Record<string, unknown>>;
   } | null;
@@ -208,7 +209,7 @@ export function MarketLabClient() {
                 <p className="mt-1 text-sm">{review?.interpretation?.summary ?? "Select or run a review."}</p>
               </div>
               <div>
-                <div className="text-xs uppercase text-muted-foreground">AAPL Facts</div>
+                <div className="text-xs uppercase text-muted-foreground">{selectedRun?.symbol ?? "Symbol"} Facts</div>
                 <p className="mt-1 text-sm font-medium">{asMoney(review?.price_facts?.price)}</p>
                 <p className="text-xs text-muted-foreground">{review?.price_facts?.source ?? "n/a"} · {review?.price_facts?.price_basis ?? "n/a"}</p>
               </div>
@@ -247,6 +248,13 @@ export function MarketLabClient() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
+                {review?.tradingagents ? (
+                  <div className="rounded-md border px-3 py-2 text-sm">
+                    <div className="text-xs uppercase text-muted-foreground">TradingAgents</div>
+                    <div className="font-medium">{review.tradingagents.status}</div>
+                    <div className="text-muted-foreground">{review.tradingagents.summary}</div>
+                  </div>
+                ) : null}
                 <div className="space-y-2">
                   {(review?.checks ?? []).map((check) => (
                     <div key={check.code} className="rounded-md border px-3 py-2 text-sm">
@@ -269,6 +277,18 @@ export function MarketLabClient() {
               </CardContent>
             </Card>
           </section>
+
+          <Card className="rounded-lg">
+            <CardHeader>
+              <CardTitle className="text-base">Artifact paths</CardTitle>
+            </CardHeader>
+            <CardContent className="grid gap-2 text-xs text-muted-foreground md:grid-cols-2">
+              <div className="truncate">review: {review?.artifact_paths?.review ?? selectedRun?.run_id ?? "n/a"}</div>
+              <div className="truncate">events: {review?.artifact_paths?.events ?? "n/a"}</div>
+              <div className="truncate">logs: {review?.artifact_paths?.logs ?? "n/a"}</div>
+              <div className="truncate">tradingagents: {review?.artifact_paths?.tradingagents ?? "n/a"}</div>
+            </CardContent>
+          </Card>
         </div>
       </section>
     </main>

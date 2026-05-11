@@ -16,6 +16,14 @@ uv run --project market_lab python -m market_lab.cli settle <run_id>
 uv run --project market_lab python -m market_lab.cli settle-due
 ```
 
+Repo-level convenience command:
+
+```bash
+pnpm market-lab -- run AAPL --json
+pnpm market-lab -- show <run_id> --json
+pnpm market-lab -- events <run_id> --json
+```
+
 Optional local aliases:
 
 ```bash

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import shlex
 import subprocess
 from pathlib import Path
 
@@ -40,7 +41,7 @@ class TradingAgentsAdapter:
                 error_message=message if self.required else None,
             )
 
-        args = [part for part in command.split(" ") if part]
+        args = shlex.split(command)
         args.append(symbol)
         try:
             result = subprocess.run(
