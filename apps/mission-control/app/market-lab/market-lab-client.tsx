@@ -526,7 +526,7 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
             {events.length === 0 ? (
               <p className="text-xs text-muted-foreground">No events loaded.</p>
             ) : (
-              <ol className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
+              <ol className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                 {events.map((event, index) => (
                   <li
                     key={`${String(event.event ?? "")}-${index}`}
@@ -558,15 +558,112 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
           <span className="text-[10px] uppercase tracking-widest text-muted-foreground group-open:hidden">Open</span>
           <span className="hidden text-[10px] uppercase tracking-widest text-muted-foreground group-open:inline">Close</span>
         </summary>
-        <div className="mt-3 grid gap-1 text-[11px] text-muted-foreground md:grid-cols-2 xl:grid-cols-3">
-          <DebugPath label="review" value={review?.artifact_paths?.review ?? selectedRun?.run_id ?? "n/a"} />
-          <DebugPath label="events" value={review?.artifact_paths?.events ?? "n/a"} />
-          <DebugPath label="logs" value={review?.artifact_paths?.logs ?? "n/a"} />
-          <DebugPath label="codex packet" value={review?.artifact_paths?.codex_packet ?? "n/a"} />
-          <DebugPath label="codex review" value={review?.artifact_paths?.codex_review ?? "n/a"} />
+        <div className="mt-3 space-y-2">
+          {ARTIFACT_VIEWERS.map(({ kind, label }) => {
+            const artifactPath = review?.artifact_paths?.[kind] ?? null;
+            return (
+              <ArtifactViewer
+                key={kind}
+                label={label}
+                kind={kind}
+                runId={selectedRunId}
+                path={artifactPath}
+              />
+            );
+          })}
         </div>
       </details>
     </div>
+  );
+}
+
+type ArtifactKey = "review" | "events" | "logs" | "codex_packet" | "codex_review";
+
+const ARTIFACT_VIEWERS: Array<{ kind: ArtifactKey; label: string }> = [
+  { kind: "review", label: "review.json" },
+  { kind: "events", label: "events.jsonl" },
+  { kind: "logs", label: "logs.txt" },
+  { kind: "codex_packet", label: "codex packet" },
+  { kind: "codex_review", label: "codex review" },
+];
+
+function ArtifactViewer({
+  label,
+  kind,
+  runId,
+  path,
+}: {
+  label: string;
+  kind: ArtifactKey;
+  runId: string | null;
+  path: string | null;
+}) {
+  const [open, setOpen] = useState(false);
+  const [contents, setContents] = useState<string | null>(null);
+  const [meta, setMeta] = useState<{ size: number; truncated: boolean } | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  const disabled = !runId || !path;
+
+  const handleToggle = async (event: React.SyntheticEvent<HTMLDetailsElement>) => {
+    const nextOpen = event.currentTarget.open;
+    setOpen(nextOpen);
+    if (!nextOpen || contents != null || loading || disabled || !runId) return;
+    setLoading(true);
+    setLoadError(null);
+    try {
+      const data = await api<{ kind: string; path: string; contents: string; size: number; truncated: boolean }>(
+        `/api/market-lab/runs/${encodeURIComponent(runId)}/artifact/${encodeURIComponent(kind)}`,
+      );
+      setContents(data.contents);
+      setMeta({ size: data.size, truncated: data.truncated });
+    } catch (err) {
+      setLoadError(err instanceof Error ? err.message : "Failed to load artifact");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <details
+      open={open}
+      onToggle={handleToggle}
+      className={cn(
+        "group/file rounded-md border border-border/60 bg-muted/20",
+        disabled && "opacity-60",
+      )}
+    >
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-2.5 py-1.5">
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="text-[10px] uppercase tracking-widest text-muted-foreground">{label}</span>
+          <span className="truncate text-[10px] text-muted-foreground/80">{path ?? "n/a"}</span>
+        </div>
+        <span className="shrink-0 text-[10px] uppercase tracking-widest text-muted-foreground">
+          {loading ? "loading…" : open ? "close" : disabled ? "—" : "open"}
+        </span>
+      </summary>
+      {open ? (
+        <div className="border-t border-border/60 px-2.5 py-2">
+          {loadError ? (
+            <p className="text-xs text-red-600 dark:text-red-400">{loadError}</p>
+          ) : loading ? (
+            <p className="text-xs text-muted-foreground">Loading…</p>
+          ) : contents != null ? (
+            <>
+              {meta?.truncated ? (
+                <p className="mb-1 text-[10px] text-amber-600 dark:text-amber-400">
+                  Truncated · file is {meta.size.toLocaleString()} bytes, showing first 512 KB.
+                </p>
+              ) : null}
+              <pre className="max-h-[480px] overflow-auto whitespace-pre-wrap break-words rounded bg-background/60 px-2 py-1.5 font-mono text-[11px] leading-5 text-foreground/85">
+                {contents}
+              </pre>
+            </>
+          ) : null}
+        </div>
+      ) : null}
+    </details>
   );
 }
 
@@ -628,10 +725,3 @@ function InsightList({ title, items, empty }: { title: string; items: string[]; 
   );
 }
 
-function DebugPath({ label, value }: { label: string; value?: string | null }) {
-  return (
-    <div className="truncate rounded-md border border-border/60 bg-muted/20 px-2.5 py-1.5">
-      {label}: {value ?? "n/a"}
-    </div>
-  );
-}

@@ -67,8 +67,8 @@ describe("MarketLabClient", () => {
     expect(screen.getAllByText("blocked").length).toBeGreaterThan(0);
     expect(screen.getByText("Run done")).toBeInTheDocument();
     expect(screen.getByText("Codex says keep this blocked.")).toBeInTheDocument();
-    expect(screen.getByText(/review: \/tmp\/review\.json/)).toBeInTheDocument();
-    expect(screen.getByText(/codex packet: \/tmp\/codex-review-packet\.md/)).toBeInTheDocument();
+    expect(screen.getByText("/tmp/review.json")).toBeInTheDocument();
+    expect(screen.getByText("/tmp/codex-review-packet.md")).toBeInTheDocument();
   });
 
   it("starts a run for the entered symbol", async () => {
