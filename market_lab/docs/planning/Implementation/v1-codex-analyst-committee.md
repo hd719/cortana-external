@@ -12,7 +12,8 @@
 | V2 - Context Packet And Parser | V1 | Codex receives richer bounded context and writes parseable committee JSON. |
 | V3 - Artifact Attach Upgrade | V1, V2 | `review.json` stores structured Codex review data. |
 | V4 - Mission Control Rendering | V3 | UI shows analyst-role panels. |
-| V5 - QA And E2E Smoke | V1-V4 | A real run can be reviewed, attached, rendered, and built. |
+| V5 - Settlement Operations | V0 settlement storage | UI and launchd can run `settle-due` so history keeps itself current. |
+| V6 - QA And E2E Smoke | V1-V5 | A real run can be reviewed, attached, settled, rendered, and built. |
 
 ---
 
@@ -22,7 +23,8 @@
 Commit 1: Structured Python models and parser tests
 Commit 2: Codex context packet, schema instructions, and attach flow
 Commit 3: Mission Control type/UI rendering
-Commit 4: QA docs/tests/build cleanup
+Commit 4: Settle-due UI/API/schedule
+Commit 5: QA docs/tests/build cleanup
 ```
 
 Keep each commit small enough to review independently.
@@ -152,9 +154,37 @@ Tests:
 
 ---
 
-## Vertical 5 - QA And E2E Smoke
+## Vertical 5 - Settlement Operations
 
-Outcome: V1 is proven against unit tests, build, and one live/manual Codex flow.
+Outcome: settlement history does not depend on Hamel remembering to click a per-run button.
+
+Files:
+
+- `apps/mission-control/lib/market-lab.ts`
+- `apps/mission-control/app/api/market-lab/settle-due/route.ts`
+- `apps/mission-control/app/market-lab/market-lab-client.tsx`
+- `market_lab/scripts/settle-due.sh`
+- `market_lab/launchd/com.cortana.market-lab-settle-due.plist`
+
+Tasks:
+
+- Add a `settleDueMarketLabRuns` bridge for the CLI `settle-due` command.
+- Add a same-origin protected API route for `POST /api/market-lab/settle-due`.
+- Make per-run `Settle` report whether windows are due, settled, or still not due.
+- Add a visible `Settle due` UI action for operator backfill.
+- Add a launchd-safe shell wrapper and plist for scheduled after-close settlement.
+
+Tests:
+
+- API route calls the `settle-due` bridge.
+- UI calls `Settle due` and reports the result.
+- Per-run `Settle` reports a `not_due` result instead of looking like a no-op.
+
+---
+
+## Vertical 6 - QA And E2E Smoke
+
+Outcome: V1 is proven against unit tests, build, one live/manual Codex flow, and settlement operations.
 
 Commands:
 

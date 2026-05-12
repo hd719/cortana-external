@@ -72,6 +72,27 @@ Codex writes `codex-review.md`, then runs the attach command so Mission Control 
 
 V1 expects `codex-review.md` to include a fenced `json market-lab-codex-review/v1` block. That block records the analyst roles (`price_action`, `fundamentals`, `news_sentiment`, `risk`, `final_judge`), confidence, missing context, and what would change the verdict. Markdown-only reviews still attach as a fallback, but the structured block is the durable contract.
 
+## Settlement Operations
+
+Each run creates pending `1d`, `5d`, and `20d` settlement windows. The per-run `Settle` button checks only the selected run. The global `Settle due` action checks every due window.
+
+Mac mini scheduled settlement uses:
+
+```bash
+market_lab/scripts/settle-due.sh
+```
+
+Install or refresh the launchd schedule:
+
+```bash
+mkdir -p ~/Library/LaunchAgents
+cp market_lab/launchd/com.cortana.market-lab-settle-due.plist ~/Library/LaunchAgents/
+launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/com.cortana.market-lab-settle-due.plist 2>/dev/null || true
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.cortana.market-lab-settle-due.plist
+```
+
+The job runs daily at 5:05 PM local time and the script skips weekends by default.
+
 ## Module Map
 
 - `models.py`: Pydantic contracts

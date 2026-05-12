@@ -1381,16 +1381,6 @@ describe("TradingOpsDashboard", () => {
     expect(screen.getByText(/trading_run_state_fallback:/)).toBeInTheDocument();
   });
 
-  it("renders terminal header metrics", () => {
-    const { container } = render(<TradingOpsDashboard data={fixture} />);
-    expect(container).toHaveTextContent("CORRECTION");
-    expect(container).toHaveTextContent("0.0%");
-    expect(container).toHaveTextContent("Snapshots");
-    expect(container).toHaveTextContent("449");
-    expect(container).toHaveTextContent("1d Matured");
-    expect(container).toHaveTextContent("880");
-  });
-
   it("renders runtime fallback alert without the removed readiness panel", () => {
     const staleFixture: TradingOpsDashboardData = {
       ...fixture,

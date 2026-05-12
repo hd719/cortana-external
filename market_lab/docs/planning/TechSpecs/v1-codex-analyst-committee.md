@@ -193,12 +193,18 @@ Update `apps/mission-control/lib/market-lab.ts`:
 
 ## Process Changes
 
-No scheduler change. V1 remains operator-triggered:
+Codex review remains operator-triggered:
 
 1. Run or select a Market Lab review.
 2. Click `Ask Codex`.
 3. Codex writes and attaches `codex-review.md`.
 4. Mission Control refreshes and renders structured committee output.
+
+Settlement is different: it must be operationalized because the trust loop depends on it. V1 should expose:
+
+1. Per-run `Settle`, which checks the selected run and reports whether windows are `not_due`, `settled`, or failed.
+2. Global `Settle due`, which runs `uv run --project market_lab python -m market_lab.cli settle-due --json`.
+3. A Mac mini launchd runner that calls `market_lab/scripts/settle-due.sh` after market close so due windows are scored without manual memory.
 
 Automation policy:
 

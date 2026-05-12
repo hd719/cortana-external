@@ -37,6 +37,9 @@ Prove that Codex-assisted Market Lab reviews are structured, role-based, context
 | UI | Old review loaded | Existing markdown summary fallback still renders. |
 | UI | Run completes without clicking `Ask Codex` | Codex review remains `not_requested`; no session is started automatically. |
 | UI | Operator clicks `Ask Codex` | Codex review state moves through requested/attached or failed. |
+| UI | Operator clicks per-run `Settle` before windows are due | UI reports `not_due` instead of appearing unchanged. |
+| UI/API | Operator clicks `Settle due` | `POST /api/market-lab/settle-due` runs the CLI bridge and reports updated run count. |
+| Schedule | launchd job is installed on Mac mini | `market_lab/scripts/settle-due.sh` runs after market close and writes `.cache/market_lab/logs/settle-due.log`. |
 | Safety | Deterministic blocker exists | UI/prompt preserves blocked hard-gate state. |
 | Safety | Codex review sounds optimistic with thin context | UI still exposes missing context and does not hide hard gates. |
 
@@ -113,6 +116,21 @@ Expected:
 - No Codex session starts automatically.
 - `codex_review` remains empty or `not_requested`.
 - UI makes the manual `Ask Codex` action obvious.
+
+---
+
+### Scenario 3 - Settlement Operations
+
+1. Run a new review.
+2. Click per-run `Settle`.
+3. Click global `Settle due`.
+4. Confirm the Mac mini launchd job is installed.
+
+Expected:
+
+- Per-run `Settle` reports `not_due` if no window is due yet.
+- Global `Settle due` reports either no due windows or the number of runs updated.
+- `settle-due` can run without Mission Control being open.
 
 ---
 

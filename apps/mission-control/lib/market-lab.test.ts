@@ -17,4 +17,11 @@ describe("market-lab library", () => {
     expect(command.args).toContain("AAPL");
     expect(command.args.at(-1)).toBe("--json");
   });
+
+  it("builds settle-due command without a run id", () => {
+    const command = buildMarketLabCommand("settle-due");
+
+    expect(command.args).toContain("settle-due");
+    expect(command.args.at(-1)).toBe("--json");
+  });
 });

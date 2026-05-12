@@ -128,6 +128,7 @@ V1 does not include:
 | Artifact Persistence | Parsed Codex schema must be saved into `review.json`, not only markdown. |
 | Mission Control Rendering | Market Lab UI must show role panels and final judge details. |
 | Comparison-Ready Fields | Review artifacts must expose fields that later comparison/scoring code can aggregate. |
+| Scheduled Settlement | Market Lab must provide a visible `settle-due` operation and a Mac mini schedule so 1D/5D/20D windows are scored without Hamel remembering to click per-run settlement. |
 | Hard Gate Safety | Codex cannot turn blocked hard gates into trusted reviews. |
 
 ---
