@@ -107,6 +107,18 @@ Schema version can remain `market-lab-review/v0` for the full review artifact if
 
 The markdown can include readable prose, but the JSON block is the UI contract.
 
+The existing V0 markdown-only output shape must be retired as the primary contract:
+
+```markdown
+Summary:
+Bull Case:
+Bear Case:
+Missing Evidence:
+Decision:
+```
+
+V1 can keep human notes after the JSON block, but Mission Control and settlement analytics must depend on the structured JSON.
+
 ---
 
 ## Context Packet Contract
@@ -117,6 +129,8 @@ Required context sections:
 
 - current symbol price, source, and timestamp/basis
 - SPY reference price, source, and timestamp/basis
+- benchmark explanation: SPY is the baseline for judging whether the stock-specific idea beat the broad market
+- settlement scoring explanation: trusted reviews are later judged over 1D/5D/20D by alpha versus SPY
 - market-hours state and off-hours/latest-price caveat
 - hard gate status and deterministic Market Lab verdict
 - recent movement or simple momentum context when available
@@ -135,6 +149,7 @@ The packet should state that Codex must not infer unavailable facts. If news, fu
 
 Update `market_lab/market_lab/codex_review.py`:
 
+- Replace the current simple markdown review template with the role-based `market-lab-codex-review/v1` JSON contract.
 - Include explicit role instructions.
 - Require the fenced JSON block.
 - Require role-level `confidence` and `evidence_used`.
@@ -199,6 +214,7 @@ Python:
   - packet contains required role names
   - packet contains fenced JSON schema requirement
   - packet contains context sections and the “do not infer missing facts” instruction
+  - packet does not rely on the old `Summary / Bull Case / Bear Case / Decision` shape as the primary output
   - packet includes hard-gate guidance
 
 Mission Control:

@@ -71,8 +71,11 @@ Files:
 Tasks:
 
 - Update `build_codex_packet` to require the fenced JSON block.
+- Remove the current packet's old primary output shape: `Summary`, `Bull Case`, `Bear Case`, `Missing Evidence`, `Decision`.
+- Replace it with explicit role sections for `price_action`, `fundamentals`, `news_sentiment`, `risk`, and `final_judge`.
 - Include role names and expected fields in the packet.
 - Add a context inventory section with symbol price, SPY reference, market-hours basis, hard gates, recent movement, risk flags, and missing optional evidence.
+- Explain in the packet that SPY is the benchmark and 1D/5D/20D settlement scores stock return versus SPY return.
 - Include prior same-symbol runs and settlement summaries when available.
 - State explicitly that Codex must not infer missing facts.
 - State explicitly that Codex is not trusted because the prompt sounds good; trust depends on evidence, admitted gaps, confidence, and settlement performance.
@@ -84,7 +87,9 @@ Tests:
 
 - Packet contains `price_action`, `fundamentals`, `news_sentiment`, `risk`, and `final_judge`.
 - Packet contains context inventory sections.
+- Packet explains SPY benchmark / alpha scoring.
 - Packet forbids inventing unavailable news/fundamental/sentiment facts.
+- Packet no longer presents the old free-form markdown review as the primary output contract.
 - Parser extracts valid JSON from markdown.
 - Parser returns null/fallback for markdown-only reviews.
 

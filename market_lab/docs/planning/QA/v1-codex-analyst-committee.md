@@ -21,6 +21,9 @@ Prove that Codex-assisted Market Lab reviews are structured, role-based, context
 | Models | Structured review omits context quality | Validation fails. |
 | Packet | Build packet for AAPL run | Packet contains required JSON schema and role list. |
 | Packet | Build packet for AAPL run | Packet contains context inventory: price, SPY, market-hours basis, hard gates, missing context. |
+| Packet | Build packet for AAPL run | Packet explains SPY benchmark and 1D/5D/20D alpha-vs-SPY settlement scoring. |
+| Packet | Build packet for AAPL run | Packet requires `price_action`, `fundamentals`, `news_sentiment`, `risk`, and `final_judge` role output. |
+| Packet | Build packet for AAPL run | Packet does not use the old free-form markdown review as the primary output contract. |
 | Packet | Optional evidence is unavailable | Packet tells Codex to mark it missing, not infer it. |
 | Packet | Run has blockers | Packet tells Codex blockers force `blocked`. |
 | Parser | Markdown has fenced schema JSON | Parser extracts and validates structured object. |
@@ -80,6 +83,8 @@ uv run --project market_lab python -m market_lab.cli run AAPL --json
 Expected:
 
 - `codex-review.md` contains a fenced `json market-lab-codex-review/v1` block.
+- The JSON block contains all five analyst roles.
+- The packet/review explains SPY benchmark logic and alpha-vs-SPY settlement scoring.
 - `review.json` contains `codex_review.structured`.
 - UI shows verdict, confidence, horizon, context quality, missing context, and role cards.
 - Each role shows evidence used, missing evidence, and confidence.

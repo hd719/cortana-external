@@ -55,6 +55,8 @@ Already implemented:
 Current pain:
 
 - Codex output is markdown-first and lightly parsed.
+- The current packet still asks for a simple `Summary / Bull Case / Bear Case / Missing Evidence / Decision` markdown review.
+- The current packet does not yet force analyst roles: price action, fundamentals, news/sentiment, risk, final judge.
 - Market Lab stores only a thin `codex_review` summary/verdict.
 - The UI cannot show distinct analyst views.
 - It is hard to compare why AAPL was trusted today versus yesterday.
@@ -120,6 +122,7 @@ V1 does not include:
 | Role-Based Analysis | Codex must produce separate role sections similar to a lightweight analyst committee. |
 | Evidence Context Packet | Codex must receive a bounded context packet with price, SPY reference, market-hours basis, recent movement, risk flags, missing evidence, and prior same-symbol runs when available. |
 | Evidence-Cited Roles | Each role must cite the evidence it used, what evidence is missing, and what would change its stance. |
+| Packet Shape Replacement | V1 must replace the current free-form markdown packet with a role-based structured JSON packet/output contract. |
 | Artifact Persistence | Parsed Codex schema must be saved into `review.json`, not only markdown. |
 | Mission Control Rendering | Market Lab UI must show role panels and final judge details. |
 | Comparison-Ready Fields | Review artifacts must expose fields that later comparison/scoring code can aggregate. |
@@ -149,6 +152,7 @@ Codex should be given:
 
 - current symbol price and source
 - SPY reference price and source
+- why SPY is the benchmark and how alpha vs SPY will be scored
 - market-hours state and off-hours/latest-price caveat
 - recent movement and simple momentum context
 - volatility or risk flags when available
@@ -177,6 +181,18 @@ Mission Control should render:
 - Missing evidence
 - What would change the verdict
 - Raw markdown/debug path collapsed by default
+
+The old packet shape is not enough for V1:
+
+```text
+Summary
+Bull Case
+Bear Case
+Missing Evidence
+Decision
+```
+
+V1 must force the analyst-role contract instead.
 
 ---
 
