@@ -340,7 +340,7 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
             <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Run tape</span>
             <span className="text-[10px] uppercase tracking-widest text-muted-foreground">{runs.length}</span>
           </div>
-          <div className="max-h-[520px] min-h-0 overflow-y-auto p-1 xl:max-h-[min(calc(100svh-180px),720px)]">
+          <div className="max-h-[520px] min-h-0 overflow-y-auto p-1 [scrollbar-gutter:stable] xl:max-h-[min(calc(100svh-180px),720px)]">
             {runs.length === 0 ? (
               <p className="px-2 py-6 text-center text-xs text-muted-foreground">No runs yet.</p>
             ) : null}
