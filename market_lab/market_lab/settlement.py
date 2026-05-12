@@ -4,6 +4,7 @@ from datetime import UTC, datetime, timedelta
 
 from .market_data import MarketDataClient
 from .models import ReviewArtifact, SettlementScore, SettlementStatus, SettlementWindow, TrustVerdict
+from .monitor_alerts import OpenClawMonitorTelegramNotifier, SettlementAlertNotifier
 from .storage import MarketLabStore, utc_now
 
 WINDOW_DAYS = {"1d": 1, "5d": 5, "20d": 20}
@@ -55,7 +56,7 @@ def settle_window(
         return window.model_copy(update={"status": SettlementStatus.FAILED, "error_message": "missing entry prices"})
     current = now or utc_now()
     if current < window.due_at:
-        return window.model_copy(update={"status": SettlementStatus.NOT_DUE})
+        return window
     raw = pct_return(window.symbol_entry_price, symbol_settlement_price)
     spy = pct_return(window.spy_entry_price, spy_settlement_price)
     alpha = raw - spy
@@ -74,9 +75,15 @@ def settle_window(
 
 
 class SettlementService:
-    def __init__(self, store: MarketLabStore | None = None, market_data: MarketDataClient | None = None):
+    def __init__(
+        self,
+        store: MarketLabStore | None = None,
+        market_data: MarketDataClient | None = None,
+        notifier: SettlementAlertNotifier | None = None,
+    ):
         self.store = store or MarketLabStore()
         self.market_data = market_data or MarketDataClient()
+        self.notifier = notifier or OpenClawMonitorTelegramNotifier()
 
     def settle_run(self, run_id: str, *, now: datetime | None = None) -> ReviewArtifact:
         review = self.store.read_review(run_id)
@@ -87,6 +94,7 @@ class SettlementService:
         spy_quote = self.market_data.get_quote("SPY")
         current = now or datetime.now(UTC)
         settled: list[SettlementWindow] = []
+        newly_settled: list[SettlementWindow] = []
         for window in artifact.settlements:
             if window.status == SettlementStatus.SETTLED:
                 settled.append(window)
@@ -99,6 +107,8 @@ class SettlementService:
                 now=current,
             )
             settled.append(result)
+            if window.status != SettlementStatus.SETTLED and result.status == SettlementStatus.SETTLED:
+                newly_settled.append(result)
             self.store.upsert_settlement(
                 run_id,
                 result.window,
@@ -119,6 +129,8 @@ class SettlementService:
             )
         updated = artifact.model_copy(update={"settlements": settled})
         self.store.write_review(updated)
+        for result in newly_settled:
+            self.notifier.send_settlement_alert(updated, result)
         return updated
 
     def settle_due(self) -> list[str]:

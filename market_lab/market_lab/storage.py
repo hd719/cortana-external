@@ -330,7 +330,7 @@ class MarketLabStore:
         cutoff = (now or utc_now()).isoformat()
         with self.connect() as conn:
             rows = conn.execute(
-                "SELECT * FROM market_lab_settlements WHERE status = 'pending' AND due_at <= ? ORDER BY due_at ASC",
+                "SELECT * FROM market_lab_settlements WHERE status IN ('pending', 'not_due') AND due_at <= ? ORDER BY due_at ASC",
                 (cutoff,),
             ).fetchall()
         return [dict(row) for row in rows]

@@ -49,6 +49,20 @@ describe("MarketLabClient", () => {
       if (String(url).includes("/events")) {
         return Response.json({ status: "ok", data: [{ event: "done", message: "Run done" }] });
       }
+      if (String(url).endsWith("/settle") && init?.method === "POST") {
+        return Response.json({
+          status: "ok",
+          data: {
+            run_id: run.run_id,
+            symbol: run.symbol,
+            settlements: [
+              { window: "1d", status: "pending" },
+              { window: "5d", status: "pending" },
+              { window: "20d", status: "pending" },
+            ],
+          },
+        });
+      }
       if (String(url).includes("/api/market-lab/runs/") && !init?.method) {
         return Response.json({ status: "ok", data: detail });
       }
@@ -100,6 +114,15 @@ describe("MarketLabClient", () => {
       );
     });
     expect(await screen.findByText("Codex review started: stream-1")).toBeInTheDocument();
+  });
+
+  it("explains early settlement in operator language", async () => {
+    render(<MarketLabClient />);
+
+    await screen.findByText("Blocked because price data is stale.");
+    fireEvent.click(await screen.findByRole("button", { name: /^settle$/i }));
+
+    expect(await screen.findByText("No settlement windows are due yet. 1D, 5D, 20D still waiting.")).toBeInTheDocument();
   });
 
   it("renders inside a parent dashboard without page chrome", async () => {

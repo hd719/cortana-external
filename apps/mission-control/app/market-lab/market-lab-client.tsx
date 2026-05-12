@@ -31,6 +31,7 @@ type Settlement = Record<string, unknown> & {
   window?: string;
   status?: string;
   alpha_vs_spy_pct?: number;
+  raw_return_pct?: number;
   return_pct?: number;
 };
 
@@ -142,6 +143,32 @@ const getAge = (iso?: string) => {
   return `${Math.round(minutes / (24 * 60))}d`;
 };
 
+const formatWindow = (window?: string) => String(window ?? "").toUpperCase();
+
+const settlementReturn = (settlement: Settlement) =>
+  typeof settlement.raw_return_pct === "number" ? settlement.raw_return_pct : settlement.return_pct;
+
+const describeSettlementResult = (settlements: Settlement[]) => {
+  const settled = settlements.filter((settlement) => settlement.status === "settled");
+  const waiting = settlements.filter((settlement) => settlement.status === "pending" || settlement.status === "not_due");
+  const failed = settlements.filter((settlement) => settlement.status === "failed");
+
+  if (settled.length === 0 && waiting.length > 0 && failed.length === 0) {
+    return `No settlement windows are due yet. ${waiting.map((item) => formatWindow(item.window)).join(", ")} still waiting.`;
+  }
+  const pieces: string[] = [];
+  if (settled.length > 0) {
+    pieces.push(`Settled ${settled.map((item) => formatWindow(item.window)).join(", ")}.`);
+  }
+  if (waiting.length > 0) {
+    pieces.push(`${waiting.map((item) => formatWindow(item.window)).join(", ")} still waiting.`);
+  }
+  if (failed.length > 0) {
+    pieces.push(`${failed.map((item) => formatWindow(item.window)).join(", ")} failed.`);
+  }
+  return pieces.join(" ");
+};
+
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, {
     ...init,
@@ -168,6 +195,7 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [codexStatus, setCodexStatus] = useState<string | null>(null);
+  const [settlementStatus, setSettlementStatus] = useState<string | null>(null);
   const [tapeMode, setTapeMode] = useState<TapeMode>("recent");
   const [closedGroups, setClosedGroups] = useState<Set<string>>(new Set());
 
@@ -264,6 +292,7 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
     setLoading(true);
     setError(null);
     setCodexStatus(null);
+    setSettlementStatus(null);
     try {
       const result = await api<{ run_id: string }>("/api/market-lab/runs", {
         method: "POST",
@@ -283,8 +312,10 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
     if (!selectedRunId) return;
     setLoading(true);
     setError(null);
+    setSettlementStatus(null);
     try {
-      await api(`/api/market-lab/runs/${encodeURIComponent(selectedRunId)}/settle`, { method: "POST" });
+      const result = await api<{ settlements: Settlement[] }>(`/api/market-lab/runs/${encodeURIComponent(selectedRunId)}/settle`, { method: "POST" });
+      setSettlementStatus(describeSettlementResult(result.settlements ?? []));
       await loadRunDetail(selectedRunId);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to settle run");
@@ -298,6 +329,7 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
     setLoading(true);
     setError(null);
     setCodexStatus(null);
+    setSettlementStatus(null);
     try {
       const result = await api<{ streamId: string; packet_path: string }>(
         `/api/market-lab/runs/${encodeURIComponent(selectedRunId)}/codex-review`,
@@ -379,6 +411,9 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
       ) : null}
       {codexStatus ? (
         <div className="mt-3 rounded-md border border-sky-300 bg-sky-50 px-3 py-2 text-xs text-sky-700 dark:border-sky-900/50 dark:bg-sky-950/30 dark:text-sky-200">{codexStatus}</div>
+      ) : null}
+      {settlementStatus ? (
+        <div className="mt-3 rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/30 dark:text-emerald-200">{settlementStatus}</div>
       ) : null}
 
       {/* ── Body: tape + decision area ── */}
@@ -619,8 +654,8 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
                   >
                     <span className="text-xs font-bold uppercase">{String(settlement.window)}</span>
                     <span className="text-[10px] uppercase tracking-widest text-muted-foreground">
-                      {settlement.return_pct != null
-                        ? `${Number(settlement.return_pct).toFixed(2)}% · vs SPY ${
+                      {settlementReturn(settlement) != null
+                        ? `${Number(settlementReturn(settlement)).toFixed(2)}% · vs SPY ${
                             settlement.alpha_vs_spy_pct != null
                               ? `${Number(settlement.alpha_vs_spy_pct).toFixed(2)}%`
                               : "—"
@@ -989,4 +1024,3 @@ function InsightList({ title, items, empty }: { title: string; items: string[]; 
     </div>
   );
 }
-

@@ -262,7 +262,9 @@ Every run records symbol and SPY reference prices. Settlements use market close 
 - blocked/uncertain good avoid: symbol underperformed SPY
 - blocked/uncertain bad avoid: symbol outperformed SPY
 
-No broker execution, paper trading, or Telegram alerting occurs in v0.
+Each window settles at most once. When a pending window becomes settled, Market Lab sends an OpenClaw monitor Telegram alert with symbol return, SPY return, alpha vs SPY, score, window, and run id. Notification failure is non-blocking; the settlement artifact remains the durable source of truth.
+
+No broker execution or paper trading occurs in v0.
 
 ---
 
@@ -286,6 +288,7 @@ market_lab/
     verdict.py
     storage.py
     settlement.py
+    monitor_alerts.py
     cli.py
   tests/
     test_models.py
@@ -306,6 +309,7 @@ Responsibilities:
 - `verdict.py`: maps checks + TradingAgents result to `trusted`, `uncertain`, `blocked`
 - `storage.py`: SQLite repository plus atomic artifact writes
 - `settlement.py`: due-window detection and raw/alpha outcome calculations
+- `monitor_alerts.py`: OpenClaw monitor Telegram alert formatting and delivery for newly settled windows
 - `cli.py`: debug commands
 
 Preferred CLI shape:

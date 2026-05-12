@@ -58,6 +58,10 @@ Default cache:
 
 - `MARKET_LAB_CACHE_DIR`: override `.cache/market_lab`
 - `MARKET_DATA_SERVICE_BASE_URL`: defaults to `http://127.0.0.1:3033`
+- `MARKET_LAB_SETTLEMENT_ALERTS_ENABLED=0`: disable OpenClaw monitor settlement alerts
+- `MARKET_LAB_MONITOR_BOT_TOKEN`: override monitor Telegram bot token
+- `MARKET_LAB_MONITOR_CHAT_ID`: override monitor Telegram chat id
+- `OPENCLAW_CONFIG_PATH`: override `~/.openclaw/openclaw.json`
 
 ## Codex-Assisted Reviews
 
@@ -70,6 +74,12 @@ uv run --project market_lab python -m market_lab.cli attach-codex-review <run_id
 
 Codex writes `codex-review.md`, then runs the attach command so Mission Control can render the review summary without requiring OpenAI API keys.
 
+## Settlement Operations
+
+Each run creates pending `1d`, `5d`, and `20d` settlement windows. `settle-due` processes only windows whose `due_at` has passed. Already-settled windows are skipped, so each window is scored once.
+
+When a pending window becomes settled, Market Lab sends an OpenClaw monitor Telegram alert with the symbol, window, original verdict, settlement score, stock return, SPY return, alpha versus SPY, and run id.
+
 ## Module Map
 
 - `models.py`: Pydantic contracts
@@ -77,6 +87,7 @@ Codex writes `codex-review.md`, then runs the attach command so Mission Control 
 - `market_data.py`: local market-data service client
 - `checks.py`: deterministic freshness and evidence checks
 - `codex_review.py`: Codex review packet and prompt builder
+- `monitor_alerts.py`: OpenClaw monitor alerts for newly settled outcome windows
 - `verdict.py`: trusted / uncertain / blocked decision
 - `runner.py`: one-symbol review orchestration
 - `settlement.py`: 1D / 5D / 20D outcome scoring

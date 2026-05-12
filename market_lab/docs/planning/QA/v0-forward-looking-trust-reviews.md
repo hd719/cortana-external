@@ -114,6 +114,8 @@ Out of scope:
 | Settlement | Trusted review underperforms SPY | Settlement score is `failure`. |
 | Settlement | Blocked/uncertain review underperforms SPY | Settlement score is `good_avoid`. |
 | Settlement | Settle before due date | Window remains `not_due` or `pending`. |
+| Settlement alert | Pending window becomes settled | OpenClaw monitor alert includes symbol return, SPY return, alpha vs SPY, score, window, and run id. |
+| Settlement alert | Already-settled window is processed again | No duplicate alert is sent. |
 | Logs | Python exception occurs | `logs.txt` and run error message contain debuggable failure info. |
 | CLI run | Run `AAPL` from terminal | CLI creates the same run/artifact shape as Mission Control. |
 | CLI show | Inspect a UI-created run | CLI shows the same verdict, artifact path, and settlement status as Mission Control. |

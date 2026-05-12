@@ -164,6 +164,7 @@ V1-V3 prove that the engine can create understandable artifacts from determinist
 - Create `market_lab/market_lab/settlement.py` for due-window calculation, close-price lookup, raw return, SPY return, alpha vs SPY, and score labels.
 - Use market close prices for symbol and SPY.
 - Add `settle` and `settle-due` CLI commands.
+- Add `market_lab/market_lab/monitor_alerts.py` so newly settled windows notify the OpenClaw monitor with raw return, SPY return, and alpha vs SPY.
 - Add `market_lab/tests/test_settlement.py` covering trusted success/failure and blocked/uncertain good/bad avoid.
 
 #### Testing
@@ -172,6 +173,7 @@ V1-V3 prove that the engine can create understandable artifacts from determinist
 - Trusted + non-positive alpha scores failure.
 - Blocked/uncertain + symbol underperforms SPY scores good avoid.
 - Settlement does not run early for not-due windows.
+- Newly settled windows alert once and already-settled windows do not alert again.
 
 ---
 
