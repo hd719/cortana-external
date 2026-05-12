@@ -64,6 +64,8 @@ type RunDetail = {
 
 type Verdict = "trusted" | "uncertain" | "blocked";
 
+type TapeMode = "recent" | "symbol" | "verdict";
+
 const verdictMeta: Record<Verdict, {
   label: string;
   code: string;
@@ -166,11 +168,58 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [codexStatus, setCodexStatus] = useState<string | null>(null);
+  const [tapeMode, setTapeMode] = useState<TapeMode>("recent");
+  const [closedGroups, setClosedGroups] = useState<Set<string>>(new Set());
 
   const selectedRun = useMemo(
     () => runs.find((run) => run.run_id === selectedRunId) ?? null,
     [runs, selectedRunId],
   );
+
+  const symbolHistory = useMemo(() => {
+    const symbol = selectedRun?.symbol;
+    if (!symbol) return [] as RunSummary[];
+    return runs.filter((run) => run.symbol === symbol).slice(0, 8);
+  }, [runs, selectedRun?.symbol]);
+
+  const runsBySymbol = useMemo(() => {
+    const groups = new Map<string, RunSummary[]>();
+    for (const run of runs) {
+      const existing = groups.get(run.symbol);
+      if (existing) {
+        existing.push(run);
+      } else {
+        groups.set(run.symbol, [run]);
+      }
+    }
+    return Array.from(groups.entries()).sort((a, b) => {
+      const aLatest = a[1][0]?.requested_at ?? "";
+      const bLatest = b[1][0]?.requested_at ?? "";
+      return bLatest.localeCompare(aLatest);
+    });
+  }, [runs]);
+
+  const runsByVerdict = useMemo(() => {
+    const buckets: Record<Verdict, RunSummary[]> = {
+      trusted: [],
+      uncertain: [],
+      blocked: [],
+    };
+    for (const run of runs) {
+      const verdict = (run.trust_verdict ?? "uncertain") as Verdict;
+      buckets[verdict].push(run);
+    }
+    return buckets;
+  }, [runs]);
+
+  const toggleGroup = (key: string, isOpen: boolean) => {
+    setClosedGroups((prev) => {
+      const next = new Set(prev);
+      if (isOpen) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
 
   const loadRuns = async () => {
     const data = await api<{ runs: RunSummary[] }>("/api/market-lab/runs?limit=25");
@@ -336,45 +385,106 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
       <section className="mt-3 grid gap-3 xl:grid-cols-[240px_minmax(0,1fr)]">
         {/* Run tape */}
         <aside className="self-start rounded-lg border border-border/70 bg-card/60 xl:sticky xl:top-3">
-          <div className="flex items-center justify-between border-b border-border/50 px-3 py-2">
-            <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Run tape</span>
-            <span className="text-[10px] uppercase tracking-widest text-muted-foreground">{runs.length}</span>
+          <div className="space-y-2 border-b border-border/50 px-3 py-2">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Run tape</span>
+              <span className="text-[10px] uppercase tracking-widest text-muted-foreground">{runs.length}</span>
+            </div>
+            <TapeModeTabs mode={tapeMode} onChange={setTapeMode} />
           </div>
           <div className="max-h-[520px] min-h-0 overflow-y-auto p-1 [scrollbar-gutter:stable] xl:max-h-[min(calc(100svh-180px),720px)]">
             {runs.length === 0 ? (
               <p className="px-2 py-6 text-center text-xs text-muted-foreground">No runs yet.</p>
-            ) : null}
-            <ul className="space-y-0.5">
-              {runs.map((run) => {
-                const runVerdict: Verdict = (run.trust_verdict ?? "uncertain") as Verdict;
-                const runMeta = verdictMeta[runVerdict];
-                const selected = selectedRunId === run.run_id;
-                return (
+            ) : tapeMode === "recent" ? (
+              <ul className="space-y-0.5">
+                {runs.map((run) => (
                   <li key={run.run_id}>
-                    <button
-                      type="button"
-                      onClick={() => setSelectedRunId(run.run_id)}
-                      className={cn(
-                        "group w-full rounded-md border border-transparent px-2 py-1.5 text-left transition hover:bg-muted/50",
-                        selected && "border-border/70 bg-muted/60",
-                      )}
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <span className={cn("inline-block h-1.5 w-1.5 shrink-0 rounded-full", runMeta.dot)} />
-                          <span className="text-xs font-semibold">{run.symbol}</span>
-                          <span className={cn("rounded px-1 py-px text-[9px] font-bold uppercase tracking-wider", runMeta.chip)}>
-                            {run.trust_verdict ?? run.status}
-                          </span>
-                        </div>
-                        <span className="shrink-0 text-[10px] text-muted-foreground">{getAge(run.requested_at)}</span>
-                      </div>
-                      <div className="mt-0.5 truncate text-[10px] text-muted-foreground/80">{run.run_id}</div>
-                    </button>
+                    <RunTapeRow
+                      run={run}
+                      selected={selectedRunId === run.run_id}
+                      onSelect={setSelectedRunId}
+                    />
                   </li>
-                );
-              })}
-            </ul>
+                ))}
+              </ul>
+            ) : tapeMode === "symbol" ? (
+              <div className="space-y-1">
+                {runsBySymbol.map(([symbol, groupRuns]) => {
+                  const key = `sym:${symbol}`;
+                  const hasSelected = groupRuns.some((r) => r.run_id === selectedRunId);
+                  const open = !closedGroups.has(key) || hasSelected;
+                  const latestVerdict = (groupRuns[0]?.trust_verdict ?? "uncertain") as Verdict;
+                  return (
+                    <RunTapeGroup
+                      key={key}
+                      open={open}
+                      onToggle={(isOpen) => toggleGroup(key, isOpen)}
+                      labelNode={
+                        <span className="flex items-center gap-1.5">
+                          <span className={cn("h-1.5 w-1.5 rounded-full", verdictMeta[latestVerdict].dot)} />
+                          <span className="text-xs font-semibold">{symbol}</span>
+                        </span>
+                      }
+                      count={groupRuns.length}
+                    >
+                      <ul className="space-y-0.5">
+                        {groupRuns.map((run) => (
+                          <li key={run.run_id}>
+                            <RunTapeRow
+                              run={run}
+                              selected={selectedRunId === run.run_id}
+                              onSelect={setSelectedRunId}
+                              hideSymbol
+                            />
+                          </li>
+                        ))}
+                      </ul>
+                    </RunTapeGroup>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="space-y-1">
+                {(["trusted", "uncertain", "blocked"] as const).map((verdictKey) => {
+                  const list = runsByVerdict[verdictKey];
+                  if (list.length === 0) return null;
+                  const key = `verd:${verdictKey}`;
+                  const hasSelected = list.some((r) => r.run_id === selectedRunId);
+                  const open = !closedGroups.has(key) || hasSelected;
+                  return (
+                    <RunTapeGroup
+                      key={key}
+                      open={open}
+                      onToggle={(isOpen) => toggleGroup(key, isOpen)}
+                      labelNode={
+                        <span
+                          className={cn(
+                            "rounded px-1.5 py-px text-[10px] font-bold uppercase tracking-wider",
+                            verdictMeta[verdictKey].chip,
+                          )}
+                        >
+                          {verdictMeta[verdictKey].label}
+                        </span>
+                      }
+                      count={list.length}
+                    >
+                      <ul className="space-y-0.5">
+                        {list.map((run) => (
+                          <li key={run.run_id}>
+                            <RunTapeRow
+                              run={run}
+                              selected={selectedRunId === run.run_id}
+                              onSelect={setSelectedRunId}
+                              hideVerdictChip
+                            />
+                          </li>
+                        ))}
+                      </ul>
+                    </RunTapeGroup>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </aside>
 
@@ -405,6 +515,11 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
                     verdict {verdict}
                   </span>
                 </div>
+                <SymbolHistory
+                  history={symbolHistory}
+                  selectedRunId={selectedRunId}
+                  onSelect={setSelectedRunId}
+                />
                 <p className="mt-2 max-w-2xl font-sans text-sm leading-6 text-foreground/80">
                   {review?.interpretation?.summary ?? "Select or run a review to see the trust decision."}
                 </p>
@@ -706,6 +821,152 @@ function PriceCell({ label, value, detail }: { label: string; value: string; det
       <div className="text-[10px] uppercase tracking-widest text-muted-foreground">{label}</div>
       <div className="mt-0.5 text-lg font-bold leading-tight">{value}</div>
       <div className="mt-0.5 truncate text-[10px] text-muted-foreground">{detail}</div>
+    </div>
+  );
+}
+
+function TapeModeTabs({ mode, onChange }: { mode: TapeMode; onChange: (mode: TapeMode) => void }) {
+  const tabs: Array<{ key: TapeMode; label: string }> = [
+    { key: "recent", label: "Recent" },
+    { key: "symbol", label: "Symbol" },
+    { key: "verdict", label: "Verdict" },
+  ];
+  return (
+    <div className="grid grid-cols-3 gap-px rounded-md border border-border/50 bg-muted/20 p-0.5">
+      {tabs.map((tab) => (
+        <button
+          key={tab.key}
+          type="button"
+          onClick={() => onChange(tab.key)}
+          className={cn(
+            "rounded px-1.5 py-0.5 text-[10px] uppercase tracking-widest transition",
+            mode === tab.key
+              ? "bg-background font-bold text-foreground shadow-sm"
+              : "text-muted-foreground hover:text-foreground",
+          )}
+        >
+          {tab.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function RunTapeRow({
+  run,
+  selected,
+  onSelect,
+  hideSymbol,
+  hideVerdictChip,
+}: {
+  run: RunSummary;
+  selected: boolean;
+  onSelect: (runId: string) => void;
+  hideSymbol?: boolean;
+  hideVerdictChip?: boolean;
+}) {
+  const runVerdict: Verdict = (run.trust_verdict ?? "uncertain") as Verdict;
+  const runMeta = verdictMeta[runVerdict];
+  return (
+    <button
+      type="button"
+      onClick={() => onSelect(run.run_id)}
+      className={cn(
+        "group w-full rounded-md border border-transparent px-2 py-1.5 text-left transition hover:bg-muted/50",
+        selected && "border-border/70 bg-muted/60",
+      )}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-2">
+          <span className={cn("inline-block h-1.5 w-1.5 shrink-0 rounded-full", runMeta.dot)} />
+          {hideSymbol ? null : <span className="text-xs font-semibold">{run.symbol}</span>}
+          {hideVerdictChip ? (
+            <span className="text-xs font-semibold">{run.symbol}</span>
+          ) : (
+            <span className={cn("rounded px-1 py-px text-[9px] font-bold uppercase tracking-wider", runMeta.chip)}>
+              {run.trust_verdict ?? run.status}
+            </span>
+          )}
+        </div>
+        <span className="shrink-0 text-[10px] text-muted-foreground">{getAge(run.requested_at)}</span>
+      </div>
+      <div className="mt-0.5 truncate text-[10px] text-muted-foreground/80">{run.run_id}</div>
+    </button>
+  );
+}
+
+function RunTapeGroup({
+  open,
+  onToggle,
+  labelNode,
+  count,
+  children,
+}: {
+  open: boolean;
+  onToggle: (isOpen: boolean) => void;
+  labelNode: React.ReactNode;
+  count: number;
+  children: React.ReactNode;
+}) {
+  return (
+    <details
+      open={open}
+      onToggle={(event) => onToggle(event.currentTarget.open)}
+      className="group/grp rounded-md"
+    >
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-2 rounded-md px-2 py-1 hover:bg-muted/40">
+        <div className="flex min-w-0 items-center gap-2">
+          {labelNode}
+          <span className="text-[10px] text-muted-foreground">· {count}</span>
+        </div>
+        <span className="text-[10px] text-muted-foreground transition group-open/grp:rotate-90">▸</span>
+      </summary>
+      <div className="mt-0.5 pl-1">{children}</div>
+    </details>
+  );
+}
+
+function SymbolHistory({
+  history,
+  selectedRunId,
+  onSelect,
+}: {
+  history: RunSummary[];
+  selectedRunId: string | null;
+  onSelect: (runId: string) => void;
+}) {
+  if (history.length <= 1) return null;
+  const newest = history[0];
+  const oldest = history[history.length - 1];
+  const symbol = newest?.symbol ?? "";
+  return (
+    <div className="mt-2 flex flex-wrap items-center gap-2">
+      <span className="text-[10px] uppercase tracking-widest text-muted-foreground">History</span>
+      <div className="flex items-center gap-1.5">
+        {history.map((run) => {
+          const verdict = (run.trust_verdict ?? "uncertain") as Verdict;
+          const m = verdictMeta[verdict];
+          const isSelected = run.run_id === selectedRunId;
+          return (
+            <button
+              key={run.run_id}
+              type="button"
+              onClick={() => onSelect(run.run_id)}
+              title={`${run.symbol} · ${m.label} · ${getAge(run.requested_at)} ago`}
+              className={cn(
+                "h-2.5 w-2.5 rounded-full transition",
+                m.dot,
+                isSelected
+                  ? "ring-2 ring-foreground/40 ring-offset-1 ring-offset-card"
+                  : "opacity-60 hover:opacity-100",
+              )}
+            />
+          );
+        })}
+      </div>
+      <span className="text-[10px] text-muted-foreground/80">
+        last {history.length} of {symbol} · {getAge(newest?.requested_at)} → {getAge(oldest?.requested_at)}
+      </span>
     </div>
   );
 }
