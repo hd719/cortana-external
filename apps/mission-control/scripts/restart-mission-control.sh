@@ -6,7 +6,6 @@ SERVICE_LABEL="com.cortana.mission-control"
 PLIST_PATH="${HOME}/Library/LaunchAgents/${SERVICE_LABEL}.plist"
 HEALTH_URL="${MISSION_CONTROL_HEALTH_URL:-http://127.0.0.1:3000/api/heartbeat-status}"
 BUILD=1
-RUN_SMOKE=1
 
 usage() {
   cat <<'EOF'
@@ -17,7 +16,7 @@ and waits for the health endpoint to return successfully.
 
 Options:
   --skip-build       Restart without running pnpm build first
-  --skip-smoke       Skip Trading Ops smoke validation after health check
+  --skip-smoke       Deprecated no-op; legacy Trading Ops smoke no longer runs during restart
   --health-url URL   Override the health check URL
   -h, --help         Show this help text
 EOF
@@ -135,7 +134,7 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     --skip-smoke)
-      RUN_SMOKE=0
+      log "--skip-smoke is deprecated; legacy Trading Ops smoke is already excluded from restart"
       shift
       ;;
     --health-url)
@@ -243,12 +242,6 @@ for _ in $(seq 1 20); do
   if response="$(curl -fsS "${HEALTH_URL}" 2>/dev/null)"; then
     log "Mission Control is healthy"
     printf '%s\n' "${response}"
-    if [[ "${RUN_SMOKE}" -eq 1 ]]; then
-      log "Running Trading Ops smoke validation"
-      if ! "${SCRIPT_DIR}/run-trading-ops-smoke-guard.sh" restart; then
-        exit 1
-      fi
-    fi
     exit 0
   fi
   sleep 1
