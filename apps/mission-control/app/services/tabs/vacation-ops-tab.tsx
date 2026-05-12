@@ -61,6 +61,8 @@ const DEFAULT_PLANNER_PARTS: PlannerParts = {
   meridiem: "AM",
 };
 
+const REMOVED_TRADING_PROVIDER_KEYS = new Set(["alpaca", "fred", "backtester"]);
+
 type ActionKey = "prep" | "enable" | "disable" | "unpause" | "cancel";
 
 type PlannerParts = {
@@ -198,6 +200,13 @@ function checkBadge(status: string) {
 }
 
 function summarizeDetail(detail: Record<string, unknown>) {
+  const services = asArray<Record<string, unknown>>(detail.services)
+    .filter((service) => !isRemovedTradingProvider(service))
+    .map((service) => asString(service.label) ?? asString(service.key))
+    .filter(Boolean);
+  if (services.length > 0 && asString(detail.summary)?.match(/alpaca|fred|backtester/i)) {
+    return `${services.join(", ")} readiness checked.`;
+  }
   if (typeof detail.summary === "string" && detail.summary.trim().length > 0) {
     return detail.summary;
   }
@@ -220,6 +229,12 @@ function asArray<T = Record<string, unknown>>(value: unknown): T[] {
 
 function asString(value: unknown) {
   return typeof value === "string" ? value : null;
+}
+
+function isRemovedTradingProvider(service: Record<string, unknown>) {
+  const key = asString(service.key)?.toLowerCase();
+  const label = asString(service.label)?.toLowerCase();
+  return Boolean((key && REMOVED_TRADING_PROVIDER_KEYS.has(key)) || (label && REMOVED_TRADING_PROVIDER_KEYS.has(label)));
 }
 
 function formatBoolean(value: unknown) {
@@ -278,7 +293,7 @@ function renderStructuredCheckDetail(check: VacationCheck) {
   }
 
   if (check.systemKey === "financial_external_services") {
-    const services = asArray<Record<string, unknown>>(check.detail.services);
+    const services = asArray<Record<string, unknown>>(check.detail.services).filter((service) => !isRemovedTradingProvider(service));
     const marketDataOps = (check.detail.marketDataOps ?? {}) as Record<string, unknown>;
     return (
       <div className="mt-3 space-y-3">

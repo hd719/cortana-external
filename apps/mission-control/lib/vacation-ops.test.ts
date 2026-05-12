@@ -5,17 +5,66 @@ import {
   deriveVacationDisplayMode,
   formatVacationSystemLabel,
   formatVacationWindowLabel,
+  sanitizeVacationDetail,
+  selectLatestVacationCheckRows,
 } from "@/lib/vacation-ops";
 
 describe("vacation ops helpers", () => {
   it("formats system keys into readable labels", () => {
     expect(formatVacationSystemLabel("tailscale_remote_access")).toBe("Tailscale Remote Access");
     expect(formatVacationSystemLabel("green_baseline")).toBe("Green Baseline");
+    expect(formatVacationSystemLabel("financial_external_services")).toBe("Schwab Market Data");
   });
 
   it("formats vacation window labels into operator dates", () => {
     expect(formatVacationWindowLabel("vacation-2026-04-13")).toBe("04-13-2026");
     expect(formatVacationWindowLabel("custom-label")).toBe("custom-label");
+  });
+
+  it("removes deleted trading providers from vacation readiness details", () => {
+    expect(sanitizeVacationDetail("financial_external_services", {
+      summary: "Alpaca, CoinMarketCap, and FRED are healthy or configured.",
+      services: [
+        { key: "alpaca", label: "Alpaca", status: "green" },
+        { key: "coinmarketcap", label: "CoinMarketCap", status: "green" },
+        { key: "fred", label: "FRED", status: "green" },
+      ],
+      marketDataOps: {
+        status: "ok",
+        providerMode: "schwab_primary",
+        providerMetrics: {
+          sourceUsage: {
+            alpaca: 5,
+            schwab: 10,
+          },
+        },
+      },
+    })).toEqual({
+      summary: "Schwab market-data ops readiness checked.",
+      services: [
+        { key: "coinmarketcap", label: "CoinMarketCap", status: "green" },
+      ],
+      marketDataOps: {
+        status: "ok",
+        providerMode: "schwab_primary",
+        providerMetrics: {
+          sourceUsage: {
+            schwab: 10,
+          },
+        },
+      },
+    });
+  });
+
+  it("keeps the latest readiness check per system", () => {
+    expect(selectLatestVacationCheckRows([
+      { id: 1, system_key: "critical_synthetic_probe", tier: 0, observed_at: "2026-05-12T19:31:20.000Z", status: "red" },
+      { id: 2, system_key: "mission_control", tier: 0, observed_at: "2026-05-12T19:31:30.000Z", status: "green" },
+      { id: 3, system_key: "critical_synthetic_probe", tier: 0, observed_at: "2026-05-12T19:32:00.000Z", status: "green" },
+    ])).toEqual([
+      { id: 3, system_key: "critical_synthetic_probe", tier: 0, observed_at: "2026-05-12T19:32:00.000Z", status: "green" },
+      { id: 2, system_key: "mission_control", tier: 0, observed_at: "2026-05-12T19:31:30.000Z", status: "green" },
+    ]);
   });
 
   it("treats completed windows as inactive display state", () => {

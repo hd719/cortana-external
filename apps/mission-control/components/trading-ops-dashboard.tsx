@@ -592,7 +592,6 @@ export function TradingOpsDashboard({ data }: TradingOpsDashboardProps) {
           <TabsTrigger value="watchlists">Watchlists</TabsTrigger>
           <TabsTrigger value="polymarket">Polymarket</TabsTrigger>
           <TabsTrigger value="health">System Health</TabsTrigger>
-          <TabsTrigger value="deep-dive">Deep Dive</TabsTrigger>
         </TabsList>
 
         {/* ── Overview ── */}
@@ -1152,127 +1151,6 @@ export function TradingOpsDashboard({ data }: TradingOpsDashboardProps) {
           </section>
         </TabsContent>
 
-        {/* ── Deep Dive ── */}
-        <TabsContent value="deep-dive" className="space-y-3">
-          <section className="grid grid-cols-1 gap-3 xl:grid-cols-3">
-            <ArtifactPanel title="Operator verdict" artifact={data.operatorVerdict}>
-              {data.operatorVerdict.data ? (
-                <div className="space-y-2 text-sm">
-                  <Metric label="Verdict" value={data.operatorVerdict.data.verdictLabel} />
-                  <Metric label="Caution" value={data.operatorVerdict.data.cautionLabel} />
-                  <Metric label="1d / 5d matured" value={`${data.operatorVerdict.data.oneDayMatured} / ${data.operatorVerdict.data.fiveDayMatured}`} />
-                  <Metric label="BUY avg / hit" value={`${formatSignedPercentLabel(data.operatorVerdict.data.buyAvgReturnPct)} · ${formatPercent(data.operatorVerdict.data.buyHitRate)}`} />
-                  <Metric label="WATCH avg / hit" value={`${formatSignedPercentLabel(data.operatorVerdict.data.watchAvgReturnPct)} · ${formatPercent(data.operatorVerdict.data.watchHitRate)}`} />
-                  <Metric label="High-conf BUY" value={`${formatSignedPercentLabel(data.operatorVerdict.data.highConfidenceBuyAvgReturnPct)} · ${formatPercent(data.operatorVerdict.data.highConfidenceBuyHitRate)}`} />
-                  {data.operatorVerdict.data.actionItems.map((item) => (
-                    <p key={item} className="rounded-md border border-border/50 bg-muted/30 px-2 py-1.5 text-xs">
-                      {item}
-                    </p>
-                  ))}
-                </div>
-              ) : null}
-            </ArtifactPanel>
-
-            <ArtifactPanel title="Prediction accuracy" artifact={data.prediction}>
-              {data.prediction.data ? (
-                <div className="space-y-2 text-sm">
-                  <Metric label="1d matured" value={String(data.prediction.data.oneDayMatured)} />
-                  <Metric label="1d pending" value={String(data.prediction.data.oneDayPending)} />
-                  <Metric label="Best visible slice" value={data.prediction.data.bestStrategyLabel ?? "Not enough settled data"} />
-                  <Metric label="Trade grades" value={data.prediction.data.decisionGradeHeadline ?? "No grade rollup yet"} />
-                  <Metric label="Trust state" value={data.prediction.data.freshnessLabel ?? "unknown"} />
-                  <Metric label="Top strategy family" value={data.prediction.data.topStrategyFamily ?? "warming"} />
-                  <Metric label="Shadow agreement" value={data.prediction.data.shadowAgreementLabel ?? "Not enough comparisons"} />
-                </div>
-              ) : null}
-            </ArtifactPanel>
-
-            <ArtifactPanel title="Benchmark ladder" artifact={data.benchmark}>
-              {data.benchmark.data ? (
-                <div className="space-y-2 text-sm">
-                  <Metric label="Horizon" value={data.benchmark.data.horizonKey ?? "n/a"} />
-                  <Metric label="Matured samples" value={String(data.benchmark.data.maturedCount ?? 0)} />
-                  <Metric label="Best visible comparison" value={data.benchmark.data.bestComparisonLabel ?? "Still waiting on mature comparisons"} />
-                </div>
-              ) : null}
-            </ArtifactPanel>
-
-          </section>
-
-          <section className="grid grid-cols-1 gap-3 xl:grid-cols-3">
-            <ArtifactPanel title="Control tower" artifact={data.controlTower}>
-              {data.controlTower.data ? (
-                <div className="space-y-2 text-sm">
-                  <Metric label="Desired posture" value={data.controlTower.data.desiredPosture ? formatLabel(data.controlTower.data.desiredPosture) : "unknown"} />
-                  <Metric label="Actual posture" value={data.controlTower.data.actualPosture ? formatLabel(data.controlTower.data.actualPosture) : "unknown"} />
-                  <Metric label="Desired autonomy" value={data.controlTower.data.desiredAutonomy ? formatLabel(data.controlTower.data.desiredAutonomy) : "unknown"} />
-                  <Metric label="Actual autonomy" value={data.controlTower.data.actualAutonomy ? formatLabel(data.controlTower.data.actualAutonomy) : "unknown"} />
-                  <Metric label="Alignment" value={data.controlTower.data.stateAlignment ? formatLabel(data.controlTower.data.stateAlignment) : "unknown"} />
-                  <Metric
-                    label="Release"
-                    value={[data.controlTower.data.releaseKey, data.controlTower.data.releaseMode].filter(Boolean).join(" · ") || "steady-state"}
-                  />
-                  <Metric label="Release status" value={data.controlTower.data.releaseStatus ? formatLabel(data.controlTower.data.releaseStatus) : "unknown"} />
-                  <Metric label="Release validation" value={data.controlTower.data.releaseValidation ? formatLabel(data.controlTower.data.releaseValidation) : "unknown"} />
-                  <Metric label="Drift" value={data.controlTower.data.driftSummary ?? data.controlTower.data.driftStatus ?? "No drift summary yet"} />
-                  <Metric
-                    label="Top action"
-                    value={[data.controlTower.data.topAction, data.controlTower.data.topActionStatus].filter(Boolean).join(" · ") || "none"}
-                  />
-                  <Metric
-                    label="BUY gate"
-                    value={
-                      data.controlTower.data.buyReadinessDecision === "BUY_BLOCKED"
-                        ? `blocked · ${data.controlTower.data.buyReadinessBlockers.slice(0, 2).join(", ") || "see artifact"}`
-                        : data.controlTower.data.buyReadinessDecision
-                          ? formatLabel(data.controlTower.data.buyReadinessDecision)
-                          : "unknown"
-                    }
-                  />
-                  <Metric label="Pending / applied" value={`${data.controlTower.data.pendingActionCount} / ${data.controlTower.data.appliedActionCount}`} />
-                  <Metric
-                    label="Interventions"
-                    value={
-                      data.controlTower.data.interventionTypes.length > 0
-                        ? `${data.controlTower.data.activeInterventionCount} · ${data.controlTower.data.interventionTypes.map((value) => formatLabel(value)).join(", ")}`
-                        : `${data.controlTower.data.activeInterventionCount}`
-                    }
-                  />
-                  <Metric label="Rollback ready" value={data.controlTower.data.rollbackReady == null ? "unknown" : data.controlTower.data.rollbackReady ? "yes" : "no"} />
-                  <Metric label="Loop schedule" value={data.controlTower.data.lateScheduleCount > 0 ? `${data.controlTower.data.lateScheduleCount} late` : "current"} />
-                  <Metric
-                    label="Last loop artifacts"
-                    value={data.controlTower.data.scheduleRows.map((row) => `${row.name}: ${row.freshnessLabel}`).join(" · ") || "none"}
-                  />
-                  <Metric label="Next operator step" value={data.controlTower.data.operatorAction ?? "No immediate operator action required."} />
-                </div>
-              ) : null}
-            </ArtifactPanel>
-
-            <ArtifactPanel title="Portfolio posture" artifact={data.lifecycle}>
-              {data.lifecycle.data ? (
-                <div className="space-y-2 text-sm">
-                  <Metric label="Posture" value={data.lifecycle.data.postureState ? formatLabel(data.lifecycle.data.postureState) : "Not synthesized"} />
-                  <Metric label="Autonomy" value={data.lifecycle.data.autonomyMode ? formatLabel(data.lifecycle.data.autonomyMode) : "advisory"} />
-                  <Metric label="Authority" value={data.lifecycle.data.authoritySummary ?? "No authority summary yet"} />
-                  <Metric label="Family budget" value={data.lifecycle.data.familyBudgetHeadline ?? "No family budget headline yet"} />
-                  <Metric label="Gross exposure" value={data.lifecycle.data.grossExposurePct != null ? formatPercent(data.lifecycle.data.grossExposurePct) : "n/a"} />
-                  <Metric label="Warnings / blockers" value={`${data.lifecycle.data.warningCount ?? 0} / ${data.lifecycle.data.blockerCount ?? 0}`} />
-                </div>
-              ) : null}
-            </ArtifactPanel>
-
-            <ArtifactPanel title="Ops highway" artifact={data.opsHighway}>
-              {data.opsHighway.data ? (
-                <div className="space-y-2 text-sm">
-                  <Metric label="Critical assets" value={String(data.opsHighway.data.criticalAssetCount)} />
-                  <Metric label="Do not commit paths" value={String(data.opsHighway.data.doNotCommitCount)} />
-                  <Metric label="Recovery step 1" value={data.opsHighway.data.firstRecoveryStep ?? "No recovery sequence recorded"} />
-                </div>
-              ) : null}
-            </ArtifactPanel>
-          </section>
-        </TabsContent>
       </Tabs>
     </div>
   );

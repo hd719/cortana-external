@@ -430,13 +430,15 @@ describe("TradingOpsDashboard", () => {
     expect(screen.getByRole("tab", { name: "Watchlists" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Polymarket" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "System Health" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Deep Dive" })).toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Deep Dive" })).not.toBeInTheDocument();
     expect(screen.getByText("Schwab live now")).toBeInTheDocument();
     expect(screen.getByText("Polymarket status")).toBeInTheDocument();
     expect(container).toHaveTextContent("Waiting for the first Schwab live quote poll.");
     expect(container).toHaveTextContent("Waiting for Polymarket services to settle after page load.");
     expect(container).toHaveTextContent("provider_cooldown: Wait.");
     expect(container).not.toHaveTextContent("Operator checklist");
+    expect(container).not.toHaveTextContent("Operator verdict");
+    expect(container).not.toHaveTextContent("Benchmark ladder");
 
     const systemHealthTab = screen.getByRole("tab", { name: "System Health" });
     fireEvent.mouseDown(systemHealthTab);
@@ -445,20 +447,6 @@ describe("TradingOpsDashboard", () => {
     expect(container).toHaveTextContent("Schwab REST");
     expect(container).toHaveTextContent("Polymarket streamer");
     expect(container).toHaveTextContent("Schwab streamer");
-
-    const deepDiveTab = screen.getByRole("tab", { name: "Deep Dive" });
-    fireEvent.mouseDown(deepDiveTab);
-    fireEvent.click(deepDiveTab);
-    expect(container).toHaveTextContent("Operator verdict");
-    expect(container).toHaveTextContent("Do not size up");
-    expect(container).toHaveTextContent("Control tower");
-    expect(container).toHaveTextContent("Desired posture");
-    expect(container).toHaveTextContent("Alignment");
-    expect(container).toHaveTextContent("bt-v4-control-loop");
-    expect(container).toHaveTextContent("manual pause");
-    expect(container).toHaveTextContent("Next operator step");
-    expect(container).toHaveTextContent("trusted · supervised_live");
-    expect(container).toHaveTextContent("dip_buyer $25,000");
 
     const watchlistsTab = screen.getByRole("tab", { name: "Watchlists" });
     fireEvent.mouseDown(watchlistsTab);

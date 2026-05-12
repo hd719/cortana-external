@@ -298,6 +298,20 @@ function parseMs(value: Date | string | null | undefined): number {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+export function selectLatestVacationCheckRows<T extends { system_key: string; observed_at: Date | string }>(rows: T[]): T[] {
+  const latestBySystem = new Map<string, T>();
+  for (const row of rows) {
+    const previous = latestBySystem.get(row.system_key);
+    if (!previous || parseMs(row.observed_at) >= parseMs(previous.observed_at)) {
+      latestBySystem.set(row.system_key, row);
+    }
+  }
+  return Array.from(latestBySystem.values()).sort((left, right) => {
+    const tierDiff = Number((left as { tier?: number }).tier ?? 0) - Number((right as { tier?: number }).tier ?? 0);
+    return tierDiff || left.system_key.localeCompare(right.system_key);
+  });
+}
+
 function readinessOutcomeToWindowStatus(outcome: string | null | undefined): "ready" | "failed" | null {
   if (outcome === "pass" || outcome === "warn") return "ready";
   if (outcome === "fail" || outcome === "no_go") return "failed";
@@ -351,6 +365,41 @@ function asObject(value: unknown): JsonObject {
   return value && typeof value === "object" && !Array.isArray(value) ? value as JsonObject : {};
 }
 
+const REMOVED_VACATION_DETAIL_TERMS = ["alpaca", "fred", "backtester"];
+
+function isRemovedVacationDetailTerm(value: unknown): boolean {
+  return typeof value === "string" && REMOVED_VACATION_DETAIL_TERMS.some((term) => value.toLowerCase().includes(term));
+}
+
+function sanitizeVacationValue(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value
+      .filter((item) => {
+        const object = asObject(item);
+        return !isRemovedVacationDetailTerm(object.key) && !isRemovedVacationDetailTerm(object.label);
+      })
+      .map(sanitizeVacationValue);
+  }
+
+  const object = asObject(value);
+  if (Object.keys(object).length === 0 || object !== value) return value;
+
+  const sanitized: JsonObject = {};
+  for (const [key, currentValue] of Object.entries(object)) {
+    if (isRemovedVacationDetailTerm(key)) continue;
+    sanitized[key] = sanitizeVacationValue(currentValue);
+  }
+  return sanitized;
+}
+
+export function sanitizeVacationDetail(systemKey: string, detail: JsonObject): JsonObject {
+  const sanitized = sanitizeVacationValue(detail) as JsonObject;
+  if (systemKey === "financial_external_services") {
+    sanitized.summary = "Schwab market-data ops readiness checked.";
+  }
+  return sanitized;
+}
+
 function readVacationConfig(): VacationConfig {
   return JSON.parse(fs.readFileSync(VACATION_CONFIG_PATH, "utf8")) as VacationConfig;
 }
@@ -364,6 +413,7 @@ function readVacationMirror(): JsonObject | null {
 }
 
 export function formatVacationSystemLabel(systemKey: string): string {
+  if (systemKey === "financial_external_services") return "Schwab Market Data";
   return systemKey
     .split("_")
     .filter(Boolean)
@@ -428,7 +478,7 @@ function mapCheck(row: RawCheckRow, config: VacationConfig): VacationCheck {
     remediationSucceeded: Boolean(row.remediation_succeeded),
     autonomyIncidentId: row.autonomy_incident_id,
     incidentKey: row.incident_key,
-    detail: asObject(row.detail),
+    detail: sanitizeVacationDetail(row.system_key, asObject(row.detail)),
   };
 }
 
@@ -647,7 +697,7 @@ export async function getVacationOpsSnapshot(): Promise<VacationOpsSnapshot> {
   ]);
 
   const latestSummary = mapRun(latestSummaryRow);
-  const latestChecks = checkRows.map((row) => mapCheck(row, config));
+  const latestChecks = selectLatestVacationCheckRows(checkRows).map((row) => mapCheck(row, config));
   const recentIncidents = incidentRows.map(mapIncident);
   const recentActions = actionRows.map(mapAction);
   const tierRollup = buildVacationTierRollup(latestChecks);
