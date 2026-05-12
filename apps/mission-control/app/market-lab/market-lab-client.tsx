@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Activity, FlaskConical, Play, RefreshCw, Terminal } from "lucide-react";
+import { Activity, FlaskConical, MessageSquareText, Play, RefreshCw, Terminal } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -25,7 +25,15 @@ type RunDetail = {
     price_facts?: { price?: number; timestamp?: string; source?: string; price_basis?: string } | null;
     spy_facts?: { price?: number; timestamp?: string; source?: string; price_basis?: string } | null;
     tradingagents?: { status?: string; summary?: string };
-    artifact_paths?: { review?: string; events?: string; logs?: string; tradingagents?: string | null };
+    codex_review?: { status?: string; summary?: string; output_path?: string | null; session_id?: string | null } | null;
+    artifact_paths?: {
+      review?: string;
+      events?: string;
+      logs?: string;
+      tradingagents?: string | null;
+      codex_packet?: string | null;
+      codex_review?: string | null;
+    };
     checks?: Array<{ code?: string; severity?: string; message?: string }>;
     settlements?: Array<Record<string, unknown>>;
   } | null;
@@ -63,6 +71,7 @@ export function MarketLabClient() {
   const [events, setEvents] = useState<Array<Record<string, unknown>>>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [codexStatus, setCodexStatus] = useState<string | null>(null);
 
   const selectedRun = useMemo(
     () => runs.find((run) => run.run_id === selectedRunId) ?? null,
@@ -96,6 +105,7 @@ export function MarketLabClient() {
   const startRun = async () => {
     setLoading(true);
     setError(null);
+    setCodexStatus(null);
     try {
       const result = await api<{ run_id: string }>("/api/market-lab/runs", {
         method: "POST",
@@ -120,6 +130,24 @@ export function MarketLabClient() {
       await loadRunDetail(selectedRunId);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to settle run");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const askCodex = async () => {
+    if (!selectedRunId) return;
+    setLoading(true);
+    setError(null);
+    setCodexStatus(null);
+    try {
+      const result = await api<{ streamId: string; packet_path: string }>(
+        `/api/market-lab/runs/${encodeURIComponent(selectedRunId)}/codex-review`,
+        { method: "POST" },
+      );
+      setCodexStatus(`Codex review started: ${result.streamId}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to start Codex review");
     } finally {
       setLoading(false);
     }
@@ -156,6 +184,7 @@ export function MarketLabClient() {
       </section>
 
       {error ? <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div> : null}
+      {codexStatus ? <div className="rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-700">{codexStatus}</div> : null}
 
       <section className="grid gap-4 lg:grid-cols-[320px_1fr]">
         <Card className="rounded-lg">
@@ -199,6 +228,10 @@ export function MarketLabClient() {
                   ) : null}
                   <Button variant="outline" size="sm" onClick={settleRun} disabled={!selectedRunId || loading}>
                     Settle
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={askCodex} disabled={!selectedRunId || loading}>
+                    <MessageSquareText className="h-4 w-4" />
+                    Ask Codex
                   </Button>
                 </div>
               </div>
@@ -255,6 +288,16 @@ export function MarketLabClient() {
                     <div className="text-muted-foreground">{review.tradingagents.summary}</div>
                   </div>
                 ) : null}
+                {review?.codex_review ? (
+                  <div className="rounded-md border px-3 py-2 text-sm">
+                    <div className="text-xs uppercase text-muted-foreground">Codex Review</div>
+                    <div className="font-medium">{review.codex_review.status}</div>
+                    <div className="text-muted-foreground">{review.codex_review.summary}</div>
+                    {review.codex_review.session_id ? (
+                      <div className="mt-1 text-xs text-muted-foreground">session: {review.codex_review.session_id}</div>
+                    ) : null}
+                  </div>
+                ) : null}
                 <div className="space-y-2">
                   {(review?.checks ?? []).map((check) => (
                     <div key={check.code} className="rounded-md border px-3 py-2 text-sm">
@@ -287,6 +330,8 @@ export function MarketLabClient() {
               <div className="truncate">events: {review?.artifact_paths?.events ?? "n/a"}</div>
               <div className="truncate">logs: {review?.artifact_paths?.logs ?? "n/a"}</div>
               <div className="truncate">tradingagents: {review?.artifact_paths?.tradingagents ?? "n/a"}</div>
+              <div className="truncate">codex packet: {review?.artifact_paths?.codex_packet ?? "n/a"}</div>
+              <div className="truncate">codex review: {review?.artifact_paths?.codex_review ?? "n/a"}</div>
             </CardContent>
           </Card>
         </div>

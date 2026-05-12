@@ -2,6 +2,8 @@
 
 Market Lab runs one-symbol, forward-looking trust reviews. It is intentionally separate from the old backtester.
 
+Planning docs live in `market_lab/docs/planning`.
+
 ## CLI
 
 Canonical commands:
@@ -14,6 +16,8 @@ uv run --project market_lab python -m market_lab.cli show <run_id>
 uv run --project market_lab python -m market_lab.cli events <run_id>
 uv run --project market_lab python -m market_lab.cli settle <run_id>
 uv run --project market_lab python -m market_lab.cli settle-due
+uv run --project market_lab python -m market_lab.cli codex-packet <run_id> --json
+uv run --project market_lab python -m market_lab.cli attach-codex-review <run_id> <review_path> --json
 ```
 
 Repo-level convenience command:
@@ -45,6 +49,8 @@ Default cache:
   runs/<run_id>/
     review.json
     events.jsonl
+    codex-review-packet.md
+    codex-review.md
     tradingagents.md
     logs.txt
 ```
@@ -57,6 +63,17 @@ Default cache:
 - `MARKET_LAB_FAKE_TRADINGAGENTS=1`: use deterministic fake TradingAgents output for smoke tests
 - `MARKET_LAB_REQUIRE_TRADINGAGENTS=1`: block when TradingAgents cannot run
 
+## Codex-Assisted Reviews
+
+Every run writes `codex-review-packet.md`. Mission Control's `Ask Codex` button sends that packet through the existing Codex sessions route for the `cortana-external` workspace.
+
+```bash
+uv run --project market_lab python -m market_lab.cli codex-packet <run_id> --json
+uv run --project market_lab python -m market_lab.cli attach-codex-review <run_id> <review_path> --json
+```
+
+Codex writes `codex-review.md`, then runs the attach command so Mission Control can render the review summary without requiring OpenAI API keys.
+
 ## Module Map
 
 - `models.py`: Pydantic contracts
@@ -64,6 +81,7 @@ Default cache:
 - `market_data.py`: local market-data service client
 - `checks.py`: deterministic freshness and evidence checks
 - `tradingagents_adapter.py`: TradingAgents second-opinion lane
+- `codex_review.py`: Codex review packet and prompt builder
 - `verdict.py`: trusted / uncertain / blocked decision
 - `runner.py`: one-symbol review orchestration
 - `settlement.py`: 1D / 5D / 20D outcome scoring

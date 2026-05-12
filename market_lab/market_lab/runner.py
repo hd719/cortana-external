@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from .checks import evaluate_optional_evidence, evaluate_price_facts
+from .codex_review import build_codex_packet
 from .market_data import MarketDataClient, MarketDataError
 from .models import (
     ArtifactPaths,
@@ -82,6 +83,8 @@ class ReviewRunner:
             events=run.events_path,
             logs=run.logs_path,
             tradingagents=trading_review.output_path,
+            codex_packet=str(run_dir / "codex-review-packet.md"),
+            codex_review=str(run_dir / "codex-review.md"),
         )
         settlements = build_pending_windows(
             requested_at=requested_at,
@@ -106,6 +109,7 @@ class ReviewRunner:
             artifact_paths=artifact_paths,
         )
         self.store.write_review(artifact)
+        self.store.write_codex_packet(run.run_id, build_codex_packet(artifact))
         for window in settlements:
             self.store.upsert_settlement(
                 run.run_id,

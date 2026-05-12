@@ -23,11 +23,14 @@ const detail = {
     price_facts: { price: 123.45, source: "fake", price_basis: "live" },
     spy_facts: { price: 500.0, source: "fake" },
     tradingagents: { status: "skipped", summary: "Skipped due to blocker." },
+    codex_review: { status: "attached", summary: "Codex says keep this blocked.", session_id: "session-1" },
     artifact_paths: {
       review: "/tmp/review.json",
       events: "/tmp/events.jsonl",
       logs: "/tmp/logs.txt",
       tradingagents: "/tmp/tradingagents.md",
+      codex_packet: "/tmp/codex-review-packet.md",
+      codex_review: "/tmp/codex-review.md",
     },
     checks: [{ code: "price_data_stale", severity: "blocker", message: "stale" }],
     settlements: [{ window: "1d", status: "pending" }],
@@ -39,6 +42,12 @@ describe("MarketLabClient", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+      if (String(url).includes("/codex-review") && init?.method === "POST") {
+        return Response.json(
+          { status: "ok", data: { streamId: "stream-1", packet_path: "/tmp/codex-review-packet.md" } },
+          { status: 202 },
+        );
+      }
       if (String(url).includes("/events")) {
         return Response.json({ status: "ok", data: [{ event: "done", message: "Run done" }] });
       }
@@ -60,7 +69,9 @@ describe("MarketLabClient", () => {
     expect(screen.getAllByText("blocked").length).toBeGreaterThan(0);
     expect(screen.getByText("Run done")).toBeInTheDocument();
     expect(screen.getByText("Skipped due to blocker.")).toBeInTheDocument();
+    expect(screen.getByText("Codex says keep this blocked.")).toBeInTheDocument();
     expect(screen.getByText(/review: \/tmp\/review\.json/)).toBeInTheDocument();
+    expect(screen.getByText(/codex packet: \/tmp\/codex-review-packet\.md/)).toBeInTheDocument();
   });
 
   it("starts a run for the entered symbol", async () => {
@@ -77,5 +88,19 @@ describe("MarketLabClient", () => {
         }),
       );
     });
+  });
+
+  it("starts a Codex-assisted review for the selected run", async () => {
+    render(<MarketLabClient />);
+
+    fireEvent.click(await screen.findByRole("button", { name: /ask codex/i }));
+
+    await waitFor(() => {
+      expect(fetch).toHaveBeenCalledWith(
+        "/api/market-lab/runs/mlab_test_AAPL/codex-review",
+        expect.objectContaining({ method: "POST" }),
+      );
+    });
+    expect(await screen.findByText("Codex review started: stream-1")).toBeInTheDocument();
   });
 });

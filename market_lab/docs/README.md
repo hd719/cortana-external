@@ -25,6 +25,7 @@ Completed:
 - market-data service client and deterministic freshness/evidence checks
 - Trust Verdict logic: `trusted`, `uncertain`, `blocked`
 - TradingAgents adapter boundary with fake-mode smoke support
+- Codex-assisted review packets and Mission Control `Ask Codex` handoff
 - 1D/5D/20D settlement windows and SPY-relative scoring
 - first-class CLI commands plus `pnpm market-lab -- ...`
 - Mission Control `/market-lab` page and sidebar nav
@@ -43,5 +44,6 @@ Not included in V0:
 
 ## Naming
 
-- `market-lab/` is the docs and product-planning home.
-- `market_lab/` is the planned Python runtime package name.
+- `market_lab/` is the single Market Lab home.
+- `market_lab/docs/` contains product and planning docs.
+- `market_lab/market_lab/` contains the Python runtime package.

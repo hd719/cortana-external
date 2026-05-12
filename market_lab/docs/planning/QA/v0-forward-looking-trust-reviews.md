@@ -63,8 +63,8 @@ Live E2E validation completed on temporary dev server `127.0.0.1:3100`:
 
 Known V0 constraints:
 
-- real TradingAgents execution still requires `MARKET_LAB_TRADINGAGENTS_COMMAND`
 - fake TradingAgents mode is the supported smoke-test path
+- Codex-assisted review uses the existing Codex session flow and does not require OpenAI API keys in Market Lab
 - settlement windows remain `not_due` until their due dates
 
 ---

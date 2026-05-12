@@ -7,7 +7,15 @@ const execFileAsync = promisify(execFile);
 
 const SYMBOL_RE = /^[A-Z][A-Z0-9.-]{0,14}$/;
 
-export type MarketLabCommand = "list" | "run" | "show" | "events" | "settle" | "settle-due";
+export type MarketLabCommand =
+  | "list"
+  | "run"
+  | "show"
+  | "events"
+  | "settle"
+  | "settle-due"
+  | "codex-packet"
+  | "attach-codex-review";
 
 export type MarketLabRunSummary = {
   run_id: string;
@@ -34,6 +42,15 @@ export type MarketLabReview = {
   price_facts?: { price?: number; timestamp?: string; source?: string; price_basis?: string } | null;
   spy_facts?: { price?: number; timestamp?: string; source?: string; price_basis?: string } | null;
   tradingagents?: { status?: string; summary?: string; output_path?: string | null };
+  codex_review?: { status?: string; summary?: string; output_path?: string | null; session_id?: string | null } | null;
+  artifact_paths?: {
+    review?: string;
+    events?: string;
+    logs?: string;
+    tradingagents?: string | null;
+    codex_packet?: string | null;
+    codex_review?: string | null;
+  };
   settlements?: Array<Record<string, unknown>>;
   checks?: Array<{ code?: string; severity?: string; message?: string }>;
 };
@@ -125,3 +142,6 @@ export const getMarketLabEvents = (runId: string) =>
 
 export const settleMarketLabRun = (runId: string) =>
   runMarketLabCli<{ run_id: string; symbol: string; settlements: Array<Record<string, unknown>> }>("settle", [runId]);
+
+export const getMarketLabCodexPacket = (runId: string) =>
+  runMarketLabCli<{ run_id: string; packet_path: string; prompt: string }>("codex-packet", [runId]);

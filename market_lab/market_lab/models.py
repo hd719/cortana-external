@@ -92,6 +92,13 @@ class TradingAgentsReview(Model):
     error_message: str | None = None
 
 
+class CodexReview(Model):
+    status: Literal["pending", "attached"]
+    summary: str
+    output_path: str | None = None
+    session_id: str | None = None
+
+
 class SettlementWindow(Model):
     window: Literal["1d", "5d", "20d"]
     status: SettlementStatus
@@ -113,6 +120,8 @@ class ArtifactPaths(Model):
     events: str
     logs: str
     tradingagents: str | None = None
+    codex_packet: str | None = None
+    codex_review: str | None = None
 
 
 class ReviewArtifact(Model):
@@ -130,6 +139,7 @@ class ReviewArtifact(Model):
     optional_evidence: OptionalEvidence = Field(default_factory=OptionalEvidence)
     interpretation: Interpretation
     tradingagents: TradingAgentsReview
+    codex_review: CodexReview | None = None
     settlements: list[SettlementWindow] = Field(default_factory=list)
     artifact_paths: ArtifactPaths
 

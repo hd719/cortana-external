@@ -8,7 +8,7 @@ from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import Any
 
-from .models import ReviewArtifact, RunRecord, RunStatus, TimelineEvent, TrustVerdict, model_to_json
+from .models import CodexReview, ReviewArtifact, RunRecord, RunStatus, TimelineEvent, TrustVerdict, model_to_json
 
 
 def utc_now() -> datetime:
@@ -250,6 +250,12 @@ class MarketLabStore:
         )
         return review_path
 
+    def write_codex_packet(self, run_id: str, text: str) -> Path:
+        run = self.get_run(run_id)
+        packet_path = Path(run.run_dir) / "codex-review-packet.md"
+        packet_path.write_text(text.rstrip() + "\n", encoding="utf-8")
+        return packet_path
+
     def read_review(self, run_id: str) -> dict[str, Any] | None:
         run = self.get_run(run_id)
         if not run.review_path:
@@ -258,6 +264,33 @@ class MarketLabStore:
         if not path.exists():
             return None
         return json.loads(path.read_text(encoding="utf-8"))
+
+    def attach_codex_review(self, run_id: str, review_path: Path | str, *, session_id: str | None = None) -> ReviewArtifact:
+        raw = self.read_review(run_id)
+        if raw is None:
+            raise KeyError(f"Review not found: {run_id}")
+
+        path = Path(review_path).expanduser().resolve()
+        if not path.exists():
+            raise FileNotFoundError(f"Codex review not found: {path}")
+
+        text = path.read_text(encoding="utf-8").strip()
+        first_line = next((line.strip() for line in text.splitlines() if line.strip()), "Codex review attached.")
+        artifact = ReviewArtifact.model_validate(raw)
+        artifact = artifact.model_copy(
+            update={
+                "codex_review": CodexReview(
+                    status="attached",
+                    summary=first_line[:240],
+                    output_path=str(path),
+                    session_id=session_id,
+                ),
+                "artifact_paths": artifact.artifact_paths.model_copy(update={"codex_review": str(path)}),
+            },
+        )
+        self.write_review(artifact)
+        self.append_event(run_id, "codex_review_attached", f"Codex review attached from {path}.")
+        return artifact
 
     def upsert_settlement(self, run_id: str, window: str, values: dict[str, Any]) -> None:
         payload = {"run_id": run_id, "window": window, **values}

@@ -4,6 +4,7 @@ import argparse
 import json
 from typing import Any
 
+from .codex_review import codex_prompt_for_packet
 from .runner import ReviewRunner
 from .settlement import SettlementService
 from .storage import MarketLabStore
@@ -70,6 +71,32 @@ def settle_due_command(args: argparse.Namespace) -> None:
     emit({"settled_run_ids": run_ids}, as_json=args.json)
 
 
+def codex_packet_command(args: argparse.Namespace) -> None:
+    store = MarketLabStore()
+    review = store.read_review(args.run_id)
+    if review is None:
+        raise SystemExit(f"Review not found: {args.run_id}")
+
+    packet_path = review.get("artifact_paths", {}).get("codex_packet")
+    if not packet_path:
+        raise SystemExit(f"Codex packet path missing for {args.run_id}")
+
+    prompt = codex_prompt_for_packet(packet_path)
+    payload = {"run_id": args.run_id, "packet_path": packet_path, "prompt": prompt}
+    emit(payload, as_json=args.json)
+
+
+def attach_codex_review_command(args: argparse.Namespace) -> None:
+    artifact = MarketLabStore().attach_codex_review(args.run_id, args.review_path, session_id=args.session_id)
+    payload = {
+        "run_id": artifact.run_id,
+        "symbol": artifact.symbol,
+        "codex_review": artifact.codex_review.model_dump(mode="json") if artifact.codex_review else None,
+        "review_path": artifact.artifact_paths.review,
+    }
+    emit(payload, as_json=args.json)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="market-lab", description="Run Market Lab trust reviews.")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -102,6 +129,18 @@ def build_parser() -> argparse.ArgumentParser:
     settle_due = sub.add_parser("settle-due", help="Settle all due windows.")
     settle_due.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
     settle_due.set_defaults(func=settle_due_command)
+
+    codex_packet = sub.add_parser("codex-packet", help="Show the Codex review prompt for a run.")
+    codex_packet.add_argument("run_id")
+    codex_packet.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
+    codex_packet.set_defaults(func=codex_packet_command)
+
+    attach_codex = sub.add_parser("attach-codex-review", help="Attach a Codex markdown review to a run.")
+    attach_codex.add_argument("run_id")
+    attach_codex.add_argument("review_path")
+    attach_codex.add_argument("--session-id")
+    attach_codex.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
+    attach_codex.set_defaults(func=attach_codex_review_command)
     return parser
 
 

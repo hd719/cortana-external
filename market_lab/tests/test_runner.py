@@ -37,3 +37,7 @@ def test_runner_writes_artifact_and_events(tmp_path):
     events = store.read_events(artifact.run_id)
     assert [event["event"] for event in events][-1] == "done"
     assert len(artifact.settlements) == 3
+    assert artifact.artifact_paths.codex_packet
+    assert "Market Lab Codex Review Packet" in (tmp_path / "runs" / artifact.run_id / "codex-review-packet.md").read_text(
+        encoding="utf-8",
+    )
