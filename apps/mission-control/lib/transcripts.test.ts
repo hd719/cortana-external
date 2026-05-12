@@ -26,7 +26,7 @@ describe("lib/transcripts", () => {
         id: 11,
         session_id: "c-1",
         turn_no: 2,
-        speaker_id: "oracle",
+        speaker_id: "monitor",
         message_type: "analysis",
         content: "Risk noted",
         metadata: null,
@@ -42,19 +42,19 @@ describe("lib/transcripts", () => {
       rangeHours: 6,
       limit: 10,
       sessionId: "c-1",
-      speakerId: "oracle",
+      speakerId: "monitor",
       messageType: "analysis",
       query: "Risk",
     });
 
     expect(result.messages).toHaveLength(1);
-    expect(result.messages[0]).toMatchObject({ sessionId: "c-1", speakerId: "oracle", messageType: "analysis" });
-    expect(result.facets.speakers).toContain("oracle");
+    expect(result.messages[0]).toMatchObject({ sessionId: "c-1", speakerId: "monitor", messageType: "analysis" });
+    expect(result.facets.speakers).toContain("monitor");
 
     const query = vi.mocked(prisma.$queryRawUnsafe).mock.calls[0][0] as string;
     expect(query).toContain("INTERVAL '6 hours'");
     expect(query).toContain("m.session_id = 'c-1'");
-    expect(query).toContain("m.speaker_id = 'oracle'");
+    expect(query).toContain("m.speaker_id = 'monitor'");
     expect(query).toContain("m.message_type = 'analysis'");
     expect(query).toContain("ILIKE '%Risk%'");
     expect(query).toContain("LIMIT 10");

@@ -19,7 +19,7 @@ describe("/api/transcripts", () => {
     });
 
     const request = new Request(
-      "http://localhost/api/transcripts?rangeHours=12&limit=10&sessionId=c-1&speakerId=oracle&messageType=analysis&query=Risk",
+      "http://localhost/api/transcripts?rangeHours=12&limit=10&sessionId=c-1&speakerId=monitor&messageType=analysis&query=Risk",
     );
     const response = await GET(request);
     const body = await response.json();
@@ -34,7 +34,7 @@ describe("/api/transcripts", () => {
       rangeHours: 12,
       limit: 10,
       sessionId: "c-1",
-      speakerId: "oracle",
+      speakerId: "monitor",
       messageType: "analysis",
       query: "Risk",
     });

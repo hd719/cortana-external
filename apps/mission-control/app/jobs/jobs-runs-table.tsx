@@ -29,10 +29,7 @@ type RunsTableProps = {
 };
 
 const AGENT_ROLE_VARIANTS: Record<string, { label: string; className: string }> = {
-  huragok: { label: "Huragok", className: "agent-role-huragok" },
-  researcher: { label: "Researcher", className: "agent-role-researcher" },
   monitor: { label: "Monitor", className: "agent-role-monitor" },
-  oracle: { label: "Oracle", className: "agent-role-oracle" },
   librarian: { label: "Librarian", className: "agent-role-librarian" },
 };
 

@@ -8,7 +8,7 @@ export type CouncilDeliberationJobResult = {
 };
 
 type CouncilVote = "approve" | "reject" | "abstain" | "amend";
-type RoleKey = "huragok" | "oracle" | "researcher" | "librarian" | "generic";
+type RoleKey = "monitor" | "arbiter" | "librarian" | "generic";
 
 type SynthesizerResponse = {
   outcome: "approve" | "reject" | "amend";
@@ -33,60 +33,50 @@ const REQUIRED_PROVIDER = "openai";
 const CONTRARIAN_INSTRUCTION = "Your job is to find the weakest point and argue against the proposal. Identify what breaks, what's missing, what everyone else is overlooking.";
 
 const ROLE_PROMPTS: Record<RoleKey, string> = {
-  huragok: [
-    "You are Huragok, the systems engineer.",
+  monitor: [
+    "You are Monitor, the operational reliability reviewer.",
     "MANDATORY CHECKLIST:",
-    "- Name specific technical risks (no generic language).",
+    "- Name specific technical and operational risks (no generic language).",
     "- Name explicit latency and scale concerns.",
     "- Name concrete dependency conflicts and integration friction points.",
-    "- Give one concrete build recommendation in a 'build it like X' style.",
-    "- Do NOT use adjectives like 'robust', 'seamless', or 'comprehensive' unless you immediately define concrete measurable details.",
+    "- Give one concrete verification recommendation.",
   ].join("\n"),
-  oracle: [
-    "You are Oracle, the strategist.",
+  arbiter: [
+    "You are Arbiter, the decision-pressure reviewer.",
     "MANDATORY CHECKLIST:",
     "- List exactly 3 specific risks.",
     "- List at least 2 second-order effects and explicitly name the mechanism causing each effect.",
     "- Name 1 catastrophic failure scenario.",
-    "- Do NOT use the word 'asymmetric' unless you explicitly name what is asymmetric and why.",
-  ].join("\n"),
-  researcher: [
-    "You are Researcher, the analyst.",
-    "MANDATORY CHECKLIST:",
-    "- Name specific benchmarks.",
-    "- Cite sources or precedents explicitly.",
-    "- Enumerate failure modes and include probabilities or likelihood ratings for each.",
   ].join("\n"),
   librarian: [
-    "You are Librarian, the institutional knowledge steward.",
+    "You are Librarian, the evidence and institutional-knowledge reviewer.",
     "MANDATORY CHECKLIST:",
-    "- Cite specific prior decisions.",
-    "- Cite specific documentation and historical patterns.",
-    "- Reference concrete examples, not abstractions.",
+    "- Name specific benchmarks, sources, or precedents.",
+    "- Cite specific prior decisions, docs, or historical patterns when available.",
+    "- Enumerate concrete failure modes.",
   ].join("\n"),
   generic: "You are a council member. Provide domain-specific analysis and cast one vote: approve, reject, abstain, or amend.",
 };
 
 const ROLE_FIELD_REQUIREMENTS: Record<RoleKey, string[]> = {
-  huragok: ["role_output.tech_risks", "role_output.latency_scale_concerns", "role_output.dependency_conflicts", "role_output.build_recommendation"],
-  oracle: ["role_output.specific_risks", "role_output.second_order_effects", "role_output.catastrophic_failure_scenario"],
-  researcher: ["role_output.benchmarks", "role_output.sources", "role_output.failure_modes"],
-  librarian: ["role_output.prior_decisions", "role_output.documentation_refs", "role_output.historical_patterns", "role_output.concrete_examples"],
+  monitor: ["role_output.tech_risks", "role_output.latency_scale_concerns", "role_output.dependency_conflicts", "role_output.verification_recommendation"],
+  arbiter: ["role_output.specific_risks", "role_output.second_order_effects", "role_output.catastrophic_failure_scenario"],
+  librarian: ["role_output.sources", "role_output.failure_modes", "role_output.documentation_refs"],
   generic: [],
 };
 
 const ROLE_OUTPUT_SCHEMAS: Record<RoleKey, Record<string, unknown>> = {
-  huragok: {
+  monitor: {
     type: "object",
-    required: ["tech_risks", "latency_scale_concerns", "dependency_conflicts", "build_recommendation"],
+    required: ["tech_risks", "latency_scale_concerns", "dependency_conflicts", "verification_recommendation"],
     properties: {
       tech_risks: { type: "array", minItems: 1, items: { type: "string" } },
       latency_scale_concerns: { type: "array", minItems: 1, items: { type: "string" } },
       dependency_conflicts: { type: "array", minItems: 1, items: { type: "string" } },
-      build_recommendation: { type: "string", minLength: 1 },
+      verification_recommendation: { type: "string", minLength: 1 },
     },
   },
-  oracle: {
+  arbiter: {
     type: "object",
     required: ["specific_risks", "second_order_effects", "catastrophic_failure_scenario"],
     properties: {
@@ -106,12 +96,12 @@ const ROLE_OUTPUT_SCHEMAS: Record<RoleKey, Record<string, unknown>> = {
       catastrophic_failure_scenario: { type: "string", minLength: 1 },
     },
   },
-  researcher: {
+  librarian: {
     type: "object",
-    required: ["benchmarks", "sources", "failure_modes"],
+    required: ["sources", "failure_modes", "documentation_refs"],
     properties: {
-      benchmarks: { type: "array", minItems: 1, items: { type: "string" } },
       sources: { type: "array", minItems: 1, items: { type: "string" } },
+      documentation_refs: { type: "array", minItems: 1, items: { type: "string" } },
       failure_modes: {
         type: "array",
         minItems: 1,
@@ -124,16 +114,6 @@ const ROLE_OUTPUT_SCHEMAS: Record<RoleKey, Record<string, unknown>> = {
           },
         },
       },
-    },
-  },
-  librarian: {
-    type: "object",
-    required: ["prior_decisions", "documentation_refs", "historical_patterns", "concrete_examples"],
-    properties: {
-      prior_decisions: { type: "array", minItems: 1, items: { type: "string" } },
-      documentation_refs: { type: "array", minItems: 1, items: { type: "string" } },
-      historical_patterns: { type: "array", minItems: 1, items: { type: "string" } },
-      concrete_examples: { type: "array", minItems: 1, items: { type: "string" } },
     },
   },
   generic: { type: "object", additionalProperties: true },
@@ -154,16 +134,14 @@ const clampConfidence = (value: unknown, fallback = 0.5): number => {
 
 const normalizeRoleKey = (agentId: string, role: string | null): RoleKey => {
   const agentKey = agentId.trim().toLowerCase();
-  if (agentKey.includes("huragok")) return "huragok";
-  if (agentKey.includes("oracle") || agentKey.includes("strategist")) return "oracle";
-  if (agentKey.includes("researcher") || agentKey.includes("analyst")) return "researcher";
+  if (agentKey.includes("monitor")) return "monitor";
+  if (agentKey.includes("arbiter")) return "arbiter";
   if (agentKey.includes("librarian")) return "librarian";
 
   const roleKey = (role || "").trim().toLowerCase();
-  if (roleKey.includes("huragok") || roleKey.includes("engineer")) return "huragok";
-  if (roleKey.includes("oracle") || roleKey.includes("strateg")) return "oracle";
-  if (roleKey.includes("research") || roleKey.includes("analyst")) return "researcher";
-  if (roleKey.includes("librarian") || roleKey.includes("knowledge")) return "librarian";
+  if (roleKey.includes("monitor") || roleKey.includes("engineer") || roleKey.includes("ops")) return "monitor";
+  if (roleKey.includes("arbiter") || roleKey.includes("strateg") || roleKey.includes("decision")) return "arbiter";
+  if (roleKey.includes("librarian") || roleKey.includes("knowledge") || roleKey.includes("research") || roleKey.includes("analyst")) return "librarian";
 
   return "generic";
 };
@@ -224,16 +202,16 @@ const validateRoleOutput = (role: RoleKey, payload: Record<string, unknown>): Ro
 
   const data = roleOutput as Record<string, unknown>;
 
-  if (role === "huragok") {
+  if (role === "monitor") {
     if (!hasStringArray(data.tech_risks, 1)) missingFields.push("role_output.tech_risks");
     if (!hasStringArray(data.latency_scale_concerns, 1)) missingFields.push("role_output.latency_scale_concerns");
     if (!hasStringArray(data.dependency_conflicts, 1)) missingFields.push("role_output.dependency_conflicts");
-    if (typeof data.build_recommendation !== "string" || data.build_recommendation.trim().length === 0) {
-      missingFields.push("role_output.build_recommendation");
+    if (typeof data.verification_recommendation !== "string" || data.verification_recommendation.trim().length === 0) {
+      missingFields.push("role_output.verification_recommendation");
     }
   }
 
-  if (role === "oracle") {
+  if (role === "arbiter") {
     if (!hasStringArray(data.specific_risks, 3) || (Array.isArray(data.specific_risks) && data.specific_risks.length !== 3)) {
       missingFields.push("role_output.specific_risks");
     }
@@ -249,9 +227,9 @@ const validateRoleOutput = (role: RoleKey, payload: Record<string, unknown>): Ro
     }
   }
 
-  if (role === "researcher") {
-    if (!hasStringArray(data.benchmarks, 1)) missingFields.push("role_output.benchmarks");
+  if (role === "librarian") {
     if (!hasStringArray(data.sources, 1)) missingFields.push("role_output.sources");
+    if (!hasStringArray(data.documentation_refs, 1)) missingFields.push("role_output.documentation_refs");
     const failureModes = data.failure_modes;
     const validFailureModes = Array.isArray(failureModes)
       && failureModes.length > 0
@@ -259,13 +237,6 @@ const validateRoleOutput = (role: RoleKey, payload: Record<string, unknown>): Ro
         && typeof (item as Record<string, unknown>).mode === "string"
         && typeof (item as Record<string, unknown>).likelihood === "string");
     if (!validFailureModes) missingFields.push("role_output.failure_modes");
-  }
-
-  if (role === "librarian") {
-    if (!hasStringArray(data.prior_decisions, 1)) missingFields.push("role_output.prior_decisions");
-    if (!hasStringArray(data.documentation_refs, 1)) missingFields.push("role_output.documentation_refs");
-    if (!hasStringArray(data.historical_patterns, 1)) missingFields.push("role_output.historical_patterns");
-    if (!hasStringArray(data.concrete_examples, 1)) missingFields.push("role_output.concrete_examples");
   }
 
   return { role, missingFields };

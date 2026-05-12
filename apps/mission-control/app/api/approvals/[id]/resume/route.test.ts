@@ -49,7 +49,7 @@ describe("POST /api/approvals/[id]/resume", () => {
         resumePayload: { target: "prod" },
         resumedAt: null,
         executedAt: null,
-        agentId: "oracle",
+        agentId: "monitor",
       } as never)
       .mockResolvedValueOnce({
         id: "11111111-1111-4111-8111-111111111111",
@@ -58,7 +58,7 @@ describe("POST /api/approvals/[id]/resume", () => {
         resumePayload: { target: "prod" },
         resumedAt: "2026-02-26T12:00:00.000Z",
         executedAt: null,
-        agentId: "oracle",
+        agentId: "monitor",
       } as never);
 
     const request = new Request("http://localhost", {
@@ -91,7 +91,7 @@ describe("POST /api/approvals/[id]/resume", () => {
         resumePayload: null,
         resumedAt: null,
         executedAt: null,
-        agentId: "oracle",
+        agentId: "monitor",
       } as never)
       .mockResolvedValueOnce({
         id: "11111111-1111-4111-8111-111111111111",
@@ -100,7 +100,7 @@ describe("POST /api/approvals/[id]/resume", () => {
         resumePayload: null,
         resumedAt: "2026-02-26T12:00:00.000Z",
         executedAt: "2026-02-26T12:05:00.000Z",
-        agentId: "oracle",
+        agentId: "monitor",
       } as never);
 
     const request = new Request("http://localhost", {
@@ -127,7 +127,7 @@ describe("POST /api/approvals/[id]/resume", () => {
       executedAt: null,
       proposal: {},
       resumePayload: null,
-      agentId: "oracle",
+      agentId: "monitor",
     } as never);
 
     const response = await POST(new Request("http://localhost", { method: "POST" }), {
@@ -147,7 +147,7 @@ describe("POST /api/approvals/[id]/resume", () => {
       executedAt: "2026-02-26T12:05:00.000Z",
       proposal: {},
       resumePayload: null,
-      agentId: "oracle",
+      agentId: "monitor",
     } as never);
 
     const response = await POST(new Request("http://localhost", {

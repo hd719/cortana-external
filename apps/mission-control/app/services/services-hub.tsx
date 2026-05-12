@@ -43,7 +43,7 @@ const TABS: { key: Tab; label: string; icon: React.ReactNode }[] = [
   { key: "logs", label: "Logs", icon: <ScrollText className="h-3.5 w-3.5" /> },
 ];
 
-const WORKER_IDS = new Set(["huragok-worker"]);
+const WORKER_IDS = new Set<string>();
 
 /* ── hub component ── */
 

@@ -12,10 +12,7 @@ type AgentStatusRow = {
 };
 
 const COVENANT_AGENTS = [
-  { name: "Huragok", role: "systems engineering" },
-  { name: "Researcher", role: "research" },
   { name: "Monitor", role: "patterns" },
-  { name: "Oracle", role: "prediction" },
   { name: "Librarian", role: "knowledge" },
 ] as const;
 
@@ -39,10 +36,7 @@ const toRelativeTime = (lastActive: Date | null) => {
 const QUERY = `
   WITH agents(name, role) AS (
     VALUES
-      ('Huragok', 'systems engineering'),
-      ('Researcher', 'research'),
       ('Monitor', 'patterns'),
-      ('Oracle', 'prediction'),
       ('Librarian', 'knowledge')
   )
   SELECT

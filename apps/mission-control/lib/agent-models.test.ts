@@ -22,18 +22,18 @@ describe("lib/agent-models", () => {
   it("returns friendly display name when config is available", async () => {
     existsSyncMock.mockReturnValue(true);
     readFileSyncMock.mockReturnValue(
-      JSON.stringify({ Huragok: "openai-codex/gpt-5.3-codex" })
+      JSON.stringify({ Monitor: "openai-codex/gpt-5.3-codex" })
     );
 
     const { getAgentModelDisplay } = await import("@/lib/agent-models");
-    const result = getAgentModelDisplay("Huragok");
+    const result = getAgentModelDisplay("Monitor");
 
     expect(result).toEqual({ key: "openai-codex/gpt-5.3-codex", displayName: "GPT 5.3 Codex" });
   });
 
   it("falls back to DB model when agent is not in config", async () => {
     existsSyncMock.mockReturnValue(true);
-    readFileSyncMock.mockReturnValue(JSON.stringify({ Oracle: "openai-codex/gpt-5.3-codex" }));
+    readFileSyncMock.mockReturnValue(JSON.stringify({ Spartan: "openai-codex/gpt-5.3-codex" }));
 
     const { getAgentModelDisplay } = await import("@/lib/agent-models");
     const result = getAgentModelDisplay("Monitor", "openai-codex/gpt-5.1");

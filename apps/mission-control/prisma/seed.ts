@@ -63,47 +63,6 @@ type TaskSeed = {
 
 const agentSeeds: AgentSeed[] = [
   {
-    name: "Huragok",
-    role: "Systems Engineer",
-    description: "Keeps infrastructure healthy and automates self-healing routines.",
-    capabilities: "Infra automation, diagnostics, observability, runbook execution",
-    model: "openai-codex/gpt-5.3-codex",
-    status: AgentStatus.active,
-    healthScore: 94,
-    lastSeen: new Date(),
-  },
-  {
-    id: "huragok-worker",
-    name: "huragok-worker",
-    role: "Runbook Executor",
-    description: "Executes maintenance workflows and batch remediation tasks.",
-    capabilities: "Job orchestration, remediation, batch ops, lifecycle tracking",
-    model: "openai-codex/gpt-5.3-codex",
-    status: AgentStatus.active,
-    healthScore: 90,
-    lastSeen: new Date(Date.now() - 1000 * 60 * 8),
-  },
-  {
-    name: "Oracle",
-    role: "Forecaster",
-    description: "Highlights risks and opportunities with quick scenario modeling.",
-    capabilities: "Risk analysis, forecasting, alerting",
-    model: "openai-codex/gpt-5.3-codex",
-    status: AgentStatus.active,
-    healthScore: 88,
-    lastSeen: new Date(Date.now() - 1000 * 60 * 12),
-  },
-  {
-    name: "Researcher",
-    role: "Scout",
-    description: "Surfaces research summaries, benchmarks, and supporting evidence.",
-    capabilities: "Research synthesis, comparisons, source tracking",
-    model: "openai-codex/gpt-5.3-codex",
-    status: AgentStatus.active,
-    healthScore: 85,
-    lastSeen: new Date(Date.now() - 1000 * 60 * 45),
-  },
-  {
     name: "Librarian",
     role: "Knowledge Base",
     description: "Manages notes, memory, and retrieval across projects.",
@@ -127,26 +86,6 @@ const agentSeeds: AgentSeed[] = [
 
 const runSeeds: RunSeed[] = [
   {
-    agentName: "Huragok",
-    jobType: "daily_sync",
-    status: RunStatus.completed,
-    summary: "Refreshed infra telemetry and updated cache.",
-    payload: { scope: "telemetry", interval: "24h" },
-    result: { durationMinutes: 8, refreshed: 124 },
-    startedAt: new Date(Date.now() - 1000 * 60 * 50),
-    completedAt: new Date(Date.now() - 1000 * 60 * 42),
-  },
-  {
-    agentName: "Researcher",
-    jobType: "literature_scan",
-    status: RunStatus.running,
-    summary: "Scanning for new eval papers on agent reliability.",
-    payload: { topic: "agent reliability", sources: ["arxiv", "openreview"] },
-    result: null,
-    startedAt: new Date(Date.now() - 1000 * 60 * 22),
-    completedAt: null,
-  },
-  {
     agentName: "Monitor",
     jobType: "uptime_probe",
     status: RunStatus.failed,
@@ -166,22 +105,6 @@ const eventSeeds: EventSeed[] = [
     severity: Severity.warning,
     message: "Gateway missed 2 consecutive heartbeats (staging).",
     metadata: { target: "gateway-staging", missed: 2 },
-  },
-  {
-    agentName: "Oracle",
-    runType: null,
-    type: "insight",
-    severity: Severity.info,
-    message: "No critical risks detected in the last 12h window.",
-    metadata: { windowHours: 12 },
-  },
-  {
-    agentName: "Huragok",
-    runType: "daily_sync",
-    type: "health",
-    severity: Severity.info,
-    message: "Infra sync completed successfully.",
-    metadata: { refreshed: 124 },
   },
 ];
 

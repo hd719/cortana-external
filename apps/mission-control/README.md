@@ -31,7 +31,7 @@ EOF
 #   HEARTBEAT_STATE_PATH=/Users/hd/.openclaw/memory/heartbeat-state.json
 #   TELEGRAM_USAGE_HANDLER_PATH=/Users/hd/Developer/cortana/skills/telegram-usage/handler.ts
 ```
-3) Apply schema + seed data (creates agents Huragok, Oracle, Researcher, Librarian, Monitor)
+3) Apply schema + seed data (creates active agents Librarian and Monitor)
 ```bash
 pnpm db:migrate
 pnpm db:seed
@@ -173,7 +173,7 @@ Example local ingestion:
 ```bash
 curl -X POST http://localhost:3000/api/openclaw/subagent-events \
   -H "content-type: application/json" \
-  -d '{"runId":"sub-123","status":"queued","agentName":"Huragok","jobType":"mission-control-sync"}'
+  -d '{"runId":"sub-123","status":"queued","agentName":"Monitor","jobType":"mission-control-sync"}'
 ```
 
 ## Trading Ops

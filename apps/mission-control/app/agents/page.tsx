@@ -7,7 +7,7 @@ import { StatusBadge } from "@/components/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { AutoRefresh } from "@/components/auto-refresh";
 
-const WORKER_AGENT_IDS = new Set(["huragok-worker"]);
+const WORKER_AGENT_IDS = new Set<string>();
 
 export default async function AgentsPage() {
   const agents = await getAgents();
@@ -28,11 +28,7 @@ export default async function AgentsPage() {
             Known Cortana agents, their roles, capabilities, and recent health.
           </p>
         </div>
-        <Badge variant="outline">
-          Seeded core: Huragok · Oracle · Researcher · Librarian · Monitor
-          {" · "}
-          Workers: huragok-worker
-        </Badge>
+        <Badge variant="outline">Seeded core: Librarian · Monitor</Badge>
       </div>
 
       {workerAgents.length > 0 && (

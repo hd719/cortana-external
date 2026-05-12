@@ -1,6 +1,6 @@
 type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
 
-export const OPENCLAW_AGENT_PREFIXES = ["Monitor", "Huragok", "Oracle", "Librarian", "Researcher"] as const;
+export const OPENCLAW_AGENT_PREFIXES = ["Monitor", "Librarian", "Spartan", "Arbiter"] as const;
 
 type AgentRecord = {
   id: string;
@@ -104,7 +104,7 @@ const gatherAssignmentCandidates = (source: AssignmentSource): string[] => {
     if (prefix) out.push(prefix);
   }
 
-  // Scan task text for known agent name mentions (e.g., "Spawn a Huragok to...")
+  // Scan task text for known agent name mentions (e.g., "Spawn Monitor to...")
   const taskText = stringFromUnknown(metadata?.task) ?? stringFromUnknown(payload?.task);
   if (taskText) {
     for (const prefix of OPENCLAW_AGENT_PREFIXES) {

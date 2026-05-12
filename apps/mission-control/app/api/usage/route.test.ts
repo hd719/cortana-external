@@ -12,7 +12,7 @@ describe("GET /api/usage", () => {
       windowMinutes: 60,
       totals: { sessions: 2, totalTokens: 300, inputTokens: 100, outputTokens: 200, estimatedCost: 0.0042 },
       byModel: [{ model: "gpt-5.3-codex", sessions: 2, totalTokens: 300, inputTokens: 100, outputTokens: 200, estimatedCost: 0.0042 }],
-      byAgent: [{ agentId: "huragok", model: "n/a", sessions: 2, totalTokens: 300, inputTokens: 100, outputTokens: 200, estimatedCost: 0.0042 }],
+      byAgent: [{ agentId: "monitor", model: "n/a", sessions: 2, totalTokens: 300, inputTokens: 100, outputTokens: 200, estimatedCost: 0.0042 }],
       sessions: [],
     });
 

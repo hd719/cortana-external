@@ -8,7 +8,7 @@ describe("buildUsageAnalytics", () => {
         {
           id: "s1",
           model: "gpt-5.3-codex",
-          agentId: "huragok",
+          agentId: "monitor",
           inputTokens: 1000,
           outputTokens: 500,
           totalTokens: 1500,
@@ -16,7 +16,7 @@ describe("buildUsageAnalytics", () => {
         {
           id: "s2",
           model: "claude-3.5-sonnet",
-          agentId: "oracle",
+          agentId: "spartan",
           totalTokens: 2000,
         },
       ],
@@ -27,7 +27,7 @@ describe("buildUsageAnalytics", () => {
     expect(result.windowMinutes).toBe(120);
     expect(result.totals.sessions).toBe(2);
     expect(result.byModel[0]?.estimatedCost).toBeGreaterThanOrEqual(result.byModel[1]?.estimatedCost ?? 0);
-    expect(result.byAgent.map((row) => row.agentId)).toEqual(expect.arrayContaining(["huragok", "oracle"]));
+    expect(result.byAgent.map((row) => row.agentId)).toEqual(expect.arrayContaining(["monitor", "spartan"]));
     expect(result.totals.totalTokens).toBe(3500);
   });
 });
