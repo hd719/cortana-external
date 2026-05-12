@@ -298,6 +298,20 @@ function parseMs(value: Date | string | null | undefined): number {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+export function selectLatestVacationCheckRows<T extends { system_key: string; observed_at: Date | string }>(rows: T[]): T[] {
+  const latestBySystem = new Map<string, T>();
+  for (const row of rows) {
+    const previous = latestBySystem.get(row.system_key);
+    if (!previous || parseMs(row.observed_at) >= parseMs(previous.observed_at)) {
+      latestBySystem.set(row.system_key, row);
+    }
+  }
+  return Array.from(latestBySystem.values()).sort((left, right) => {
+    const tierDiff = Number((left as { tier?: number }).tier ?? 0) - Number((right as { tier?: number }).tier ?? 0);
+    return tierDiff || left.system_key.localeCompare(right.system_key);
+  });
+}
+
 function readinessOutcomeToWindowStatus(outcome: string | null | undefined): "ready" | "failed" | null {
   if (outcome === "pass" || outcome === "warn") return "ready";
   if (outcome === "fail" || outcome === "no_go") return "failed";
@@ -683,7 +697,7 @@ export async function getVacationOpsSnapshot(): Promise<VacationOpsSnapshot> {
   ]);
 
   const latestSummary = mapRun(latestSummaryRow);
-  const latestChecks = checkRows.map((row) => mapCheck(row, config));
+  const latestChecks = selectLatestVacationCheckRows(checkRows).map((row) => mapCheck(row, config));
   const recentIncidents = incidentRows.map(mapIncident);
   const recentActions = actionRows.map(mapAction);
   const tierRollup = buildVacationTierRollup(latestChecks);

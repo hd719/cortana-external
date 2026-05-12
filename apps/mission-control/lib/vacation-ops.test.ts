@@ -6,6 +6,7 @@ import {
   formatVacationSystemLabel,
   formatVacationWindowLabel,
   sanitizeVacationDetail,
+  selectLatestVacationCheckRows,
 } from "@/lib/vacation-ops";
 
 describe("vacation ops helpers", () => {
@@ -53,6 +54,17 @@ describe("vacation ops helpers", () => {
         },
       },
     });
+  });
+
+  it("keeps the latest readiness check per system", () => {
+    expect(selectLatestVacationCheckRows([
+      { id: 1, system_key: "critical_synthetic_probe", tier: 0, observed_at: "2026-05-12T19:31:20.000Z", status: "red" },
+      { id: 2, system_key: "mission_control", tier: 0, observed_at: "2026-05-12T19:31:30.000Z", status: "green" },
+      { id: 3, system_key: "critical_synthetic_probe", tier: 0, observed_at: "2026-05-12T19:32:00.000Z", status: "green" },
+    ])).toEqual([
+      { id: 3, system_key: "critical_synthetic_probe", tier: 0, observed_at: "2026-05-12T19:32:00.000Z", status: "green" },
+      { id: 2, system_key: "mission_control", tier: 0, observed_at: "2026-05-12T19:31:30.000Z", status: "green" },
+    ]);
   });
 
   it("treats completed windows as inactive display state", () => {
