@@ -32,6 +32,31 @@ export type MarketLabRunSummary = {
   error_message?: string | null;
 };
 
+export type MarketLabCodexRoleReview = {
+  role: "price_action" | "fundamentals" | "news_sentiment" | "risk" | "final_judge";
+  stance: "bullish" | "bearish" | "neutral" | "mixed";
+  confidence: number;
+  summary: string;
+  evidence_used: string[];
+  bull_points: string[];
+  bear_points: string[];
+  missing_evidence: string[];
+};
+
+export type MarketLabCodexStructuredReview = {
+  schema_version?: "market-lab-codex-review/v1";
+  verdict: "trusted" | "uncertain" | "blocked";
+  confidence: number;
+  horizon: "1d" | "5d" | "20d" | "mixed";
+  summary: string;
+  hard_gate_assessment: string;
+  context_quality: string;
+  missing_context: string[];
+  roles: MarketLabCodexRoleReview[];
+  what_would_change_verdict: string[];
+  operator_note: string;
+};
+
 export type MarketLabReview = {
   run_id: string;
   symbol: string;
@@ -46,6 +71,7 @@ export type MarketLabReview = {
     status?: string;
     summary?: string;
     verdict?: "trusted" | "uncertain" | "blocked" | null;
+    structured?: MarketLabCodexStructuredReview | null;
     output_path?: string | null;
     session_id?: string | null;
   } | null;

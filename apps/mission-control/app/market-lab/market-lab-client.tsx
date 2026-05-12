@@ -36,6 +36,31 @@ type Settlement = Record<string, unknown> & {
   return_pct?: number;
 };
 
+type CodexRoleReview = {
+  role: "price_action" | "fundamentals" | "news_sentiment" | "risk" | "final_judge";
+  stance: "bullish" | "bearish" | "neutral" | "mixed";
+  confidence: number;
+  summary: string;
+  evidence_used: string[];
+  bull_points: string[];
+  bear_points: string[];
+  missing_evidence: string[];
+};
+
+type CodexStructuredReview = {
+  schema_version?: "market-lab-codex-review/v1";
+  verdict: "trusted" | "uncertain" | "blocked";
+  confidence: number;
+  horizon: "1d" | "5d" | "20d" | "mixed";
+  summary: string;
+  hard_gate_assessment: string;
+  context_quality: string;
+  missing_context: string[];
+  roles: CodexRoleReview[];
+  what_would_change_verdict: string[];
+  operator_note: string;
+};
+
 type RunDetail = {
   run: RunSummary;
   review: {
@@ -48,6 +73,7 @@ type RunDetail = {
       status?: string;
       summary?: string;
       verdict?: "trusted" | "uncertain" | "blocked" | null;
+      structured?: CodexStructuredReview | null;
       output_path?: string | null;
       session_id?: string | null;
     } | null;
@@ -93,6 +119,18 @@ const verdictMeta = {
 
 const asMoney = (value?: number) =>
   typeof value === "number" ? `$${value.toFixed(2)}` : "n/a";
+
+const asPercent = (value?: number) =>
+  typeof value === "number" ? `${Math.round(value * 100)}%` : "n/a";
+
+const roleLabel = (role: CodexRoleReview["role"]) =>
+  ({
+    price_action: "Price action",
+    fundamentals: "Fundamentals",
+    news_sentiment: "News and sentiment",
+    risk: "Risk",
+    final_judge: "Final judge",
+  })[role];
 
 const formatRunTime = (iso?: string) => {
   if (!iso) return "unknown";
@@ -224,6 +262,7 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
   };
 
   const review = detail?.review;
+  const structuredCodex = review?.codex_review?.structured ?? null;
   const verdict = review?.trust_verdict ?? selectedRun?.trust_verdict ?? "uncertain";
   const meta = verdictMeta[verdict];
   const VerdictIcon = meta.icon;
@@ -373,17 +412,48 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
             <div className="rounded-lg border border-neutral-200 bg-white p-5 shadow-sm">
               <SectionTitle icon={MessageSquareText} title="Codex review" eyebrow="Second opinion" />
               <div className="mt-5 rounded-md border border-neutral-200 bg-neutral-50 px-4 py-3">
-                <div className="text-xs font-medium uppercase tracking-[0.18em] text-neutral-500">Status</div>
-                <div className="mt-1 text-sm font-semibold text-neutral-950">
-                  {review?.codex_review?.verdict ?? review?.codex_review?.status ?? "not requested"}
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <div className="text-xs font-medium uppercase tracking-[0.18em] text-neutral-500">Status</div>
+                    <div className="mt-1 text-sm font-semibold text-neutral-950">
+                      {structuredCodex?.verdict ?? review?.codex_review?.verdict ?? review?.codex_review?.status ?? "not requested"}
+                    </div>
+                  </div>
+                  {structuredCodex ? (
+                    <div className="text-right">
+                      <div className="text-xs font-medium uppercase tracking-[0.18em] text-neutral-500">Confidence</div>
+                      <div className="mt-1 text-sm font-semibold text-neutral-950">
+                        {asPercent(structuredCodex.confidence)} · {structuredCodex.horizon.toUpperCase()}
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
                 <p className="mt-2 text-sm leading-6 text-neutral-600">
-                  {review?.codex_review?.summary ?? "Use Ask Codex when this run needs an operator-readable critique."}
+                  {structuredCodex?.summary ?? review?.codex_review?.summary ?? "Use Ask Codex when this run needs an operator-readable critique."}
                 </p>
                 {review?.codex_review?.session_id ? (
                   <div className="mt-3 truncate text-xs text-neutral-500">session: {review.codex_review.session_id}</div>
                 ) : null}
               </div>
+              {structuredCodex ? (
+                <div className="mt-4 space-y-3">
+                  <div className="rounded-md border border-neutral-200 px-4 py-3">
+                    <div className="text-xs font-medium uppercase tracking-[0.18em] text-neutral-500">Context quality</div>
+                    <p className="mt-1 text-sm leading-6 text-neutral-700">{structuredCodex.context_quality}</p>
+                    {structuredCodex.missing_context.length ? (
+                      <PillList label="Missing" items={structuredCodex.missing_context} />
+                    ) : null}
+                  </div>
+                  <div className="grid gap-2">
+                    {structuredCodex.roles.map((role) => (
+                      <CodexRoleCard key={role.role} role={role} />
+                    ))}
+                  </div>
+                  {structuredCodex.what_would_change_verdict.length ? (
+                    <PillList label="Would change verdict" items={structuredCodex.what_would_change_verdict} />
+                  ) : null}
+                </div>
+              ) : null}
             </div>
           </section>
 
@@ -507,6 +577,51 @@ function InsightList({ title, items, empty }: { title: string; items: string[]; 
           ))}
         </ul>
       )}
+    </div>
+  );
+}
+
+function CodexRoleCard({ role }: { role: CodexRoleReview }) {
+  return (
+    <div className="rounded-md border border-neutral-200 px-4 py-3">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="text-sm font-semibold text-neutral-950">{roleLabel(role.role)}</div>
+          <p className="mt-1 text-sm leading-6 text-neutral-600">{role.summary}</p>
+        </div>
+        <Badge variant="outline" className="rounded-full border-neutral-300 bg-white text-[10px] uppercase tracking-wide text-neutral-700">
+          {role.stance} · {asPercent(role.confidence)}
+        </Badge>
+      </div>
+      {role.bull_points.length || role.bear_points.length || role.missing_evidence.length ? (
+        <div className="mt-3 grid gap-2 text-xs text-neutral-500 md:grid-cols-3">
+          <MiniList label="Bull" items={role.bull_points} empty="none" />
+          <MiniList label="Bear" items={role.bear_points} empty="none" />
+          <MiniList label="Missing" items={role.missing_evidence} empty="none" />
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function MiniList({ label, items, empty }: { label: string; items: string[]; empty: string }) {
+  return (
+    <div>
+      <div className="font-medium uppercase tracking-[0.14em] text-neutral-400">{label}</div>
+      <div className="mt-1">{items.length ? items.join("; ") : empty}</div>
+    </div>
+  );
+}
+
+function PillList({ label, items }: { label: string; items: string[] }) {
+  return (
+    <div className="mt-3 flex flex-wrap items-center gap-2">
+      <span className="text-xs font-medium uppercase tracking-[0.16em] text-neutral-500">{label}</span>
+      {items.map((item) => (
+        <Badge key={item} variant="outline" className="rounded-full border-neutral-300 bg-white text-[10px] uppercase tracking-wide text-neutral-700">
+          {item}
+        </Badge>
+      ))}
     </div>
   );
 }
