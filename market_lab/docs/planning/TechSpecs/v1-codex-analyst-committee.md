@@ -258,8 +258,13 @@ Manual:
 
 ---
 
-## Open Questions
+## Decisions
 
-1. Should V1 include `news_sentiment` as a role even while source evidence is optional/missing? Recommendation: yes, so Codex explicitly says what is missing.
-2. Should confidence be allowed for `blocked` verdicts? Recommendation: yes; confidence then means confidence in the block.
-3. Should final judge be both a role and top-level verdict? Recommendation: yes; top-level fields are for UI/query, final judge role is for narrative.
+1. V1 includes `news_sentiment` as a required role even while source evidence is optional or missing.
+   Rationale: Codex should explicitly report missing news/sentiment instead of silently ignoring that lens.
+2. `confidence` is required for every verdict, including `blocked`.
+   Rationale: for `blocked`, confidence means confidence in the block, not confidence in a trade idea.
+3. `final_judge` exists both as a role and as top-level verdict fields.
+   Rationale: top-level fields make UI/querying simple; the `final_judge` role keeps the narrative and evidence trail.
+4. Codex review stays manual by default in V1.
+   Rationale: automatic review should wait until packet quality and settlement performance justify the context cost.
