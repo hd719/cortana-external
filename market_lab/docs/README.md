@@ -24,7 +24,6 @@ Completed:
 - SQLite run index and filesystem artifacts under `.cache/market_lab/`
 - market-data service client and deterministic freshness/evidence checks
 - Trust Verdict logic: `trusted`, `uncertain`, `blocked`
-- TradingAgents adapter boundary with fake-mode smoke support
 - Codex-assisted review packets and Mission Control `Ask Codex` handoff
 - 1D/5D/20D settlement windows and SPY-relative scoring
 - first-class CLI commands plus `pnpm market-lab -- ...`

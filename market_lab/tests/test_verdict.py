@@ -15,15 +15,15 @@ def test_blocker_forces_blocked_even_when_tradingagents_ok():
     assert reasons == ["price_data_stale"]
 
 
-def test_skipped_tradingagents_makes_review_uncertain():
+def test_skipped_tradingagents_does_not_change_deterministic_verdict():
     verdict, reasons = decide_trust_verdict(
         [],
         TradingAgentsReview(status="skipped", summary="not configured"),
         OptionalEvidence(history_status="available", fundamentals_status="available", news_status="available", sentiment_status="available"),
     )
 
-    assert verdict == TrustVerdict.UNCERTAIN
-    assert "tradingagents_skipped" in reasons
+    assert verdict == TrustVerdict.TRUSTED
+    assert reasons == ["all_required_evidence_passed"]
 
 
 def test_all_required_evidence_can_be_trusted():

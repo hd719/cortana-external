@@ -13,9 +13,6 @@ def decide_trust_verdict(
     if blockers:
         return TrustVerdict.BLOCKED, [check.code for check in blockers]
 
-    if tradingagents.status == "failed":
-        return TrustVerdict.BLOCKED, ["tradingagents_failed"]
-
     reasons: list[str] = []
     warnings = [check.code for check in checks if check.severity == CheckSeverity.WARNING]
     reasons.extend(warnings)
@@ -31,9 +28,6 @@ def decide_trust_verdict(
         if status != "available"
     ]
     reasons.extend(f"{name}_optional_missing" for name in missing_optional)
-
-    if tradingagents.status == "skipped":
-        reasons.append("tradingagents_skipped")
 
     if reasons:
         return TrustVerdict.UNCERTAIN, sorted(set(reasons))

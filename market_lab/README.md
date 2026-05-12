@@ -51,7 +51,6 @@ Default cache:
     events.jsonl
     codex-review-packet.md
     codex-review.md
-    tradingagents.md
     logs.txt
 ```
 
@@ -59,9 +58,6 @@ Default cache:
 
 - `MARKET_LAB_CACHE_DIR`: override `.cache/market_lab`
 - `MARKET_DATA_SERVICE_BASE_URL`: defaults to `http://127.0.0.1:3033`
-- `TRADINGAGENTS_REPO_PATH`: defaults to `/Users/hd/Developer/TradingAgents`
-- `MARKET_LAB_FAKE_TRADINGAGENTS=1`: use deterministic fake TradingAgents output for smoke tests
-- `MARKET_LAB_REQUIRE_TRADINGAGENTS=1`: block when TradingAgents cannot run
 
 ## Codex-Assisted Reviews
 
@@ -80,7 +76,6 @@ Codex writes `codex-review.md`, then runs the attach command so Mission Control 
 - `storage.py`: SQLite index and artifact files
 - `market_data.py`: local market-data service client
 - `checks.py`: deterministic freshness and evidence checks
-- `tradingagents_adapter.py`: TradingAgents second-opinion lane
 - `codex_review.py`: Codex review packet and prompt builder
 - `verdict.py`: trusted / uncertain / blocked decision
 - `runner.py`: one-symbol review orchestration

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Activity, FlaskConical, MessageSquareText, Play, RefreshCw, Terminal } from "lucide-react";
+import { Activity, FlaskConical, MessageSquareText, Play, RefreshCw, ShieldCheck } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -24,13 +24,11 @@ type RunDetail = {
     interpretation?: { summary?: string; bullish_points?: string[]; bearish_points?: string[] };
     price_facts?: { price?: number; timestamp?: string; source?: string; price_basis?: string } | null;
     spy_facts?: { price?: number; timestamp?: string; source?: string; price_basis?: string } | null;
-    tradingagents?: { status?: string; summary?: string };
     codex_review?: { status?: string; summary?: string; output_path?: string | null; session_id?: string | null } | null;
     artifact_paths?: {
       review?: string;
       events?: string;
       logs?: string;
-      tradingagents?: string | null;
       codex_packet?: string | null;
       codex_review?: string | null;
     };
@@ -276,18 +274,11 @@ export function MarketLabClient() {
             <Card className="rounded-lg">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-base">
-                  <Terminal className="h-4 w-4" />
-                  Checks and settlement
+                  <ShieldCheck className="h-4 w-4" />
+                  Codex review and settlement
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
-                {review?.tradingagents ? (
-                  <div className="rounded-md border px-3 py-2 text-sm">
-                    <div className="text-xs uppercase text-muted-foreground">TradingAgents</div>
-                    <div className="font-medium">{review.tradingagents.status}</div>
-                    <div className="text-muted-foreground">{review.tradingagents.summary}</div>
-                  </div>
-                ) : null}
                 {review?.codex_review ? (
                   <div className="rounded-md border px-3 py-2 text-sm">
                     <div className="text-xs uppercase text-muted-foreground">Codex Review</div>
@@ -297,7 +288,13 @@ export function MarketLabClient() {
                       <div className="mt-1 text-xs text-muted-foreground">session: {review.codex_review.session_id}</div>
                     ) : null}
                   </div>
-                ) : null}
+                ) : (
+                  <div className="rounded-md border px-3 py-2 text-sm">
+                    <div className="text-xs uppercase text-muted-foreground">Codex Review</div>
+                    <div className="font-medium">not requested</div>
+                    <div className="text-muted-foreground">Use Ask Codex when this run needs a second-opinion review.</div>
+                  </div>
+                )}
                 <div className="space-y-2">
                   {(review?.checks ?? []).map((check) => (
                     <div key={check.code} className="rounded-md border px-3 py-2 text-sm">
@@ -329,7 +326,6 @@ export function MarketLabClient() {
               <div className="truncate">review: {review?.artifact_paths?.review ?? selectedRun?.run_id ?? "n/a"}</div>
               <div className="truncate">events: {review?.artifact_paths?.events ?? "n/a"}</div>
               <div className="truncate">logs: {review?.artifact_paths?.logs ?? "n/a"}</div>
-              <div className="truncate">tradingagents: {review?.artifact_paths?.tradingagents ?? "n/a"}</div>
               <div className="truncate">codex packet: {review?.artifact_paths?.codex_packet ?? "n/a"}</div>
               <div className="truncate">codex review: {review?.artifact_paths?.codex_review ?? "n/a"}</div>
             </CardContent>

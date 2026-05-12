@@ -22,13 +22,11 @@ const detail = {
     interpretation: { summary: "Blocked because price data is stale." },
     price_facts: { price: 123.45, source: "fake", price_basis: "live" },
     spy_facts: { price: 500.0, source: "fake" },
-    tradingagents: { status: "skipped", summary: "Skipped due to blocker." },
     codex_review: { status: "attached", summary: "Codex says keep this blocked.", session_id: "session-1" },
     artifact_paths: {
       review: "/tmp/review.json",
       events: "/tmp/events.jsonl",
       logs: "/tmp/logs.txt",
-      tradingagents: "/tmp/tradingagents.md",
       codex_packet: "/tmp/codex-review-packet.md",
       codex_review: "/tmp/codex-review.md",
     },
@@ -61,14 +59,13 @@ describe("MarketLabClient", () => {
     }));
   });
 
-  it("renders blocked verdict, timeline, tradingagents summary, and artifact paths", async () => {
+  it("renders blocked verdict, timeline, Codex summary, and artifact paths", async () => {
     render(<MarketLabClient />);
 
     await screen.findByText("Blocked because price data is stale.");
 
     expect(screen.getAllByText("blocked").length).toBeGreaterThan(0);
     expect(screen.getByText("Run done")).toBeInTheDocument();
-    expect(screen.getByText("Skipped due to blocker.")).toBeInTheDocument();
     expect(screen.getByText("Codex says keep this blocked.")).toBeInTheDocument();
     expect(screen.getByText(/review: \/tmp\/review\.json/)).toBeInTheDocument();
     expect(screen.getByText(/codex packet: \/tmp\/codex-review-packet\.md/)).toBeInTheDocument();

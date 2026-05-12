@@ -19,7 +19,6 @@ from .models import (
 )
 from .settlement import build_pending_windows
 from .storage import MarketLabStore
-from .tradingagents_adapter import TradingAgentsAdapter
 from .verdict import decide_trust_verdict
 
 
@@ -29,11 +28,9 @@ class ReviewRunner:
         *,
         store: MarketLabStore | None = None,
         market_data: MarketDataClient | None = None,
-        tradingagents: TradingAgentsAdapter | None = None,
     ):
         self.store = store or MarketLabStore()
         self.market_data = market_data or MarketDataClient()
-        self.tradingagents = tradingagents or TradingAgentsAdapter()
 
     def run(self, symbol: str) -> ReviewArtifact:
         run = self.store.create_run(symbol)
@@ -47,7 +44,10 @@ class ReviewRunner:
         spy_facts: PriceFacts | None = None
         optional_evidence = OptionalEvidence()
         checks: list[CheckResult] = []
-        trading_review = TradingAgentsReview(status="skipped", summary="TradingAgents was not run.")
+        trading_review = TradingAgentsReview(
+            status="skipped",
+            summary="Codex-assisted review is available from Mission Control.",
+        )
 
         try:
             price_facts = self.market_data.get_quote(run.symbol)
@@ -61,14 +61,6 @@ class ReviewRunner:
             checks.append(CheckResult(code="market_data_error", severity=CheckSeverity.BLOCKER, message=message))
             self.store.append_event(run.run_id, "market_data_error", message)
             self.store.append_log(run.run_id, message)
-
-        has_blocker = any(check.severity == CheckSeverity.BLOCKER for check in checks)
-        if not has_blocker:
-            self.store.append_event(run.run_id, "tradingagents_started", "Starting TradingAgents second-opinion review.")
-            trading_review = self.tradingagents.review(run.symbol, run_dir=run_dir)
-            self.store.append_event(run.run_id, "tradingagents_done", trading_review.summary)
-        else:
-            self.store.append_event(run.run_id, "tradingagents_skipped", "Skipped TradingAgents because hard blockers exist.")
 
         verdict, reasons = decide_trust_verdict(checks, trading_review, optional_evidence)
         now = datetime.now(UTC)
@@ -110,6 +102,7 @@ class ReviewRunner:
         )
         self.store.write_review(artifact)
         self.store.write_codex_packet(run.run_id, build_codex_packet(artifact))
+        self.store.append_event(run.run_id, "codex_packet_written", "Codex review packet written.")
         for window in settlements:
             self.store.upsert_settlement(
                 run.run_id,

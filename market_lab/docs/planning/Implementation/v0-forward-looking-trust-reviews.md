@@ -37,9 +37,9 @@ Completion snapshot:
 - `market_lab.cli` supports `run`, `list`, `show`, `events`, `settle`, and `settle-due`.
 - `pnpm market-lab -- ...` delegates to the canonical `uv run --project market_lab python -m market_lab.cli ...` command.
 - Mission Control invokes the Python CLI with an argument array, not shell string interpolation.
-- Mission Control `/market-lab` renders recent runs, verdicts, facts, timeline, TradingAgents status, Codex review status, checks, settlements, and artifact paths.
+- Mission Control `/market-lab` renders recent runs, verdicts, facts, timeline, Codex review status, checks, settlements, and artifact paths.
 - Every run writes a `codex-review-packet.md`; Mission Control can launch the existing Codex session flow with `Ask Codex`.
-- TradingAgents remains an adapter boundary with fake-mode smoke support; real API-key execution is not required for the Codex-assisted path.
+- TradingAgents is not part of the default run path; Codex is the visible second-opinion lane.
 - V0 remains review-only: no broker, paper-trading, Telegram, or old-backtester execution path.
 
 ---
