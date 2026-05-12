@@ -351,10 +351,10 @@ function asObject(value: unknown): JsonObject {
   return value && typeof value === "object" && !Array.isArray(value) ? value as JsonObject : {};
 }
 
-const RETIRED_VACATION_DETAIL_TERMS = ["alpaca", "fred", "backtester"];
+const REMOVED_VACATION_DETAIL_TERMS = ["alpaca", "fred", "backtester"];
 
-function isRetiredVacationDetailTerm(value: unknown): boolean {
-  return typeof value === "string" && RETIRED_VACATION_DETAIL_TERMS.some((term) => value.toLowerCase().includes(term));
+function isRemovedVacationDetailTerm(value: unknown): boolean {
+  return typeof value === "string" && REMOVED_VACATION_DETAIL_TERMS.some((term) => value.toLowerCase().includes(term));
 }
 
 function sanitizeVacationValue(value: unknown): unknown {
@@ -362,7 +362,7 @@ function sanitizeVacationValue(value: unknown): unknown {
     return value
       .filter((item) => {
         const object = asObject(item);
-        return !isRetiredVacationDetailTerm(object.key) && !isRetiredVacationDetailTerm(object.label);
+        return !isRemovedVacationDetailTerm(object.key) && !isRemovedVacationDetailTerm(object.label);
       })
       .map(sanitizeVacationValue);
   }
@@ -372,7 +372,7 @@ function sanitizeVacationValue(value: unknown): unknown {
 
   const sanitized: JsonObject = {};
   for (const [key, currentValue] of Object.entries(object)) {
-    if (isRetiredVacationDetailTerm(key)) continue;
+    if (isRemovedVacationDetailTerm(key)) continue;
     sanitized[key] = sanitizeVacationValue(currentValue);
   }
   return sanitized;

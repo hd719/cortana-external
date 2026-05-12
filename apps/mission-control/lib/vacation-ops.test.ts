@@ -20,7 +20,7 @@ describe("vacation ops helpers", () => {
     expect(formatVacationWindowLabel("custom-label")).toBe("custom-label");
   });
 
-  it("removes retired trading providers from vacation readiness details", () => {
+  it("removes deleted trading providers from vacation readiness details", () => {
     expect(sanitizeVacationDetail("financial_external_services", {
       summary: "Alpaca, CoinMarketCap, and FRED are healthy or configured.",
       services: [
