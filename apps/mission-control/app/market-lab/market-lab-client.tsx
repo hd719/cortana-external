@@ -163,6 +163,7 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
   const [detail, setDetail] = useState<RunDetail | null>(null);
   const [events, setEvents] = useState<Array<Record<string, unknown>>>([]);
   const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [codexStatus, setCodexStatus] = useState<string | null>(null);
 
@@ -175,6 +176,21 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
     const data = await api<{ runs: RunSummary[] }>("/api/market-lab/runs?limit=25");
     setRuns(data.runs);
     setSelectedRunId((current) => current ?? data.runs[0]?.run_id ?? null);
+  };
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    setError(null);
+    try {
+      await loadRuns();
+      if (selectedRunId) {
+        await loadRunDetail(selectedRunId);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to refresh");
+    } finally {
+      setRefreshing(false);
+    }
   };
 
   const loadRunDetail = async (runId: string) => {
@@ -295,8 +311,14 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
               <Play className="h-3.5 w-3.5" />
               Run
             </Button>
-            <Button variant="outline" onClick={() => loadRuns()} disabled={loading} size="sm" className="h-8 gap-1.5 px-3 font-mono text-xs uppercase tracking-wider">
-              <RefreshCw className="h-3.5 w-3.5" />
+            <Button
+              variant="outline"
+              onClick={handleRefresh}
+              disabled={refreshing || loading}
+              size="sm"
+              className="h-8 gap-1.5 px-3 font-mono text-xs uppercase tracking-wider"
+            >
+              <RefreshCw className={cn("h-3.5 w-3.5", refreshing && "animate-spin")} />
               Refresh
             </Button>
           </div>
@@ -423,105 +445,103 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
             </div>
           </section>
 
-          {/* Two-column: evidence (left, dominant) + side stack (right) */}
-          <section className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_340px]">
-            <div className="space-y-3">
-              <Panel icon={CheckCircle2} eyebrow="Trust inputs" title="Evidence board">
-                {checks.length === 0 ? (
-                  <p className="text-xs text-muted-foreground">No checks loaded for this run yet.</p>
-                ) : (
-                  <ul className="space-y-1">
-                    {checks.map((check) => {
-                      const sev = severityChip(check.severity, check.code);
-                      return (
-                        <li
-                          key={check.code}
-                          className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 rounded-md border border-border/60 bg-muted/20 px-2.5 py-1.5"
-                        >
-                          <span className={cn("rounded px-1.5 py-px text-[9px] font-bold uppercase tracking-wider", sev.cls)}>
-                            {sev.label}
-                          </span>
-                          <div className="min-w-0">
-                            <div className="truncate text-xs font-semibold">{check.code ?? "check"}</div>
-                            <div className="truncate font-sans text-xs text-muted-foreground">{check.message ?? ""}</div>
-                          </div>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                )}
-                <div className="mt-3 grid gap-2 md:grid-cols-2">
-                  <InsightList title="Bullish" items={review?.interpretation?.bullish_points ?? []} empty="No bullish points." />
-                  <InsightList title="Bearish" items={review?.interpretation?.bearish_points ?? []} empty="No bearish points." />
-                </div>
-              </Panel>
-            </div>
-
-            <div className="space-y-3">
-              <Panel icon={MessageSquareText} eyebrow="Second opinion" title="Codex review" dense>
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-[10px] uppercase tracking-widest text-muted-foreground">Status</span>
-                    <span className="text-xs font-semibold">{codexState}</span>
-                  </div>
-                  <p className="font-sans text-xs leading-5 text-muted-foreground">
-                    {review?.codex_review?.summary ?? "Use Ask Codex to request an operator-readable critique."}
-                  </p>
-                  {review?.codex_review?.session_id ? (
-                    <div className="truncate text-[10px] text-muted-foreground/80">
-                      session: {review.codex_review.session_id}
-                    </div>
-                  ) : null}
-                </div>
-              </Panel>
-
-              <Panel icon={ArrowUpRight} eyebrow="Forward score" title="Settlement" dense>
-                <ul className="space-y-1">
-                  {settlementWindows.map((settlement) => (
+          {/* Evidence — full width */}
+          <Panel icon={CheckCircle2} eyebrow="Trust inputs" title="Evidence board">
+            {checks.length === 0 ? (
+              <p className="text-xs text-muted-foreground">No checks loaded for this run yet.</p>
+            ) : (
+              <ul className="grid gap-1 lg:grid-cols-2">
+                {checks.map((check) => {
+                  const sev = severityChip(check.severity, check.code);
+                  return (
                     <li
-                      key={String(settlement.window)}
-                      className="grid grid-cols-[40px_minmax(0,1fr)_auto] items-center gap-2 rounded-md border border-border/60 bg-muted/20 px-2.5 py-1.5"
+                      key={check.code}
+                      className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-2 rounded-md border border-border/60 bg-muted/20 px-2.5 py-1.5"
                     >
-                      <span className="text-xs font-bold uppercase">{String(settlement.window)}</span>
-                      <span className="text-[10px] uppercase tracking-widest text-muted-foreground">
-                        {settlement.return_pct != null
-                          ? `${Number(settlement.return_pct).toFixed(2)}% · vs SPY ${
-                              settlement.alpha_vs_spy_pct != null
-                                ? `${Number(settlement.alpha_vs_spy_pct).toFixed(2)}%`
-                                : "—"
-                            }`
-                          : "Return: pending · vs SPY: pending"}
+                      <span className={cn("rounded px-1.5 py-px text-[9px] font-bold uppercase tracking-wider", sev.cls)}>
+                        {sev.label}
                       </span>
-                      <span className="rounded border border-border/60 px-1.5 py-px text-[9px] uppercase tracking-wider text-muted-foreground">
-                        {String(settlement.status ?? "pending")}
-                      </span>
+                      <div className="min-w-0">
+                        <div className="truncate text-xs font-semibold">{check.code ?? "check"}</div>
+                        <div className="truncate font-sans text-xs text-muted-foreground">{check.message ?? ""}</div>
+                      </div>
                     </li>
-                  ))}
-                </ul>
-              </Panel>
-
-              <Panel icon={Activity} eyebrow="Run path" title="Timeline" dense>
-                {events.length === 0 ? (
-                  <p className="text-xs text-muted-foreground">No events loaded.</p>
-                ) : (
-                  <ol className="space-y-1">
-                    {events.map((event, index) => (
-                      <li
-                        key={`${String(event.event ?? "")}-${index}`}
-                        className="grid grid-cols-[12px_minmax(0,1fr)] items-start gap-2"
-                      >
-                        <span className="mt-1.5 inline-block h-1.5 w-1.5 rounded-full bg-foreground/70" />
-                        <div className="min-w-0">
-                          <div className="truncate text-xs font-semibold">{String(event.event ?? "event")}</div>
-                          <div className="truncate font-sans text-[11px] text-muted-foreground">{String(event.message ?? "")}</div>
-                        </div>
-                      </li>
-                    ))}
-                  </ol>
-                )}
-              </Panel>
+                  );
+                })}
+              </ul>
+            )}
+            <div className="mt-3 grid gap-2 md:grid-cols-2">
+              <InsightList title="Bullish" items={review?.interpretation?.bullish_points ?? []} empty="No bullish points." />
+              <InsightList title="Bearish" items={review?.interpretation?.bearish_points ?? []} empty="No bearish points." />
             </div>
+          </Panel>
+
+          {/* Codex + Settlement — paired row, h-full so bottoms align */}
+          <section className="grid gap-3 lg:grid-cols-2">
+            <Panel icon={MessageSquareText} eyebrow="Second opinion" title="Codex review" dense className="h-full">
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[10px] uppercase tracking-widest text-muted-foreground">Status</span>
+                  <span className="text-xs font-semibold">{codexState}</span>
+                </div>
+                <p className="font-sans text-xs leading-5 text-muted-foreground">
+                  {review?.codex_review?.summary ?? "Use Ask Codex to request an operator-readable critique."}
+                </p>
+                {review?.codex_review?.session_id ? (
+                  <div className="truncate text-[10px] text-muted-foreground/80">
+                    session: {review.codex_review.session_id}
+                  </div>
+                ) : null}
+              </div>
+            </Panel>
+
+            <Panel icon={ArrowUpRight} eyebrow="Forward score" title="Settlement" dense className="h-full">
+              <ul className="space-y-1">
+                {settlementWindows.map((settlement) => (
+                  <li
+                    key={String(settlement.window)}
+                    className="grid grid-cols-[40px_minmax(0,1fr)_auto] items-center gap-2 rounded-md border border-border/60 bg-muted/20 px-2.5 py-1.5"
+                  >
+                    <span className="text-xs font-bold uppercase">{String(settlement.window)}</span>
+                    <span className="text-[10px] uppercase tracking-widest text-muted-foreground">
+                      {settlement.return_pct != null
+                        ? `${Number(settlement.return_pct).toFixed(2)}% · vs SPY ${
+                            settlement.alpha_vs_spy_pct != null
+                              ? `${Number(settlement.alpha_vs_spy_pct).toFixed(2)}%`
+                              : "—"
+                          }`
+                        : "Return: pending · vs SPY: pending"}
+                    </span>
+                    <span className="rounded border border-border/60 px-1.5 py-px text-[9px] uppercase tracking-wider text-muted-foreground">
+                      {String(settlement.status ?? "pending")}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </Panel>
           </section>
+
+          {/* Timeline — full width, events flow as a horizontal grid */}
+          <Panel icon={Activity} eyebrow="Run path" title="Timeline" dense>
+            {events.length === 0 ? (
+              <p className="text-xs text-muted-foreground">No events loaded.</p>
+            ) : (
+              <ol className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
+                {events.map((event, index) => (
+                  <li
+                    key={`${String(event.event ?? "")}-${index}`}
+                    className="grid grid-cols-[12px_minmax(0,1fr)] items-start gap-2 rounded-md border border-border/60 bg-muted/20 px-2.5 py-1.5"
+                  >
+                    <span className="mt-1.5 inline-block h-1.5 w-1.5 rounded-full bg-foreground/70" />
+                    <div className="min-w-0">
+                      <div className="truncate text-xs font-semibold">{String(event.event ?? "event")}</div>
+                      <div className="truncate font-sans text-[11px] text-muted-foreground">{String(event.message ?? "")}</div>
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            )}
+          </Panel>
 
           <details className="group rounded-lg border border-border/70 bg-card/60 px-4 py-3">
             <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
@@ -555,15 +575,17 @@ function Panel({
   title,
   children,
   dense,
+  className,
 }: {
   icon: LucideIcon;
   eyebrow: string;
   title: string;
   children: React.ReactNode;
   dense?: boolean;
+  className?: string;
 }) {
   return (
-    <section className="rounded-lg border border-border/70 bg-card/60">
+    <section className={cn("rounded-lg border border-border/70 bg-card/60", className)}>
       <header className="flex items-center gap-2 border-b border-border/50 px-3 py-2">
         <Icon className="h-3.5 w-3.5 text-muted-foreground" />
         <div className="leading-tight">
