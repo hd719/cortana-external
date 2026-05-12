@@ -340,7 +340,7 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
             <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Run tape</span>
             <span className="text-[10px] uppercase tracking-widest text-muted-foreground">{runs.length}</span>
           </div>
-          <div className="max-h-[520px] min-h-0 overflow-y-auto p-1 xl:max-h-[calc(100svh-180px)]">
+          <div className="max-h-[520px] min-h-0 overflow-y-auto p-1 xl:max-h-[min(calc(100svh-180px),720px)]">
             {runs.length === 0 ? (
               <p className="px-2 py-6 text-center text-xs text-muted-foreground">No runs yet.</p>
             ) : null}
@@ -379,7 +379,7 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
         </aside>
 
         {/* Decision area */}
-        <div className="min-w-0 space-y-3 self-start">
+        <div className="flex min-w-0 flex-col gap-3">
           {/* Hero: verdict + price ribbon */}
           <section className={cn("overflow-hidden rounded-lg border bg-card/70", meta.ribbon)}>
             <div className="flex flex-col gap-3 px-4 py-3 md:flex-row md:items-start md:justify-between">
@@ -522,7 +522,7 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
           </section>
 
           {/* Timeline — full width, events flow as a horizontal grid */}
-          <Panel icon={Activity} eyebrow="Run path" title="Timeline" dense>
+          <Panel icon={Activity} eyebrow="Run path" title="Timeline" dense className="flex-1">
             {events.length === 0 ? (
               <p className="text-xs text-muted-foreground">No events loaded.</p>
             ) : (
