@@ -5,7 +5,7 @@
 
 ## Development Overview
 
-V1 upgrades the existing Codex-assisted review lane from markdown summary to structured analyst committee output. The Python package remains the source of truth for artifacts. Mission Control continues to trigger Codex through the existing session bridge and renders the parsed artifact.
+V1 upgrades the existing Codex-assisted review lane from markdown summary to structured analyst committee output. It also makes the evidence context explicit so Codex is judged by what it used, what it missed, and how its verdict later settles. The Python package remains the source of truth for artifacts. Mission Control continues to trigger Codex through the existing session bridge and renders the parsed artifact.
 
 Key current files:
 
@@ -31,7 +31,9 @@ Add:
 class CodexRoleReview(Model):
     role: Literal["price_action", "fundamentals", "news_sentiment", "risk", "final_judge"]
     stance: Literal["bullish", "bearish", "neutral", "mixed"]
+    confidence: float = Field(ge=0, le=1)
     summary: str
+    evidence_used: list[str] = Field(default_factory=list)
     bull_points: list[str] = Field(default_factory=list)
     bear_points: list[str] = Field(default_factory=list)
     missing_evidence: list[str] = Field(default_factory=list)
@@ -42,6 +44,8 @@ class CodexStructuredReview(Model):
     horizon: Literal["1d", "5d", "20d", "mixed"]
     summary: str
     hard_gate_assessment: str
+    context_quality: str
+    missing_context: list[str] = Field(default_factory=list)
     roles: list[CodexRoleReview] = Field(default_factory=list)
     what_would_change_verdict: list[str] = Field(default_factory=list)
     operator_note: str
@@ -77,11 +81,15 @@ Schema version can remain `market-lab-review/v0` for the full review artifact if
   "horizon": "5d",
   "summary": "...",
   "hard_gate_assessment": "...",
+  "context_quality": "Price and SPY reference are fresh; news and sentiment are missing optional inputs.",
+  "missing_context": ["news", "sentiment"],
   "roles": [
     {
       "role": "price_action",
       "stance": "bullish",
+      "confidence": 0.68,
       "summary": "...",
+      "evidence_used": ["symbol_price", "spy_reference", "market_hours_state"],
       "bull_points": ["..."],
       "bear_points": ["..."],
       "missing_evidence": []
@@ -101,6 +109,26 @@ The markdown can include readable prose, but the JSON block is the UI contract.
 
 ---
 
+## Context Packet Contract
+
+Update `market_lab/market_lab/codex_review.py` so the packet clearly separates facts from opinion.
+
+Required context sections:
+
+- current symbol price, source, and timestamp/basis
+- SPY reference price, source, and timestamp/basis
+- market-hours state and off-hours/latest-price caveat
+- hard gate status and deterministic Market Lab verdict
+- recent movement or simple momentum context when available
+- risk flags or volatility caveats when available
+- missing optional evidence
+- prior same-symbol Market Lab runs when available
+- prior same-symbol settlement outcomes when available
+
+The packet should state that Codex must not infer unavailable facts. If news, fundamentals, or sentiment are missing, Codex should mark them as missing instead of pretending to know them.
+
+---
+
 ## Behavior Changes
 
 ### Codex Packet
@@ -109,8 +137,11 @@ Update `market_lab/market_lab/codex_review.py`:
 
 - Include explicit role instructions.
 - Require the fenced JSON block.
+- Require role-level `confidence` and `evidence_used`.
+- Include the context packet contract above.
 - State that optional missing news/sentiment is not by itself a hard blocker.
 - State that deterministic blocker checks must force `blocked`.
+- State that Codex is not trusted because it sounds persuasive; trust requires evidence, admitted gaps, and later settlement performance.
 - Keep “review-only, no trade placement” language.
 
 ### Attach Flow
@@ -122,6 +153,7 @@ Update `market_lab/market_lab/storage.py`:
 - Store it under `artifact.codex_review.structured`.
 - Continue storing markdown `summary`, `verdict`, `output_path`, and `session_id`.
 - If JSON parsing fails, attach markdown as today but set `structured` to null and append a warning event.
+- Preserve `missing_context`, `context_quality`, role confidence, and role evidence fields for later settlement analytics.
 
 ### UI
 
@@ -129,7 +161,9 @@ Update `apps/mission-control/app/market-lab/market-lab-client.tsx`:
 
 - Add structured Codex type fields.
 - Render Codex final judge: verdict, confidence, horizon.
+- Render context quality and missing context.
 - Render role cards for price action, fundamentals, news/sentiment, risk, final judge.
+- Render role confidence and evidence used.
 - Keep raw/debug paths collapsed by default.
 - Preserve current fallback for older runs without structured data.
 
@@ -164,12 +198,14 @@ Python:
 - `market_lab/tests/test_codex_review.py`
   - packet contains required role names
   - packet contains fenced JSON schema requirement
+  - packet contains context sections and the “do not infer missing facts” instruction
   - packet includes hard-gate guidance
 
 Mission Control:
 
 - `apps/mission-control/app/market-lab/market-lab-client.test.tsx`
   - renders structured Codex verdict/confidence/horizon
+  - renders context quality and missing context
   - renders role cards
   - falls back for older markdown-only reviews
 - `apps/mission-control/lib/market-lab.test.ts`
@@ -192,6 +228,7 @@ Manual:
 | Codex emits invalid JSON | Keep markdown fallback and show “structured parse missing” warning. |
 | UI becomes too dense | Render final judge first; collapse raw/debug content. |
 | Codex over-trusts thin data | Deterministic blockers remain authoritative; optional gaps remain visible. |
+| Codex invents missing facts | Packet explicitly forbids inference; schema requires `missing_context` and `evidence_used`. |
 | Schema changes break older runs | Treat `structured` as optional and maintain fallback rendering. |
 
 ---
@@ -201,4 +238,3 @@ Manual:
 1. Should V1 include `news_sentiment` as a role even while source evidence is optional/missing? Recommendation: yes, so Codex explicitly says what is missing.
 2. Should confidence be allowed for `blocked` verdicts? Recommendation: yes; confidence then means confidence in the block.
 3. Should final judge be both a role and top-level verdict? Recommendation: yes; top-level fields are for UI/query, final judge role is for narrative.
-

@@ -8,8 +8,8 @@
 
 | Vertical | Dependencies | Outcome |
 |----------|--------------|---------|
-| V1 - Structured Codex Models | V0 Market Lab | Python can validate role-based Codex output. |
-| V2 - Packet And Parser | V1 | Codex is instructed to write parseable committee JSON. |
+| V1 - Structured Codex Models | V0 Market Lab | Python can validate role-based Codex output with evidence and context fields. |
+| V2 - Context Packet And Parser | V1 | Codex receives richer bounded context and writes parseable committee JSON. |
 | V3 - Artifact Attach Upgrade | V1, V2 | `review.json` stores structured Codex review data. |
 | V4 - Mission Control Rendering | V3 | UI shows analyst-role panels. |
 | V5 - QA And E2E Smoke | V1-V4 | A real run can be reviewed, attached, rendered, and built. |
@@ -20,7 +20,7 @@
 
 ```text
 Commit 1: Structured Python models and parser tests
-Commit 2: Codex packet schema instructions and attach flow
+Commit 2: Codex context packet, schema instructions, and attach flow
 Commit 3: Mission Control type/UI rendering
 Commit 4: QA docs/tests/build cleanup
 ```
@@ -42,6 +42,8 @@ Tasks:
 
 - Add `CodexRoleReview`.
 - Add `CodexStructuredReview`.
+- Add role-level `confidence` and `evidence_used`.
+- Add structured `context_quality` and `missing_context`.
 - Extend `CodexReview` with optional `structured`.
 - Keep backward compatibility for old `codex_review` objects without structured data.
 
@@ -50,13 +52,14 @@ Tests:
 - Valid structured payload validates.
 - Invalid confidence fails.
 - Invalid role fails.
+- Missing required context quality fails for structured reviews.
 - Existing markdown-only attached review still validates.
 
 ---
 
-## Vertical 2 - Packet And Parser
+## Vertical 2 - Context Packet And Parser
 
-Outcome: Codex receives clear instructions and Market Lab can parse the JSON contract.
+Outcome: Codex receives clear instructions plus enough bounded context to produce a review that can be trusted, rejected, or measured.
 
 Files:
 
@@ -69,6 +72,10 @@ Tasks:
 
 - Update `build_codex_packet` to require the fenced JSON block.
 - Include role names and expected fields in the packet.
+- Add a context inventory section with symbol price, SPY reference, market-hours basis, hard gates, recent movement, risk flags, and missing optional evidence.
+- Include prior same-symbol runs and settlement summaries when available.
+- State explicitly that Codex must not infer missing facts.
+- State explicitly that Codex is not trusted because the prompt sounds good; trust depends on evidence, admitted gaps, confidence, and settlement performance.
 - Add parser helper for ````json market-lab-codex-review/v1` blocks.
 - Validate parsed JSON with `CodexStructuredReview`.
 - Preserve existing `Verdict:` regex fallback.
@@ -76,6 +83,8 @@ Tasks:
 Tests:
 
 - Packet contains `price_action`, `fundamentals`, `news_sentiment`, `risk`, and `final_judge`.
+- Packet contains context inventory sections.
+- Packet forbids inventing unavailable news/fundamental/sentiment facts.
 - Parser extracts valid JSON from markdown.
 - Parser returns null/fallback for markdown-only reviews.
 
@@ -96,6 +105,7 @@ Tasks:
 - On `attach-codex-review`, parse structured block.
 - Store `codex_review.structured`.
 - Set `codex_review.verdict` from structured verdict when present.
+- Persist role evidence, role confidence, `context_quality`, and `missing_context`.
 - Append a `codex_review_attached` event as today.
 - Optionally append `codex_review_parse_warning` if markdown attaches but JSON is missing/invalid.
 
@@ -121,7 +131,9 @@ Tasks:
 
 - Extend TypeScript types for `codex_review.structured`.
 - Add final judge strip: verdict, confidence, horizon.
+- Add context quality strip: what Codex used and what was missing.
 - Add role cards: price action, fundamentals, news/sentiment, risk, final judge.
+- Add role confidence and evidence-used rendering.
 - Keep current markdown summary fallback for old runs.
 - Keep debug artifact paths collapsed by default.
 
@@ -153,7 +165,7 @@ Manual smoke:
 4. Click `Ask Codex`.
 5. Confirm Codex writes `codex-review.md`.
 6. Confirm attach updates `review.json`.
-7. Confirm UI renders final judge and role panels.
+7. Confirm UI renders final judge, context quality, missing context, role confidence, and role panels.
 
 ---
 
@@ -162,6 +174,7 @@ Manual smoke:
 In scope:
 
 - structured Codex review schema
+- richer bounded Codex context packet
 - role-based prompt output
 - parsing/attachment
 - Mission Control rendering
@@ -175,4 +188,3 @@ Out of scope:
 - batch scanner
 - historical backtesting
 - paid API mode for TradingAgents
-

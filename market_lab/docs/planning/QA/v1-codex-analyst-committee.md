@@ -7,7 +7,7 @@
 
 ## QA Goal
 
-Prove that Codex-assisted Market Lab reviews are structured, role-based, UI-renderable, backward-compatible, and still subordinate to deterministic hard gates.
+Prove that Codex-assisted Market Lab reviews are structured, role-based, context-aware, UI-renderable, backward-compatible, and still subordinate to deterministic hard gates.
 
 ---
 
@@ -18,16 +18,22 @@ Prove that Codex-assisted Market Lab reviews are structured, role-based, UI-rend
 | Models | Valid structured Codex review | Pydantic validates. |
 | Models | Confidence below 0 or above 1 | Validation fails. |
 | Models | Unknown role name | Validation fails. |
+| Models | Structured review omits context quality | Validation fails. |
 | Packet | Build packet for AAPL run | Packet contains required JSON schema and role list. |
+| Packet | Build packet for AAPL run | Packet contains context inventory: price, SPY, market-hours basis, hard gates, missing context. |
+| Packet | Optional evidence is unavailable | Packet tells Codex to mark it missing, not infer it. |
 | Packet | Run has blockers | Packet tells Codex blockers force `blocked`. |
 | Parser | Markdown has fenced schema JSON | Parser extracts and validates structured object. |
 | Parser | Markdown has only `Verdict:` line | Attach succeeds with markdown fallback. |
 | Parser | Markdown has invalid JSON | Attach succeeds, records fallback/warning. |
 | Attach | Structured verdict is trusted | `review.json.codex_review.structured.verdict` is `trusted`. |
 | Attach | Structured verdict exists | `review.json.codex_review.verdict` matches structured verdict. |
+| Attach | Structured review includes context fields | `context_quality`, `missing_context`, role confidence, and `evidence_used` persist. |
 | UI | Structured review loaded | Final judge, confidence, horizon, and role cards render. |
+| UI | Structured review loaded | Context quality and missing context render. |
 | UI | Old review loaded | Existing markdown summary fallback still renders. |
 | Safety | Deterministic blocker exists | UI/prompt preserves blocked hard-gate state. |
+| Safety | Codex review sounds optimistic with thin context | UI still exposes missing context and does not hide hard gates. |
 
 ---
 
@@ -75,7 +81,8 @@ Expected:
 
 - `codex-review.md` contains a fenced `json market-lab-codex-review/v1` block.
 - `review.json` contains `codex_review.structured`.
-- UI shows verdict, confidence, horizon, and role cards.
+- UI shows verdict, confidence, horizon, context quality, missing context, and role cards.
+- Each role shows evidence used, missing evidence, and confidence.
 - Raw artifact path remains available for debugging.
 
 ---
@@ -108,6 +115,21 @@ Expected:
 
 ---
 
+### Scenario 4 - Thin Context Is Not Over-Trusted
+
+1. Use a run with fresh price data but missing optional news/sentiment/fundamental context.
+2. Build the Codex packet.
+3. Attach a structured Codex review.
+
+Expected:
+
+- Packet lists optional missing context clearly.
+- Codex review includes `missing_context`.
+- UI shows the missing context near the final judge.
+- The review can still be `trusted` only if required gates pass and Codex explains why the missing context is not disqualifying.
+
+---
+
 ## Regression Checks
 
 - Existing V0 runs without structured Codex data still render.
@@ -116,6 +138,7 @@ Expected:
 - Settlement display still works.
 - No old backtester dependency is introduced.
 - No Telegram, paper trading, or broker execution code is added.
+- Codex packet never asks “should I buy?” or treats Codex as an oracle.
 
 ---
 
@@ -129,4 +152,4 @@ V1 is ready for implementation review when:
 - one live AAPL/TSLA smoke confirms structured Codex output can be attached and rendered
 - old markdown-only artifacts remain readable
 - hard-gate precedence is demonstrated in tests
-
+- thin-context behavior is visible and test-covered

@@ -24,6 +24,10 @@ V1 goal:
 
 > Make Codex reviews structured, role-based, comparable, and measurable while keeping Market Lab review-only.
 
+Trust position:
+
+> Codex is not trusted because the prompt sounds good. Codex earns trust only when it shows structured evidence, admits missing context, gives calibrated confidence, and can later be measured against settlement outcomes.
+
 ---
 
 ## Insights
@@ -31,8 +35,9 @@ V1 goal:
 1. Market Lab should get closer to a TradingAgents-style committee by using explicit Codex roles instead of one broad essay.
 2. The role output must be machine-readable enough for UI panels and later scoring.
 3. Codex should not override hard gates. Stale/missing core market data still blocks trust.
-4. The first version should improve prompt/schema/UI before adding more data providers.
-5. Settlements remain the truth loop: analysis is only good if later outcomes support it.
+4. Codex needs richer bounded context, not a bigger vague prompt.
+5. Missing optional news/sentiment should be visible, but it should not automatically make every review uncertain.
+6. Settlements remain the truth loop: analysis is only good if later outcomes support it.
 
 ---
 
@@ -54,6 +59,8 @@ Current pain:
 - The UI cannot show distinct analyst views.
 - It is hard to compare why AAPL was trusted today versus yesterday.
 - The prompt is too dependent on the current packet narrative instead of a durable schema.
+- Codex can sound confident even when the evidence packet is thin.
+- The packet does not yet make context quality obvious enough for the operator to trust or reject the answer.
 
 ---
 
@@ -66,12 +73,15 @@ Product success:
 - The final Codex verdict includes confidence, horizon, and reasons.
 - Missing optional evidence is visible without making every review uncertain.
 - Hard blockers remain impossible to override through Codex wording.
+- The UI shows what context Codex used and what context was missing.
+- Codex explains what would change its mind before a review can be considered high-trust.
 
 Measurement success:
 
 - Structured Codex verdict fields are persisted on the artifact.
 - Settled runs can be grouped by Codex verdict and confidence band.
 - Future comparison work can answer: “Did Codex trusted reviews beat SPY more often than uncertain reviews?”
+- Future comparison work can answer: “Which evidence gaps caused bad trusted reviews?”
 
 ---
 
@@ -108,6 +118,8 @@ V1 does not include:
 |-------------|-------------|
 | Structured Codex Schema | Codex review output must include stable fields for verdict, confidence, horizon, roles, missing evidence, and decision notes. |
 | Role-Based Analysis | Codex must produce separate role sections similar to a lightweight analyst committee. |
+| Evidence Context Packet | Codex must receive a bounded context packet with price, SPY reference, market-hours basis, recent movement, risk flags, missing evidence, and prior same-symbol runs when available. |
+| Evidence-Cited Roles | Each role must cite the evidence it used, what evidence is missing, and what would change its stance. |
 | Artifact Persistence | Parsed Codex schema must be saved into `review.json`, not only markdown. |
 | Mission Control Rendering | Market Lab UI must show role panels and final judge details. |
 | Comparison-Ready Fields | Review artifacts must expose fields that later comparison/scoring code can aggregate. |
@@ -126,10 +138,24 @@ V1 does not include:
 | Accepted | As Hamel, I want raw markdown preserved so that I can inspect the full review when debugging. | Structured data and markdown both matter. |
 | Accepted | As Hamel, I want hard market-data blockers to stay blocked even if Codex is optimistic. | Deterministic safety gates win. |
 | Accepted | As Hamel, I want the fields stored in a way future settlement analytics can use. | Prepare for V2 comparison/scoring. |
+| Accepted | As Hamel, I want the product to state plainly that Codex is not automatically trusted. | Trust comes from evidence, admitted gaps, confidence, and later performance. |
+| Accepted | As Hamel, I want Codex to see richer context before giving a verdict. | Context should stay bounded and review-only. |
 
 ---
 
 ## Product Shape
+
+Codex should be given:
+
+- current symbol price and source
+- SPY reference price and source
+- market-hours state and off-hours/latest-price caveat
+- recent movement and simple momentum context
+- volatility or risk flags when available
+- hard gate status
+- missing optional context
+- prior same-symbol Market Lab runs when available
+- prior settlement outcomes for same symbol/verdict when available
 
 Codex should return:
 
@@ -137,14 +163,16 @@ Codex should return:
 - `confidence`: number from `0` to `1`
 - `horizon`: `1d | 5d | 20d | mixed`
 - `summary`: short operator-readable conclusion
-- `roles`: one object per role with stance, bull points, bear points, missing evidence
+- `roles`: one object per role with stance, confidence, bull points, bear points, evidence used, and missing evidence
 - `hard_gate_assessment`: whether any deterministic blocker exists
+- `context_quality`: what context was strong, weak, or missing
 - `what_would_change_verdict`: concise list
 - `operator_note`: review-only next step
 
 Mission Control should render:
 
 - Final judge strip: verdict, confidence, horizon
+- Context quality strip: used context, missing context, hard blockers
 - Analyst role grid
 - Missing evidence
 - What would change the verdict
@@ -157,6 +185,6 @@ Mission Control should render:
 - No execution language that implies “place trade now.”
 - No paper trading.
 - No stale data trust.
+- No trusting Codex because it sounds persuasive.
 - No hidden prompt-only schema. If the UI depends on it, the artifact contract must define it.
 - No old backtester imports or artifacts.
-
