@@ -158,18 +158,6 @@ const roleLabel = (role: CodexRoleReview["role"]) =>
     final_judge: "Final judge",
   })[role];
 
-const describeSettlements = (settlements: Settlement[]) => {
-  if (settlements.length === 0) return "Settlement checked. No settlement windows were returned.";
-  const counts = settlements.reduce<Record<string, number>>((acc, settlement) => {
-    const status = String(settlement.status ?? "unknown");
-    acc[status] = (acc[status] ?? 0) + 1;
-    return acc;
-  }, {});
-  return `Settlement checked: ${Object.entries(counts)
-    .map(([status, count]) => `${count} ${status}`)
-    .join(", ")}.`;
-};
-
 const formatRunTime = (iso?: string) => {
   if (!iso) return "—";
   const date = new Date(iso);
@@ -191,6 +179,32 @@ const getAge = (iso?: string) => {
   if (minutes < 60) return `${minutes}m`;
   if (minutes < 24 * 60) return `${Math.round(minutes / 60)}h`;
   return `${Math.round(minutes / (24 * 60))}d`;
+};
+
+const formatWindow = (window?: string) => String(window ?? "").toUpperCase();
+
+const settlementReturn = (settlement: Settlement) =>
+  typeof settlement.raw_return_pct === "number" ? settlement.raw_return_pct : settlement.return_pct;
+
+const describeSettlementResult = (settlements: Settlement[]) => {
+  const settled = settlements.filter((settlement) => settlement.status === "settled");
+  const waiting = settlements.filter((settlement) => settlement.status === "pending" || settlement.status === "not_due");
+  const failed = settlements.filter((settlement) => settlement.status === "failed");
+
+  if (settled.length === 0 && waiting.length > 0 && failed.length === 0) {
+    return `No settlement windows are due yet. ${waiting.map((item) => formatWindow(item.window)).join(", ")} still waiting.`;
+  }
+  const pieces: string[] = [];
+  if (settled.length > 0) {
+    pieces.push(`Settled ${settled.map((item) => formatWindow(item.window)).join(", ")}.`);
+  }
+  if (waiting.length > 0) {
+    pieces.push(`${waiting.map((item) => formatWindow(item.window)).join(", ")} still waiting.`);
+  }
+  if (failed.length > 0) {
+    pieces.push(`${failed.map((item) => formatWindow(item.window)).join(", ")} failed.`);
+  }
+  return pieces.join(" ");
 };
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
@@ -343,7 +357,7 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
         `/api/market-lab/runs/${encodeURIComponent(selectedRunId)}/settle`,
         { method: "POST" },
       );
-      setSettlementStatus(describeSettlements(result.settlements ?? []));
+      setSettlementStatus(describeSettlementResult(result.settlements ?? []));
       await loadRunDetail(selectedRunId);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to settle run");
@@ -737,8 +751,8 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
                   >
                     <span className="text-xs font-bold uppercase">{String(settlement.window)}</span>
                     <span className="text-[10px] uppercase tracking-widest text-muted-foreground">
-                      {settlement.raw_return_pct != null || settlement.return_pct != null
-                        ? `${Number(settlement.raw_return_pct ?? settlement.return_pct).toFixed(2)}% · vs SPY ${
+                      {settlementReturn(settlement) != null
+                        ? `${Number(settlementReturn(settlement)).toFixed(2)}% · vs SPY ${
                             settlement.alpha_vs_spy_pct != null
                               ? `${Number(settlement.alpha_vs_spy_pct).toFixed(2)}%`
                               : "—"

@@ -195,14 +195,15 @@ Suggested storage shape:
 | Accepted | As Hamel, I want every review to record entry/reference prices so that I can later see what would have happened without paper trading. | Passive measurement only. |
 | Accepted | As Hamel, I want settlement windows of 1D, 5D, and 20D so that I can measure next-day, one-week, and roughly one-month outcomes. | Use market close prices. |
 | Accepted | As Hamel, I want both raw P/L and alpha vs SPY so that I can see whether the idea made money and whether it beat the market. | Alpha vs SPY is headline quality metric. |
-| Accepted | As Hamel, I want a manual settle-now action plus scheduled settlement so that normal measurement is automatic but still debuggable. | No Telegram in v0. |
+| Accepted | As Hamel, I want a manual settle-now action plus scheduled settlement so that normal measurement is automatic but still debuggable. | Each window settles once. |
+| Accepted | As Hamel, I want newly settled windows to alert my OpenClaw monitor so that I can see whether the idea beat SPY without opening Mission Control. | Alert includes raw return, SPY return, alpha vs SPY, score, window, and run id. |
 
 ### Debuggable Python Architecture
 
 | Status | User story | Notes |
 |--------|------------|-------|
 | Accepted | As Hamel, I want the Python engine to use real production patterns so that the system is durable without hiding behavior behind magic. | Use typed functions, Pydantic models, pytest fixtures, structured logs, and explicit dependencies. |
-| Accepted | As Hamel, I want the module layout to explain the system so that each file has one obvious job. | Suggested modules: `models.py`, `runner.py`, `market_data.py`, `checks.py`, `tradingagents_adapter.py`, `verdict.py`, `storage.py`, `settlement.py`, `cli.py`. |
+| Accepted | As Hamel, I want the module layout to explain the system so that each file has one obvious job. | Suggested modules: `models.py`, `runner.py`, `market_data.py`, `checks.py`, `tradingagents_adapter.py`, `verdict.py`, `storage.py`, `settlement.py`, `monitor_alerts.py`, `cli.py`. |
 | Accepted | As Hamel, I want CLI debugging commands so that I can inspect runs without relying only on the UI. | Example commands: `run SYMBOL`, `show RUN_ID`, `events RUN_ID`, `settle RUN_ID`. |
 | Accepted | As Hamel, I want tests to read like examples so that they teach the behavior while protecting the contracts. | Prioritize artifact, verdict, freshness, storage, and settlement tests. |
 

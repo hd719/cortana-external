@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -97,6 +97,26 @@ def test_store_writes_packet_and_attaches_codex_review(tmp_path):
     assert updated.codex_review.verdict == TrustVerdict.TRUSTED
     assert updated.codex_review.session_id == "session-1"
     assert updated.artifact_paths.codex_review == str(review_file.resolve())
+
+
+def test_due_settlements_includes_legacy_not_due_rows(tmp_path):
+    store = MarketLabStore(tmp_path)
+    run = store.create_run("AAPL", run_id="mlab_test_AAPL")
+    store.upsert_settlement(
+        run.run_id,
+        "1d",
+        {
+            "status": "not_due",
+            "due_at": (datetime.now(UTC) - timedelta(days=1)).isoformat(),
+            "symbol_entry_price": 100,
+            "spy_entry_price": 100,
+        },
+    )
+
+    due = store.due_settlements()
+
+    assert due[0]["run_id"] == run.run_id
+    assert due[0]["status"] == "not_due"
 
 
 def structured_review_markdown(verdict: str = "trusted", confidence: float = 0.72) -> str:

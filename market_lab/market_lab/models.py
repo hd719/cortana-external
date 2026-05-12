@@ -137,6 +137,16 @@ class CodexReview(Model):
     session_id: str | None = None
 
 
+class CodexReviewStructured(Model):
+    schema_version: str | None = None
+    verdict: TrustVerdict | str | None = None
+    summary: str | None = None
+    analyst_reviews: dict[str, Any] = Field(default_factory=dict)
+    confidence: float | None = None
+    notes: list[str] = Field(default_factory=list)
+    raw_payload: dict[str, Any] = Field(default_factory=dict)
+
+
 class SettlementWindow(Model):
     window: Literal["1d", "5d", "20d"]
     status: SettlementStatus
@@ -178,6 +188,7 @@ class ReviewArtifact(Model):
     interpretation: Interpretation
     tradingagents: TradingAgentsReview
     codex_review: CodexReview | None = None
+    codex_review_structured: CodexReviewStructured | dict[str, Any] | None = None
     settlements: list[SettlementWindow] = Field(default_factory=list)
     artifact_paths: ArtifactPaths
 

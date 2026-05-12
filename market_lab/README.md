@@ -58,6 +58,10 @@ Default cache:
 
 - `MARKET_LAB_CACHE_DIR`: override `.cache/market_lab`
 - `MARKET_DATA_SERVICE_BASE_URL`: defaults to `http://127.0.0.1:3033`
+- `MARKET_LAB_SETTLEMENT_ALERTS_ENABLED=0`: disable OpenClaw monitor settlement alerts
+- `MARKET_LAB_MONITOR_BOT_TOKEN`: override monitor Telegram bot token
+- `MARKET_LAB_MONITOR_CHAT_ID`: override monitor Telegram chat id
+- `OPENCLAW_CONFIG_PATH`: override `~/.openclaw/openclaw.json`
 
 ## Codex-Assisted Reviews
 
@@ -75,6 +79,8 @@ V1 expects `codex-review.md` to include a fenced `json market-lab-codex-review/v
 ## Settlement Operations
 
 Each run creates pending `1d`, `5d`, and `20d` settlement windows. The per-run `Settle` button checks only the selected run. The global `Settle due` action checks every due window.
+
+Only windows whose `due_at` has passed are settled. Already-settled windows are skipped, so each window is scored once. When a pending window becomes settled, Market Lab sends an OpenClaw monitor Telegram alert with the symbol, window, original verdict, settlement score, stock return, SPY return, alpha versus SPY, and run id.
 
 Mac mini scheduled settlement uses:
 
@@ -100,6 +106,7 @@ The job runs daily at 5:05 PM local time and the script skips weekends by defaul
 - `market_data.py`: local market-data service client
 - `checks.py`: deterministic freshness and evidence checks
 - `codex_review.py`: Codex review packet and prompt builder
+- `monitor_alerts.py`: OpenClaw monitor alerts for newly settled outcome windows
 - `verdict.py`: trusted / uncertain / blocked decision
 - `runner.py`: one-symbol review orchestration
 - `settlement.py`: 1D / 5D / 20D outcome scoring
