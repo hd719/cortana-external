@@ -12,6 +12,7 @@ describe("vacation ops helpers", () => {
   it("formats system keys into readable labels", () => {
     expect(formatVacationSystemLabel("tailscale_remote_access")).toBe("Tailscale Remote Access");
     expect(formatVacationSystemLabel("green_baseline")).toBe("Green Baseline");
+    expect(formatVacationSystemLabel("financial_external_services")).toBe("Schwab Market Data");
   });
 
   it("formats vacation window labels into operator dates", () => {

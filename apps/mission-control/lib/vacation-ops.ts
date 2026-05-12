@@ -399,6 +399,7 @@ function readVacationMirror(): JsonObject | null {
 }
 
 export function formatVacationSystemLabel(systemKey: string): string {
+  if (systemKey === "financial_external_services") return "Schwab Market Data";
   return systemKey
     .split("_")
     .filter(Boolean)
