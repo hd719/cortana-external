@@ -44,7 +44,13 @@ type RunDetail = {
     interpretation?: { summary?: string; bullish_points?: string[]; bearish_points?: string[] };
     price_facts?: { price?: number; timestamp?: string; source?: string; price_basis?: string } | null;
     spy_facts?: { price?: number; timestamp?: string; source?: string; price_basis?: string } | null;
-    codex_review?: { status?: string; summary?: string; output_path?: string | null; session_id?: string | null } | null;
+    codex_review?: {
+      status?: string;
+      summary?: string;
+      verdict?: "trusted" | "uncertain" | "blocked" | null;
+      output_path?: string | null;
+      session_id?: string | null;
+    } | null;
     artifact_paths?: {
       review?: string;
       events?: string;
@@ -368,7 +374,9 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
               <SectionTitle icon={MessageSquareText} title="Codex review" eyebrow="Second opinion" />
               <div className="mt-5 rounded-md border border-neutral-200 bg-neutral-50 px-4 py-3">
                 <div className="text-xs font-medium uppercase tracking-[0.18em] text-neutral-500">Status</div>
-                <div className="mt-1 text-sm font-semibold text-neutral-950">{review?.codex_review?.status ?? "not requested"}</div>
+                <div className="mt-1 text-sm font-semibold text-neutral-950">
+                  {review?.codex_review?.verdict ?? review?.codex_review?.status ?? "not requested"}
+                </div>
                 <p className="mt-2 text-sm leading-6 text-neutral-600">
                   {review?.codex_review?.summary ?? "Use Ask Codex when this run needs an operator-readable critique."}
                 </p>

@@ -86,11 +86,12 @@ def test_store_writes_packet_and_attaches_codex_review(tmp_path):
 
     packet = store.write_codex_packet(run.run_id, "# packet")
     review_file = Path(run.run_dir) / "codex-review.md"
-    review_file.write_text("# Codex: keep uncertain\n\nEvidence is incomplete.\n", encoding="utf-8")
+    review_file.write_text("# Codex: trust review\n\nVerdict: trusted\n\nEvidence is coherent.\n", encoding="utf-8")
     updated = store.attach_codex_review(run.run_id, review_file, session_id="session-1")
 
     assert packet.exists()
     assert updated.codex_review is not None
-    assert updated.codex_review.summary == "# Codex: keep uncertain"
+    assert updated.codex_review.summary == "# Codex: trust review"
+    assert updated.codex_review.verdict == TrustVerdict.TRUSTED
     assert updated.codex_review.session_id == "session-1"
     assert updated.artifact_paths.codex_review == str(review_file.resolve())

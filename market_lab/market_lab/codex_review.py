@@ -21,6 +21,12 @@ Return a clear verdict: `trusted`, `blocked`, or `uncertain`.
 
 Do not recommend placing a trade. This is review-only.
 
+Verdict guidance:
+
+- `blocked`: use only when a blocker check exists, required price evidence is unusable, or the artifact is internally inconsistent.
+- `trusted`: use when required live/latest price evidence is usable and the review is coherent, even if optional v0 news or sentiment evidence is missing.
+- `uncertain`: use when evidence is mixed, contradictory, materially thin beyond known optional v0 gaps, or needs a human decision.
+
 ## Run
 
 - Run id: `{artifact.run_id}`

@@ -42,7 +42,13 @@ export type MarketLabReview = {
   price_facts?: { price?: number; timestamp?: string; source?: string; price_basis?: string } | null;
   spy_facts?: { price?: number; timestamp?: string; source?: string; price_basis?: string } | null;
   tradingagents?: { status?: string; summary?: string; output_path?: string | null };
-  codex_review?: { status?: string; summary?: string; output_path?: string | null; session_id?: string | null } | null;
+  codex_review?: {
+    status?: string;
+    summary?: string;
+    verdict?: "trusted" | "uncertain" | "blocked" | null;
+    output_path?: string | null;
+    session_id?: string | null;
+  } | null;
   artifact_paths?: {
     review?: string;
     events?: string;

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
@@ -9,6 +10,8 @@ from tempfile import NamedTemporaryFile
 from typing import Any
 
 from .models import CodexReview, ReviewArtifact, RunRecord, RunStatus, TimelineEvent, TrustVerdict, model_to_json
+
+_CODEX_VERDICT_RE = re.compile(r"^\s*Verdict\s*:\s*(trusted|blocked|uncertain)\b", re.IGNORECASE | re.MULTILINE)
 
 
 def utc_now() -> datetime:
@@ -37,6 +40,13 @@ def default_cache_dir() -> Path:
 def make_run_id(symbol: str, now: datetime | None = None) -> str:
     stamp = (now or utc_now()).strftime("%Y%m%dT%H%M%SZ")
     return f"mlab_{stamp}_{symbol.strip().upper()}"
+
+
+def parse_codex_verdict(text: str) -> TrustVerdict | None:
+    match = _CODEX_VERDICT_RE.search(text)
+    if not match:
+        return None
+    return TrustVerdict(match.group(1).lower())
 
 
 class MarketLabStore:
@@ -282,6 +292,7 @@ class MarketLabStore:
                 "codex_review": CodexReview(
                     status="attached",
                     summary=first_line[:240],
+                    verdict=parse_codex_verdict(text),
                     output_path=str(path),
                     session_id=session_id,
                 ),

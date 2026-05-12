@@ -13,11 +13,7 @@ def decide_trust_verdict(
     if blockers:
         return TrustVerdict.BLOCKED, [check.code for check in blockers]
 
-    reasons: list[str] = []
-    warnings = [check.code for check in checks if check.severity == CheckSeverity.WARNING]
-    reasons.extend(warnings)
-
-    missing_optional = [
+    optional_errors = [
         name
         for name, status in [
             ("history", optional_evidence.history_status),
@@ -25,12 +21,10 @@ def decide_trust_verdict(
             ("news", optional_evidence.news_status),
             ("sentiment", optional_evidence.sentiment_status),
         ]
-        if status != "available"
+        if status == "error"
     ]
-    reasons.extend(f"{name}_optional_missing" for name in missing_optional)
-
-    if reasons:
-        return TrustVerdict.UNCERTAIN, sorted(set(reasons))
+    if optional_errors:
+        return TrustVerdict.UNCERTAIN, [f"{name}_error" for name in optional_errors]
 
     if has_blockers(checks):
         return TrustVerdict.BLOCKED, ["blocked"]

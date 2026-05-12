@@ -95,6 +95,7 @@ class TradingAgentsReview(Model):
 class CodexReview(Model):
     status: Literal["pending", "attached"]
     summary: str
+    verdict: TrustVerdict | None = None
     output_path: str | None = None
     session_id: str | None = None
 
