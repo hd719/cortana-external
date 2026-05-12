@@ -578,7 +578,7 @@ export function TradingOpsDashboard({ data }: TradingOpsDashboardProps) {
   return (
     <div className="space-y-3">
       {/* ── Zone A: Terminal Header Bar ── */}
-      <TerminalHeader data={data} />
+      <TerminalHeader data={data} liveData={liveData} />
 
       {/* ── Zone B: Alert Banner (conditional) ── */}
       {(hasIncidents || hasErrors || hasTradingRunFallback) && <AlertBanner data={data} />}

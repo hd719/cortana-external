@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
 import { accessSync, constants } from "node:fs";
+import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 
@@ -151,3 +152,71 @@ export const settleMarketLabRun = (runId: string) =>
 
 export const getMarketLabCodexPacket = (runId: string) =>
   runMarketLabCli<{ run_id: string; packet_path: string; prompt: string }>("codex-packet", [runId]);
+
+export type MarketLabArtifactKind =
+  | "review"
+  | "events"
+  | "logs"
+  | "tradingagents"
+  | "codex_packet"
+  | "codex_review";
+
+const ARTIFACT_KINDS: readonly MarketLabArtifactKind[] = [
+  "review",
+  "events",
+  "logs",
+  "tradingagents",
+  "codex_packet",
+  "codex_review",
+];
+
+export const isValidArtifactKind = (kind: string): kind is MarketLabArtifactKind =>
+  (ARTIFACT_KINDS as readonly string[]).includes(kind);
+
+const MAX_ARTIFACT_BYTES = 512 * 1024;
+
+export class MarketLabArtifactMissingError extends Error {
+  readonly code = "artifact_missing";
+  constructor(public readonly artifactPath: string | null, message: string) {
+    super(message);
+    this.name = "MarketLabArtifactMissingError";
+  }
+}
+
+export const readMarketLabArtifact = async (runId: string, kind: MarketLabArtifactKind) => {
+  const detail = await getMarketLabRun(runId);
+  const artifactPath = detail.review?.artifact_paths?.[kind] ?? null;
+  if (!artifactPath) {
+    throw new MarketLabArtifactMissingError(null, `No ${kind} artifact registered for this run yet.`);
+  }
+
+  const resolved = path.resolve(artifactPath);
+  const allowedRoot = path.resolve(resolveRepoRoot(), ".cache", "market_lab");
+  if (!resolved.startsWith(`${allowedRoot}${path.sep}`)) {
+    throw new Error("Artifact path is outside the Market Lab cache");
+  }
+
+  let stats;
+  try {
+    stats = await stat(resolved);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      throw new MarketLabArtifactMissingError(resolved, "Artifact file has not been generated yet.");
+    }
+    throw error;
+  }
+  if (!stats.isFile()) {
+    throw new Error("Artifact is not a regular file");
+  }
+
+  const buffer = await readFile(resolved);
+  const truncated = buffer.byteLength > MAX_ARTIFACT_BYTES;
+  const slice = truncated ? buffer.subarray(0, MAX_ARTIFACT_BYTES) : buffer;
+  return {
+    kind,
+    path: resolved,
+    contents: slice.toString("utf8"),
+    size: stats.size,
+    truncated,
+  };
+};
