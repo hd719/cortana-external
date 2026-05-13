@@ -24,4 +24,14 @@ describe("market-lab library", () => {
     expect(command.args).toContain("settle-due");
     expect(command.args.at(-1)).toBe("--json");
   });
+
+  it("builds opportunity and portfolio commands through the uv bridge", () => {
+    const opportunities = buildMarketLabCommand("opportunities", ["--symbols", "AAPL,MSFT"]);
+    const portfolio = buildMarketLabCommand("portfolio", ["--refresh"]);
+
+    expect(opportunities.args).toContain("opportunities");
+    expect(opportunities.args).toContain("AAPL,MSFT");
+    expect(portfolio.args).toContain("portfolio");
+    expect(portfolio.args).toContain("--refresh");
+  });
 });

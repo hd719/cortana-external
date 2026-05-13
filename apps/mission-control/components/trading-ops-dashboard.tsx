@@ -191,7 +191,7 @@ export function TradingOpsDashboard({ data }: TradingOpsDashboardProps) {
 
         {/* ── Watchlists ── */}
         <TabsContent value="watchlists" className="space-y-3">
-          <WatchlistsTab tradingRun={data.tradingRun} />
+          <WatchlistsTab />
         </TabsContent>
 
         {/* ── Polymarket ── */}
@@ -220,5 +220,4 @@ export function TradingOpsDashboard({ data }: TradingOpsDashboardProps) {
     </div>
   );
 }
-
 
