@@ -255,6 +255,11 @@ type MarketLabClientProps = {
   embedded?: boolean;
 };
 
+type PortfolioNotice = {
+  message: string;
+  tone: "success" | "warning";
+};
+
 export function MarketLabClient({ embedded = false }: MarketLabClientProps = {}) {
   const [symbol, setSymbol] = useState("AAPL");
   const [runs, setRuns] = useState<RunSummary[]>([]);
@@ -266,7 +271,7 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
   const [error, setError] = useState<string | null>(null);
   const [codexStatus, setCodexStatus] = useState<string | null>(null);
   const [settlementStatus, setSettlementStatus] = useState<string | null>(null);
-  const [portfolioStatus, setPortfolioStatus] = useState<string | null>(null);
+  const [portfolioStatus, setPortfolioStatus] = useState<PortfolioNotice | null>(null);
   const [tapeMode, setTapeMode] = useState<TapeMode>("recent");
   const [closedGroups, setClosedGroups] = useState<Set<string>>(new Set());
 
@@ -449,11 +454,20 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
     try {
       const result = await api<PortfolioContext>("/api/market-lab/portfolio/refresh", { method: "POST" });
       if (result.status === "available") {
-        setPortfolioStatus("Schwab portfolio cache refreshed. New Market Lab runs will attach the latest read-only context.");
+        setPortfolioStatus({
+          message: "Schwab portfolio cache refreshed. New Market Lab runs will attach the latest read-only context.",
+          tone: "success",
+        });
       } else if (result.status === "reauth_required") {
-        setPortfolioStatus("Schwab portfolio refresh needs Schwab reauth before positions can be read.");
+        setPortfolioStatus({
+          message: "Schwab OAuth is refreshed, but account/position access is not authorized for this app yet.",
+          tone: "warning",
+        });
       } else {
-        setPortfolioStatus(result.message ?? "Schwab portfolio context is not available yet.");
+        setPortfolioStatus({
+          message: result.message ?? "Schwab portfolio context is not available yet.",
+          tone: "warning",
+        });
       }
       if (selectedRunId) {
         await loadRunDetail(selectedRunId);
@@ -552,7 +566,16 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
         <div className="mt-3 rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/30 dark:text-emerald-200">{settlementStatus}</div>
       ) : null}
       {portfolioStatus ? (
-        <div className="mt-3 rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/30 dark:text-emerald-200">{portfolioStatus}</div>
+        <div
+          className={cn(
+            "mt-3 rounded-md border px-3 py-2 text-xs",
+            portfolioStatus.tone === "success"
+              ? "border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/30 dark:text-emerald-200"
+              : "border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200",
+          )}
+        >
+          {portfolioStatus.message}
+        </div>
       ) : null}
 
       {/* ── Body: tape + decision area ── */}

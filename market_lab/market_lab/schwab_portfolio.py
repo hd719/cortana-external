@@ -47,7 +47,7 @@ class SchwabPortfolioClient:
                     status="reauth_required",
                     source="schwab",
                     generated_at=datetime.now(UTC),
-                    message="Schwab account access requires re-authentication or product access.",
+                    message="Schwab account endpoints returned 401/403; reauth or Trader API account-access approval may be required.",
                 )
             return PortfolioContext(status="error", source="schwab", generated_at=datetime.now(UTC), message=str(exc))
         except Exception as exc:
