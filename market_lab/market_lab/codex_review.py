@@ -97,7 +97,7 @@ Verdict guidance:
 - Symbol: `{artifact.symbol}`
 - Current Market Lab verdict: `{artifact.trust_verdict}`
 - Current reasons: {reasons}
-- Review artifact: `{artifact.artifact_paths.review}`
+- Full review artifact: omitted from this Codex packet; use the packet as the bounded source of truth.
 - Codex review output path: `{artifact.artifact_paths.codex_review}`
 - Hard blockers: {", ".join(blockers) or "none"}
 - Packet mode: `{mode}`
@@ -241,10 +241,12 @@ Read this packet:
 `{packet_path}`
 
 Follow the packet exactly:
-1. Read the Market Lab review artifact it references.
+1. Use the packet as the review source of truth.
 2. Write the Codex review markdown to the requested output path.
 3. Run the attach command from the packet.
 4. Reply with the final verdict and the file path you wrote.
+
+Do not open the full review.json or portfolio cache unless the packet is internally inconsistent and you need to debug corruption.
 """
 
 
@@ -263,6 +265,69 @@ def _compact_evidence(payload: dict[str, Any] | None) -> dict[str, Any] | None:
         "benchmark_summary": payload.get("benchmark_summary"),
         "missing_context": payload.get("missing_context", []),
         "risk_flags": payload.get("risk_flags", []),
+    }
+
+
+def _compact_sentiment(payload: dict[str, Any] | None) -> dict[str, Any] | None:
+    if not payload:
+        return None
+    sources = []
+    for source in payload.get("sources", []) or []:
+        samples = source.get("samples", []) if isinstance(source, dict) else []
+        sources.append(
+            {
+                "source": source.get("source"),
+                "status": source.get("status"),
+                "sample_count": source.get("sample_count"),
+                "fetch_method": source.get("fetch_method"),
+                "summary": source.get("summary"),
+                "error": source.get("error_message") or source.get("error"),
+                "samples": samples[:3],
+            }
+        )
+    return {
+        "symbol": payload.get("symbol"),
+        "status": payload.get("status"),
+        "generated_at": payload.get("generated_at"),
+        "sources": sources,
+        "notes": payload.get("notes", []),
+    }
+
+
+def _compact_portfolio(payload: dict[str, Any] | None, *, symbol: str) -> dict[str, Any] | None:
+    if not payload:
+        return None
+    normalized = symbol.strip().upper()
+    positions = payload.get("positions", []) or []
+    symbol_positions = [
+        {
+            "symbol": position.get("symbol"),
+            "asset_type": position.get("asset_type"),
+            "quantity": position.get("quantity"),
+            "current_price": position.get("current_price"),
+            "day_change": position.get("day_change"),
+            "day_change_pct": position.get("day_change_pct"),
+            "market_value": position.get("market_value"),
+            "unrealized_pnl": position.get("unrealized_pnl"),
+            "weight_pct": position.get("weight_pct"),
+            "quote_source": position.get("quote_source"),
+            "quote_status": position.get("quote_status"),
+            "quote_timestamp": position.get("quote_timestamp"),
+        }
+        for position in positions
+        if str(position.get("symbol") or "").strip().upper() == normalized
+    ]
+    return {
+        "status": payload.get("status"),
+        "source": payload.get("source"),
+        "generated_at": payload.get("generated_at"),
+        "accounts_count": len(payload.get("accounts", []) or []),
+        "positions_count": len(positions),
+        "holds_symbol": bool(symbol_positions),
+        "symbol_positions": symbol_positions,
+        "exposure_notes": payload.get("exposure_notes", []),
+        "overlap_notes": payload.get("overlap_notes", []),
+        "message": payload.get("message"),
     }
 
 
@@ -287,19 +352,25 @@ def _context_sections(artifact: ReviewArtifact, mode: Literal["quick", "deep"]) 
 ### Sentiment Sources
 
 ```json
-{_json_for_packet(sentiment)}
+{_json_for_packet(_compact_sentiment(sentiment))}
 ```
 
-### Portfolio Context
+### Redacted Portfolio Context
 
 ```json
-{_json_for_packet(portfolio)}
+{_json_for_packet(_compact_portfolio(portfolio, symbol=artifact.symbol))}
 ```
 """
     return f"""### Compact Evidence Snapshot
 
 ```json
 {_json_for_packet(_compact_evidence(evidence))}
+```
+
+### Sentiment Sources Summary
+
+```json
+{_json_for_packet(_compact_sentiment(sentiment))}
 ```
 
 ### Outcome Memory Summary

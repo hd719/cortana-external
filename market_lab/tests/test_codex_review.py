@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from pathlib import Path
 
-from market_lab.codex_review import CODEX_SCHEMA, build_codex_packet
+from market_lab.codex_review import CODEX_SCHEMA, build_codex_packet, codex_prompt_for_packet
 from market_lab.models import (
     ArtifactPaths,
     CheckResult,
@@ -11,11 +11,16 @@ from market_lab.models import (
     Interpretation,
     OptionalEvidence,
     PriceFacts,
+    PortfolioAccount,
+    PortfolioContext,
+    PortfolioPosition,
     ReviewArtifact,
     RunRecord,
     RunStatus,
     TradingAgentsReview,
     TrustVerdict,
+    SentimentSnapshot,
+    SentimentSourceResult,
 )
 
 
@@ -110,3 +115,85 @@ def test_codex_packet_includes_prior_run_settlement_context():
 
     assert "mlab_prior_AAPL" in packet
     assert "settlements=1d:settled, score=success, alpha_vs_spy=2.50%" in packet
+
+
+def test_codex_prompt_does_not_send_codex_to_full_review_artifact():
+    prompt = codex_prompt_for_packet("/tmp/mlab_test_AAPL/codex-review-packet.md")
+
+    assert "Use the packet as the review source of truth." in prompt
+    assert "Read the Market Lab review artifact" not in prompt
+    assert "Do not open the full review.json" in prompt
+
+
+def test_deep_codex_packet_redacts_portfolio_context():
+    artifact = make_artifact().model_copy(
+        update={
+            "portfolio_context": PortfolioContext(
+                status="available",
+                source="schwab",
+                generated_at=datetime.now(UTC),
+                accounts=[
+                    PortfolioAccount(
+                        account_hash="secret-account-hash",
+                        display_name="Brokerage",
+                        liquidation_value=1000,
+                    )
+                ],
+                positions=[
+                    PortfolioPosition(
+                        account_hash="secret-account-hash",
+                        symbol="AAPL",
+                        quantity=2,
+                        current_price=100,
+                        market_value=200,
+                    ),
+                    PortfolioPosition(
+                        account_hash="secret-account-hash",
+                        symbol="MSFT",
+                        quantity=1,
+                        current_price=400,
+                        market_value=400,
+                    ),
+                ],
+                exposure_notes=["2 positions across 1 account(s)."],
+                overlap_notes=["AAPL is already owned; current market value $200.00."],
+            )
+        }
+    )
+
+    packet = build_codex_packet(artifact, mode="deep")
+
+    assert "Redacted Portfolio Context" in packet
+    assert "secret-account-hash" not in packet
+    assert '"accounts_count": 1' in packet
+    assert '"positions_count": 2' in packet
+    assert '"holds_symbol": true' in packet
+    assert '"symbol": "AAPL"' in packet
+    assert '"symbol": "MSFT"' not in packet
+
+
+def test_quick_codex_packet_includes_compact_sentiment_sources():
+    artifact = make_artifact().model_copy(
+        update={
+            "sentiment_snapshot": SentimentSnapshot(
+                status="available",
+                sources=[
+                    SentimentSourceResult(
+                        source="yahoo_finance_news",
+                        status="available",
+                        fetched_at=datetime.now(UTC),
+                        sample_count=4,
+                        fetch_method="yahoo_finance_rss",
+                        summary="Recent AAPL headlines are available.",
+                    )
+                ],
+            )
+        }
+    )
+
+    packet = build_codex_packet(artifact)
+
+    assert "Sentiment Sources Summary" in packet
+    assert "yahoo_finance_news" in packet
+    assert "Recent AAPL headlines are available." in packet
+    assert "yahoo_finance_rss" in packet
