@@ -2,14 +2,11 @@
 
 /* eslint-disable react-hooks/set-state-in-effect */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { AlertTriangle, Gauge, Landmark, Radar, ShieldCheck } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { cn } from "@/lib/utils";
 import type {
-  FinancialServiceHealthRow,
   PolymarketAccountOverview,
-  PolymarketResultRow,
   PolymarketResultsOverview,
   TradingOpsPolymarketLiveData,
   PolymarketSignalOverview,
@@ -30,38 +27,33 @@ import {
 import {
   badgeVariantForMarketSeverity,
   badgeVariantForPolymarketStreamer,
-  badgeVariantForServiceHealth,
   badgeVariantForStreamer,
 } from "@/lib/trading-ops/badge-variants";
 import {
-  formatDetailedMoney,
   formatLabel,
-  formatMarketPrice,
-  formatMarketQuantity,
   formatProbability,
   formatProbabilityDelta,
-  formatSignedDetailedMoney,
-  signedValueTextClass,
 } from "@/lib/trading-ops/format";
 import {
   collectTradingRunSymbols,
-  derivePinnedCurrentValue,
   describePolymarketBoardEmptyState,
   isPolymarketAggregateHandoffPending,
   isPolymarketLivePayload,
   isPolymarketLiveReady,
   isPolymarketPayload,
-  newestTimestamp,
-  preferredFlashMark,
   shouldKeepPolymarketNeutral,
 } from "@/lib/trading-ops/polymarket-helpers";
 import { Metric, StageChip, StrategyWatchlistSection, ArtifactPanel } from "./trading-ops/shared";
 import { TerminalHeader } from "./trading-ops/terminal-header";
 import { TerminalCell } from "./trading-ops/terminal-cell";
 import { AlertBanner } from "./trading-ops/alert-banner";
-import { CompactTapeStrip, LiveTapeGrid, LiveWatchlistGroup, useAnimatedValue, useFlashClass } from "./trading-ops/animated-quote";
+import { CompactTapeStrip, LiveTapeGrid, LiveWatchlistGroup } from "./trading-ops/animated-quote";
+import { FinancialServiceCard } from "./trading-ops/health/financial-service-card";
+import { renderPolymarketMarketCard } from "./trading-ops/polymarket/polymarket-market-card";
+import { RosterMetric } from "./trading-ops/polymarket/roster-metric";
+import { RosterChangeSummary } from "./trading-ops/polymarket/roster-change-summary";
+import { usePolymarketRosterState } from "./trading-ops/polymarket/use-polymarket-roster-state";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { MarketLabClient } from "@/app/market-lab/market-lab-client";
 
 const LIVE_POLL_MS = 15_000;
@@ -1181,316 +1173,4 @@ export function TradingOpsDashboard({ data }: TradingOpsDashboardProps) {
   );
 }
 
-function FinancialServiceCard({ row }: { row: FinancialServiceHealthRow }) {
-  return (
-    <div className="rounded-md border border-border/50 bg-muted/20 p-3 text-xs">
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div className="min-w-0">
-          <p className="font-medium">{row.label}</p>
-          <p className="text-muted-foreground">{row.summary}</p>
-        </div>
-        <Badge variant={badgeVariantForServiceHealth(row.state)} className="text-[10px]">
-          {row.badgeText ?? row.state}
-        </Badge>
-      </div>
-      <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
-        <Metric label="Detail" value={row.detail} />
-        <Metric label="Updated" value={row.updatedAt ? formatOperatorTimestamp(row.updatedAt) : "—"} />
-      </div>
-      <p className="mt-2 truncate text-[10px] text-muted-foreground">Source: {row.source}</p>
-    </div>
-  );
-}
-
-
-
-function renderPolymarketMarketCard(
-  market: TradingOpsPolymarketLiveData["markets"][number],
-  options: { pending: boolean; result: PolymarketResultRow | null; rosterNew?: boolean; onToggle: () => void },
-) {
-  return <PolymarketMarketCard key={market.slug} market={market} options={options} />;
-}
-
-function PolymarketMarketCard({
-  market,
-  options,
-}: {
-  market: TradingOpsPolymarketLiveData["markets"][number];
-  options: { pending: boolean; result: PolymarketResultRow | null; rosterNew?: boolean; onToggle: () => void };
-}) {
-  const subtitle =
-    market.bucket === "sports"
-      ? [
-          market.eventTitle && market.eventTitle !== market.title ? market.eventTitle : null,
-          market.league ? formatLabel(market.league) : null,
-        ].filter(Boolean).join(" · ") || "Sports market"
-      : market.eventTitle ?? "Polymarket event";
-  const currentValue = derivePinnedCurrentValue(market, options.result);
-  const unrealizedPnl =
-    currentValue != null && options.result?.costBasis != null
-      ? Number((currentValue - options.result.costBasis).toFixed(4))
-      : options.result?.unrealizedPnl ?? null;
-  const hasLiveEconomics = (options.result?.netPosition ?? 0) > 0;
-  const flash = usePolymarketFlashClass({
-    bid: market.bestBid,
-    ask: market.bestAsk,
-    last: market.lastTrade,
-    spread: market.spread,
-  });
-  const animatedBid = useAnimatedValue(market.bestBid, 700);
-  const animatedAsk = useAnimatedValue(market.bestAsk, 700);
-  const animatedLast = useAnimatedValue(market.lastTrade, 700);
-  const animatedSpread = useAnimatedValue(market.spread, 700);
-  const animatedCurrentValue = useAnimatedValue(currentValue, 700);
-  const animatedUnrealizedPnl = useAnimatedValue(unrealizedPnl, 700);
-  const animatedCostBasis = useAnimatedValue(options.result?.costBasis ?? null, 700);
-  const animatedPosition = useAnimatedValue(options.result?.netPosition ?? null, 700);
-  const freshestTimestamp = newestTimestamp([market.updatedAt, market.tradeTime]);
-
-  return (
-    <div
-      className={cn(
-        "rounded-md border border-border/50 bg-muted/20 px-3 py-3 text-xs transition-[background-color,border-color,box-shadow,transform] duration-1000",
-        options.rosterNew && "border-amber-300/60 bg-amber-50/50 shadow-[0_0_0_1px_rgba(245,158,11,0.22)] motion-safe:animate-[pulse_1.1s_ease-out_1]",
-        flash,
-      )}
-    >
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div className="min-w-0">
-          <p className="font-medium">{market.title}</p>
-          <p className="text-muted-foreground">{subtitle}</p>
-          <p className="font-mono text-muted-foreground">{market.slug}</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-1">
-          {options.rosterNew ? (
-            <Badge variant="outline" className="border-amber-300/70 bg-amber-100/80 text-[10px] text-amber-900 dark:border-amber-500/50 dark:bg-amber-500/15 dark:text-amber-200">
-              NEW
-            </Badge>
-          ) : null}
-          <Badge variant={market.state === "ok" ? "success" : market.state === "degraded" ? "warning" : "outline"} className="text-[10px]">
-            {market.state === "ok" ? "live" : market.state}
-          </Badge>
-          {market.marketState ? (
-            <Badge variant="outline" className="text-[10px]">
-              {formatLabel(market.marketState)}
-            </Badge>
-          ) : null}
-          <Button
-            type="button"
-            size="xs"
-            variant={market.pinned ? "destructive" : "outline"}
-            disabled={options.pending}
-            onClick={options.onToggle}
-          >
-            {options.pending ? "Saving..." : market.pinned ? "Remove" : "Pin"}
-          </Button>
-        </div>
-      </div>
-      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-        <AnimatedMetric label="Bid" value={formatMarketPrice(animatedBid)} flashValue={market.bestBid} />
-        <AnimatedMetric label="Ask" value={formatMarketPrice(animatedAsk)} flashValue={market.bestAsk} />
-        <AnimatedMetric label="Last" value={formatMarketPrice(animatedLast)} flashValue={market.lastTrade} />
-        <AnimatedMetric label="Spread" value={formatMarketPrice(animatedSpread)} flashValue={market.spread} />
-      </div>
-      {hasLiveEconomics ? (
-        <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
-          <AnimatedMetric label="Position" value={formatMarketQuantity(animatedPosition)} flashValue={options.result?.netPosition ?? null} />
-          <AnimatedMetric label="Basis" value={formatDetailedMoney(animatedCostBasis)} flashValue={options.result?.costBasis ?? null} />
-          <AnimatedMetric label="Value" value={formatDetailedMoney(animatedCurrentValue)} flashValue={currentValue} />
-          <AnimatedMetric
-            label="Unrealized"
-            value={formatSignedDetailedMoney(animatedUnrealizedPnl)}
-            flashValue={unrealizedPnl}
-            valueClassName={signedValueTextClass(animatedUnrealizedPnl)}
-          />
-        </div>
-      ) : null}
-      <p className="mt-3 text-muted-foreground">
-        Trade {formatMarketPrice(market.tradePrice)} · Qty {formatMarketQuantity(market.tradeQuantity)} · {formatOperatorTimestamp(freshestTimestamp)}
-      </p>
-    </div>
-  );
-}
-
-function AnimatedMetric({
-  label,
-  value,
-  flashValue,
-  valueClassName,
-}: {
-  label: string;
-  value: string;
-  flashValue?: number | null;
-  valueClassName?: string;
-}) {
-  const flash = useFlashClass(flashValue ?? null);
-  return (
-    <div
-      className={cn(
-        "rounded-md border border-border/50 bg-background/70 px-2 py-1.5 backdrop-blur-sm transition-[background-color,border-color] duration-700",
-        flash && "border-border/70",
-        flash,
-      )}
-    >
-      <p className="terminal-metric-label">{label}</p>
-      <p className={cn("mt-0.5 font-mono text-sm font-medium leading-tight tabular-nums", valueClassName)}>{value}</p>
-    </div>
-  );
-}
-
-function RosterMetric({
-  label,
-  value,
-  highlight = false,
-}: {
-  label: string;
-  value: string;
-  highlight?: boolean;
-}) {
-  return (
-    <div
-      className={cn(
-        "rounded-md border border-border/50 bg-muted/20 px-2 py-1.5 transition-[background-color,border-color,box-shadow] duration-700",
-        highlight && "border-amber-300/60 bg-amber-50/60 shadow-[0_0_0_1px_rgba(245,158,11,0.18)]",
-      )}
-    >
-      <p className="terminal-metric-label">{label}</p>
-      <p className="mt-0.5 font-mono text-sm font-medium leading-tight">{value}</p>
-    </div>
-  );
-}
-
-function RosterChangeSummary({
-  state,
-}: {
-  state: ReturnType<typeof usePolymarketRosterState>;
-}) {
-  if (!state.badgeLabel && !state.updatedAt) return null;
-
-  return (
-    <div className="flex flex-wrap items-center gap-2 text-xs">
-      {state.badgeLabel ? (
-        <Badge
-          variant="outline"
-          className="border-amber-300/70 bg-amber-100/80 text-[10px] text-amber-900 dark:border-amber-500/50 dark:bg-amber-500/15 dark:text-amber-200"
-        >
-          {state.badgeLabel}
-        </Badge>
-      ) : null}
-      {state.updatedAt ? (
-        <p className="text-amber-800/90 dark:text-amber-200/90">
-          Roster updated {formatOperatorTimestamp(state.updatedAt)}.
-        </p>
-      ) : null}
-    </div>
-  );
-}
-
-function usePolymarketFlashClass(values: {
-  bid: number | null;
-  ask: number | null;
-  last: number | null;
-  spread: number | null;
-}): string {
-  const [flash, setFlash] = useState<"up" | "down" | null>(null);
-  const prevRef = useRef(values);
-  const timerRef = useRef(0);
-
-  useEffect(() => {
-    const previous = prevRef.current;
-    prevRef.current = values;
-    if (!previous) return;
-
-    const currentMark = preferredFlashMark(values);
-    const previousMark = preferredFlashMark(previous);
-    if (currentMark == null || previousMark == null || currentMark === previousMark) {
-      if (
-        previous.bid !== values.bid ||
-        previous.ask !== values.ask ||
-        previous.last !== values.last ||
-        previous.spread !== values.spread
-      ) {
-        setFlash("up");
-        window.clearTimeout(timerRef.current);
-        timerRef.current = window.setTimeout(() => setFlash(null), 1100);
-      }
-      return;
-    }
-
-    setFlash(currentMark > previousMark ? "up" : "down");
-    window.clearTimeout(timerRef.current);
-    timerRef.current = window.setTimeout(() => setFlash(null), 1100);
-  }, [values]);
-
-  if (flash === "up") return "bg-emerald-500/14 border-emerald-500/40 shadow-[0_0_0_1px_rgba(16,185,129,0.22)]";
-  if (flash === "down") return "bg-red-500/12 border-red-500/35 shadow-[0_0_0_1px_rgba(239,68,68,0.18)]";
-  return "";
-}
-
-function usePolymarketRosterState(
-  rows: TradingOpsPolymarketLiveData["markets"],
-  updatedAt: string | null,
-) {
-  const [newSlugs, setNewSlugs] = useState<string[]>([]);
-  const [badgeLabel, setBadgeLabel] = useState<string | null>(null);
-  const [highlightedUpdatedAt, setHighlightedUpdatedAt] = useState<string | null>(null);
-  const [leaderChanged, setLeaderChanged] = useState(false);
-  const previousSlugsRef = useRef<string[] | null>(null);
-  const previousLeaderRef = useRef<string | null>(null);
-  const newTimerRef = useRef(0);
-  const badgeTimerRef = useRef(0);
-
-  useEffect(() => {
-    return () => {
-      window.clearTimeout(newTimerRef.current);
-      window.clearTimeout(badgeTimerRef.current);
-    };
-  }, []);
-
-  useEffect(() => {
-    const currentSlugs = rows.map((row) => row.slug);
-    const currentLeader = rows[0]?.slug ?? null;
-    const previousSlugs = previousSlugsRef.current;
-    const previousLeader = previousLeaderRef.current;
-
-    previousSlugsRef.current = currentSlugs;
-    previousLeaderRef.current = currentLeader;
-
-    if (!previousSlugs) return;
-
-    const previousSet = new Set(previousSlugs);
-    const currentSet = new Set(currentSlugs);
-    const entering = currentSlugs.filter((slug) => !previousSet.has(slug));
-    const leaving = previousSlugs.filter((slug) => !currentSet.has(slug));
-    const membershipChanged = entering.length > 0 || leaving.length > 0;
-    const hasLeaderChange = Boolean(previousLeader && currentLeader && previousLeader !== currentLeader);
-
-    if (!membershipChanged && !hasLeaderChange) {
-      return;
-    }
-
-    if (entering.length > 0) {
-      setNewSlugs((current) => Array.from(new Set([...current, ...entering])));
-      window.clearTimeout(newTimerRef.current);
-      newTimerRef.current = window.setTimeout(() => setNewSlugs([]), 10_000);
-    }
-
-    setLeaderChanged(hasLeaderChange);
-    setHighlightedUpdatedAt(updatedAt);
-    setBadgeLabel(entering.length > 0 ? `${entering.length} new` : "updated");
-    window.clearTimeout(badgeTimerRef.current);
-    badgeTimerRef.current = window.setTimeout(() => {
-      setBadgeLabel(null);
-      setHighlightedUpdatedAt(null);
-      setLeaderChanged(false);
-    }, 8_000);
-  }, [rows, updatedAt]);
-
-  return {
-    newSlugs: new Set(newSlugs),
-    badgeLabel,
-    updatedAt: highlightedUpdatedAt,
-    leaderChanged,
-  };
-}
 
