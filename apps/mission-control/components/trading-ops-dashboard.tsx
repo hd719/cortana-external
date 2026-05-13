@@ -33,6 +33,7 @@ import { AlertBanner } from "./trading-ops/alert-banner";
 import { OverviewTab } from "./trading-ops/tabs/overview-tab";
 import { LiveTab } from "./trading-ops/tabs/live-tab";
 import { WatchlistsTab } from "./trading-ops/tabs/watchlists-tab";
+import { PortfolioTab } from "./trading-ops/tabs/portfolio-tab";
 import { PolymarketTab } from "./trading-ops/tabs/polymarket-tab";
 import { SystemHealthTab } from "./trading-ops/tabs/system-health-tab";
 import { MarketLabClient } from "@/app/market-lab/market-lab-client";
@@ -158,6 +159,7 @@ export function TradingOpsDashboard({ data }: TradingOpsDashboardProps) {
           <TabsTrigger value="live">Live</TabsTrigger>
           <TabsTrigger value="market-lab">Market Lab</TabsTrigger>
           <TabsTrigger value="watchlists">Watchlists</TabsTrigger>
+          <TabsTrigger value="portfolio">Portfolio</TabsTrigger>
           <TabsTrigger value="polymarket">Polymarket</TabsTrigger>
           <TabsTrigger value="health">System Health</TabsTrigger>
         </TabsList>
@@ -194,6 +196,11 @@ export function TradingOpsDashboard({ data }: TradingOpsDashboardProps) {
           <WatchlistsTab />
         </TabsContent>
 
+        {/* ── Portfolio ── */}
+        <TabsContent value="portfolio" className="space-y-3">
+          <PortfolioTab />
+        </TabsContent>
+
         {/* ── Polymarket ── */}
         <TabsContent value="polymarket" className="space-y-3">
           <PolymarketTab
@@ -220,4 +227,3 @@ export function TradingOpsDashboard({ data }: TradingOpsDashboardProps) {
     </div>
   );
 }
-

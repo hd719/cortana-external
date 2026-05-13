@@ -147,8 +147,27 @@ export type MarketLabPortfolioContext = {
   status: "available" | "unavailable" | "reauth_required" | "error";
   source: string;
   generated_at: string;
-  accounts: Array<Record<string, unknown>>;
-  positions: Array<{ symbol?: string; market_value?: number | null; weight_pct?: number | null; quantity?: number | null }>;
+  accounts: Array<{
+    account_hash?: string;
+    display_name?: string | null;
+    account_type?: string | null;
+    cash_value?: number | null;
+    liquidation_value?: number | null;
+  }>;
+  positions: Array<{
+    account_hash?: string | null;
+    symbol?: string;
+    asset_type?: string | null;
+    quantity?: number | null;
+    average_price?: number | null;
+    current_price?: number | null;
+    cost_basis?: number | null;
+    unrealized_pnl?: number | null;
+    market_value?: number | null;
+    weight_pct?: number | null;
+    sector?: string | null;
+    themes?: string[];
+  }>;
   exposure_notes: string[];
   overlap_notes: string[];
   message?: string | null;
