@@ -2,18 +2,15 @@
 
 /* eslint-disable react-hooks/set-state-in-effect */
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { AlertTriangle, Gauge, Landmark, Radar, ShieldCheck } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type {
   PolymarketAccountOverview,
   PolymarketResultsOverview,
-  TradingOpsPolymarketLiveData,
   PolymarketSignalOverview,
   PolymarketWatchlistOverview,
   TradingOpsDashboardData,
-  TradingOpsLiveData,
-  TradingOpsPolymarketData,
 } from "@/lib/trading-ops-contract";
 import { formatCurrency as formatMoney, formatOperatorTimestamp, formatPercentDecimal as formatPercent } from "@/lib/format-utils";
 import {
@@ -38,11 +35,11 @@ import {
   collectTradingRunSymbols,
   describePolymarketBoardEmptyState,
   isPolymarketAggregateHandoffPending,
-  isPolymarketLivePayload,
-  isPolymarketLiveReady,
-  isPolymarketPayload,
   shouldKeepPolymarketNeutral,
 } from "@/lib/trading-ops/polymarket-helpers";
+import { useLiveTape } from "@/hooks/trading-ops/use-live-tape";
+import { usePolymarketStatus } from "@/hooks/trading-ops/use-polymarket-status";
+import { usePolymarketLive } from "@/hooks/trading-ops/use-polymarket-live";
 import { Metric, StageChip, StrategyWatchlistSection, ArtifactPanel } from "./trading-ops/shared";
 import { TerminalHeader } from "./trading-ops/terminal-header";
 import { TerminalCell } from "./trading-ops/terminal-cell";
@@ -56,12 +53,6 @@ import { usePolymarketRosterState } from "./trading-ops/polymarket/use-polymarke
 import { Badge } from "@/components/ui/badge";
 import { MarketLabClient } from "@/app/market-lab/market-lab-client";
 
-const LIVE_POLL_MS = 15_000;
-const LIVE_STREAM_RETRY_MS = 2_000;
-const POLYMARKET_POLL_MS = 30_000;
-const POLYMARKET_LIVE_POLL_MS = 15_000;
-const POLYMARKET_LIVE_STREAM_RETRY_MS = 2_000;
-const POLYMARKET_STARTUP_GRACE_MS = 12_000;
 const POLYMARKET_HANDOFF_RETRY_MS = 1_000;
 const POLYMARKET_HANDOFF_MAX_RETRIES = 3;
 const COMPACT_TAPE_ORDER = ["SPY", "QQQ", "IWM", "DOW", "NASDAQ"];
@@ -76,269 +67,26 @@ export function TradingOpsDashboard({ data }: TradingOpsDashboardProps) {
   const hasIncidents = (data.runtime.data?.incidents.length ?? 0) > 0;
   const hasErrors = [data.market, data.runtime, data.workflow, data.canary, data.financialServices, data.tradingRun].some((a) => a.state === "error");
   const hasTradingRunFallback = data.tradingRun.badgeText === "fallback";
-  const [liveData, setLiveData] = useState<TradingOpsLiveData | null>(null);
-  const [liveError, setLiveError] = useState<string | null>(null);
-  const [lastSuccessfulAt, setLastSuccessfulAt] = useState<string | null>(null);
-  const [polymarketData, setPolymarketData] = useState<TradingOpsPolymarketData | null>(null);
-  const [polymarketError, setPolymarketError] = useState<string | null>(null);
-  const [polymarketLiveData, setPolymarketLiveData] = useState<TradingOpsPolymarketLiveData | null>(null);
-  const [polymarketLiveError, setPolymarketLiveError] = useState<string | null>(null);
-  const [lastPolymarketLiveAt, setLastPolymarketLiveAt] = useState<string | null>(null);
-  const [polymarketPinPendingSlugs, setPolymarketPinPendingSlugs] = useState<string[]>([]);
-  const [polymarketWarmupComplete, setPolymarketWarmupComplete] = useState(false);
+  const {
+    data: liveData,
+    error: liveError,
+    lastSuccessfulAt,
+  } = useLiveTape();
+  const {
+    data: polymarketData,
+    error: polymarketError,
+    refetch: refetchPolymarketData,
+  } = usePolymarketStatus();
+  const {
+    data: polymarketLiveData,
+    error: polymarketLiveError,
+    lastSuccessfulAt: lastPolymarketLiveAt,
+    warmupComplete: polymarketWarmupComplete,
+    pinPendingSlugs: polymarketPinPendingSlugs,
+    mutatePin: mutatePolymarketPin,
+  } = usePolymarketLive();
+
   const [polymarketHandoffRetries, setPolymarketHandoffRetries] = useState(0);
-
-  const applyLiveData = useCallback((payload: TradingOpsLiveData) => {
-    setLiveData(payload);
-    setLiveError(null);
-    setLastSuccessfulAt(payload.generatedAt);
-  }, []);
-
-  const fetchLiveData = useCallback(async () => {
-    try {
-      const response = await fetch("/api/trading-ops/live", {
-        cache: "no-store",
-      });
-
-      if (!response.ok) {
-        throw new Error(`Live route failed (${response.status})`);
-      }
-
-      const payload = (await response.json()) as TradingOpsLiveData;
-      applyLiveData(payload);
-    } catch (error) {
-      setLiveError(error instanceof Error ? error.message : "Live route failed");
-    }
-  }, [applyLiveData]);
-
-  const applyPolymarketData = useCallback((payload: TradingOpsPolymarketData) => {
-    setPolymarketData(payload);
-    setPolymarketError(null);
-  }, []);
-
-  const applyPolymarketLiveData = useCallback((payload: TradingOpsPolymarketLiveData) => {
-    setPolymarketLiveData(payload);
-    setPolymarketLiveError(null);
-    setLastPolymarketLiveAt(payload.generatedAt);
-    if (isPolymarketLiveReady(payload)) {
-      setPolymarketWarmupComplete(true);
-    }
-  }, []);
-
-  useEffect(() => {
-    const timeoutId = window.setTimeout(() => {
-      setPolymarketWarmupComplete(true);
-    }, POLYMARKET_STARTUP_GRACE_MS);
-
-    return () => {
-      window.clearTimeout(timeoutId);
-    };
-  }, []);
-
-  const fetchPolymarketData = useCallback(async () => {
-    try {
-      const response = await fetch("/api/trading-ops/polymarket", {
-        cache: "no-store",
-      });
-
-      if (!response.ok) {
-        throw new Error(`Polymarket route failed (${response.status})`);
-      }
-
-      const payload = (await response.json()) as unknown;
-      if (!isPolymarketPayload(payload)) {
-        throw new Error("Polymarket route returned an invalid payload");
-      }
-      applyPolymarketData(payload);
-    } catch (error) {
-      setPolymarketError(error instanceof Error ? error.message : "Polymarket route failed");
-    }
-  }, [applyPolymarketData]);
-
-  const fetchPolymarketLiveData = useCallback(async () => {
-    try {
-      const response = await fetch("/api/trading-ops/polymarket/live", {
-        cache: "no-store",
-      });
-
-      if (!response.ok) {
-        throw new Error(`Polymarket live route failed (${response.status})`);
-      }
-
-      const payload = (await response.json()) as unknown;
-      if (!isPolymarketLivePayload(payload)) {
-        throw new Error("Polymarket live route returned an invalid payload");
-      }
-      applyPolymarketLiveData(payload);
-    } catch (error) {
-      setPolymarketLiveError(error instanceof Error ? error.message : "Polymarket live route failed");
-    }
-  }, [applyPolymarketLiveData]);
-
-  const mutatePolymarketPin = useCallback(async (
-    market: TradingOpsPolymarketLiveData["markets"][number],
-    action: "pin" | "remove",
-  ) => {
-    try {
-      setPolymarketPinPendingSlugs((current) => (
-        current.includes(market.slug) ? current : [...current, market.slug]
-      ));
-      const response = await fetch(
-        action === "pin"
-          ? "/api/trading-ops/polymarket/pins"
-          : `/api/trading-ops/polymarket/pins/${encodeURIComponent(market.slug)}`,
-        {
-          method: action === "pin" ? "POST" : "DELETE",
-          headers: action === "pin" ? { "content-type": "application/json" } : undefined,
-          body:
-            action === "pin"
-              ? JSON.stringify({
-                  marketSlug: market.slug,
-                  bucket: market.bucket,
-                  title: market.title || "Untitled market",
-                  eventTitle: market.eventTitle,
-                  league: market.league,
-                })
-              : undefined,
-        },
-      );
-
-      if (!response.ok) {
-        const payload = (await response.json().catch(() => null)) as { error?: string } | null;
-        throw new Error(payload?.error ?? `Polymarket ${action} failed (${response.status})`);
-      }
-
-      await fetchPolymarketLiveData();
-    } catch (error) {
-      setPolymarketLiveError(error instanceof Error ? error.message : `Polymarket ${action} failed`);
-    } finally {
-      setPolymarketPinPendingSlugs((current) => current.filter((slug) => slug !== market.slug));
-    }
-  }, [fetchPolymarketLiveData]);
-
-  useEffect(() => {
-    let stopped = false;
-    let source: EventSource | null = null;
-    let fallbackInterval: number | null = null;
-    let reconnectTimeout: number | null = null;
-
-    const disconnect = () => {
-      source?.close();
-      source = null;
-    };
-
-    const stopFallback = () => {
-      if (fallbackInterval !== null) {
-        window.clearInterval(fallbackInterval);
-        fallbackInterval = null;
-      }
-    };
-
-    const startFallback = () => {
-      if (fallbackInterval !== null || document.hidden) return;
-      fallbackInterval = window.setInterval(() => {
-        void fetchLiveData();
-      }, LIVE_POLL_MS);
-    };
-
-    const scheduleReconnect = () => {
-      if (stopped || reconnectTimeout !== null || document.hidden) return;
-      reconnectTimeout = window.setTimeout(() => {
-        reconnectTimeout = null;
-        connect();
-      }, LIVE_STREAM_RETRY_MS);
-    };
-
-    const connect = () => {
-      if (stopped || source || document.hidden || typeof EventSource === "undefined") return;
-
-      try {
-        source = new EventSource("/api/trading-ops/live/stream");
-        source.addEventListener("snapshot", (event) => {
-          try {
-            const payload = JSON.parse((event as MessageEvent).data) as TradingOpsLiveData;
-            applyLiveData(payload);
-            stopFallback();
-          } catch {
-            setLiveError("Live stream payload could not be parsed.");
-          }
-        });
-        source.addEventListener("warning", (event) => {
-          try {
-            const payload = JSON.parse((event as MessageEvent).data) as { message?: string };
-            setLiveError(payload.message ?? "Live stream warning");
-          } catch {
-            setLiveError("Live stream warning");
-          }
-        });
-        source.onerror = () => {
-          disconnect();
-          setLiveError((current) => current ?? "Live stream reconnecting. Falling back to snapshots.");
-          void fetchLiveData();
-          startFallback();
-          scheduleReconnect();
-        };
-      } catch {
-        startFallback();
-      }
-    };
-
-    void fetchLiveData();
-    connect();
-
-    const handleVisibility = () => {
-      if (!document.hidden) {
-        stopFallback();
-        void fetchLiveData();
-        connect();
-        return;
-      }
-
-      disconnect();
-      stopFallback();
-      if (reconnectTimeout !== null) {
-        window.clearTimeout(reconnectTimeout);
-        reconnectTimeout = null;
-      }
-    };
-
-    document.addEventListener("visibilitychange", handleVisibility);
-    return () => {
-      stopped = true;
-      disconnect();
-      stopFallback();
-      if (reconnectTimeout !== null) {
-        window.clearTimeout(reconnectTimeout);
-      }
-      document.removeEventListener("visibilitychange", handleVisibility);
-    };
-  }, [applyLiveData, fetchLiveData]);
-
-  useEffect(() => {
-    let intervalId: number | null = null;
-
-    const run = () => {
-      if (document.hidden) return;
-      void fetchPolymarketData();
-    };
-
-    run();
-    intervalId = window.setInterval(run, POLYMARKET_POLL_MS);
-    const handleVisibility = () => {
-      if (!document.hidden) {
-        run();
-      }
-    };
-
-    document.addEventListener("visibilitychange", handleVisibility);
-    return () => {
-      if (intervalId !== null) {
-        window.clearInterval(intervalId);
-      }
-      document.removeEventListener("visibilitychange", handleVisibility);
-    };
-  }, [fetchPolymarketData]);
-
   const polymarketNeedsHandoff = isPolymarketAggregateHandoffPending({
     data: polymarketData,
     liveData: polymarketLiveData,
@@ -356,111 +104,13 @@ export function TradingOpsDashboard({ data }: TradingOpsDashboardProps) {
 
     const timeoutId = window.setTimeout(() => {
       setPolymarketHandoffRetries((current) => current + 1);
-      void fetchPolymarketData();
+      void refetchPolymarketData();
     }, POLYMARKET_HANDOFF_RETRY_MS);
 
     return () => {
       window.clearTimeout(timeoutId);
     };
-  }, [fetchPolymarketData, polymarketHandoffRetries, polymarketNeedsHandoff]);
-
-  useEffect(() => {
-    let stopped = false;
-    let source: EventSource | null = null;
-    let fallbackInterval: number | null = null;
-    let reconnectTimeout: number | null = null;
-
-    const disconnect = () => {
-      source?.close();
-      source = null;
-    };
-
-    const stopFallback = () => {
-      if (fallbackInterval !== null) {
-        window.clearInterval(fallbackInterval);
-        fallbackInterval = null;
-      }
-    };
-
-    const startFallback = () => {
-      if (fallbackInterval !== null || document.hidden) return;
-      fallbackInterval = window.setInterval(() => {
-        void fetchPolymarketLiveData();
-      }, POLYMARKET_LIVE_POLL_MS);
-    };
-
-    const scheduleReconnect = () => {
-      if (stopped || reconnectTimeout !== null || document.hidden) return;
-      reconnectTimeout = window.setTimeout(() => {
-        reconnectTimeout = null;
-        connect();
-      }, POLYMARKET_LIVE_STREAM_RETRY_MS);
-    };
-
-    const connect = () => {
-      if (stopped || source || document.hidden || typeof EventSource === "undefined") return;
-
-      try {
-        source = new EventSource("/api/trading-ops/polymarket/live/stream");
-        source.addEventListener("snapshot", (event) => {
-          try {
-            const payload = JSON.parse((event as MessageEvent).data) as TradingOpsPolymarketLiveData;
-            applyPolymarketLiveData(payload);
-            stopFallback();
-          } catch {
-            setPolymarketLiveError("Polymarket live stream payload could not be parsed.");
-          }
-        });
-        source.addEventListener("warning", (event) => {
-          try {
-            const payload = JSON.parse((event as MessageEvent).data) as { message?: string };
-            setPolymarketLiveError(payload.message ?? "Polymarket live stream warning");
-          } catch {
-            setPolymarketLiveError("Polymarket live stream warning");
-          }
-        });
-        source.onerror = () => {
-          disconnect();
-          setPolymarketLiveError((current) => current ?? "Polymarket live stream reconnecting. Falling back to snapshots.");
-          void fetchPolymarketLiveData();
-          startFallback();
-          scheduleReconnect();
-        };
-      } catch {
-        startFallback();
-      }
-    };
-
-    void fetchPolymarketLiveData();
-    connect();
-
-    const handleVisibility = () => {
-      if (!document.hidden) {
-        stopFallback();
-        void fetchPolymarketLiveData();
-        connect();
-        return;
-      }
-
-      disconnect();
-      stopFallback();
-      if (reconnectTimeout !== null) {
-        window.clearTimeout(reconnectTimeout);
-        reconnectTimeout = null;
-      }
-    };
-
-    document.addEventListener("visibilitychange", handleVisibility);
-    return () => {
-      stopped = true;
-      disconnect();
-      stopFallback();
-      if (reconnectTimeout !== null) {
-        window.clearTimeout(reconnectTimeout);
-      }
-      document.removeEventListener("visibilitychange", handleVisibility);
-    };
-  }, [applyPolymarketLiveData, fetchPolymarketLiveData]);
+  }, [refetchPolymarketData, polymarketHandoffRetries, polymarketNeedsHandoff]);
 
   const liveArtifact = buildLiveArtifact(liveData, liveError, lastSuccessfulAt);
   const liveExecutionGateArtifact = buildLiveExecutionGateArtifact(liveData, liveError, lastSuccessfulAt);
