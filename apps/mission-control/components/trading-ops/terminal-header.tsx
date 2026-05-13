@@ -3,7 +3,7 @@ import { formatRelativeAge } from "@/lib/format-utils";
 import { cn } from "@/lib/utils";
 import { useAnimatedValue, useFlashClass } from "./animated-quote";
 
-const HEADER_TICKER_SYMBOLS = ["SPY", "QQQ", "IWM"];
+const HEADER_TICKER_SYMBOLS = ["NASDAQ", "DOW", "SPY", "QQQ", "IWM"];
 
 export function TerminalHeader({
   data,

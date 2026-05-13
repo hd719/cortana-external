@@ -425,7 +425,7 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
   return (
     <div
       className={cn(
-        "market-lab-surface w-full font-mono",
+        "market-lab-surface w-full min-w-0 overflow-x-hidden font-mono",
         embedded ? "" : "mx-auto max-w-[1500px] px-4 py-6 md:px-6",
       )}
     >
@@ -439,7 +439,7 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
               <span className="text-sm font-bold uppercase tracking-wider">Forward-looking trust reviews</span>
             </div>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="grid w-full grid-cols-3 gap-2 md:flex md:w-auto md:flex-wrap md:items-center">
             <label className="sr-only" htmlFor="market-lab-symbol">
               Symbol
             </label>
@@ -447,10 +447,10 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
               id="market-lab-symbol"
               value={symbol}
               onChange={(event) => setSymbol(event.target.value.toUpperCase())}
-              className="h-8 w-24 rounded-md border border-border/70 bg-background px-2 font-mono text-xs font-semibold uppercase tracking-wider outline-none transition focus:border-foreground/40 focus:ring-2 focus:ring-foreground/10"
+              className="col-span-3 h-8 w-full rounded-md border border-border/70 bg-background px-2 font-mono text-xs font-semibold uppercase tracking-wider outline-none transition focus:border-foreground/40 focus:ring-2 focus:ring-foreground/10 md:col-span-1 md:w-24"
               aria-label="Symbol"
             />
-            <Button onClick={startRun} disabled={loading} size="sm" className="h-8 gap-1.5 px-3 font-mono text-xs uppercase tracking-wider">
+            <Button onClick={startRun} disabled={loading} size="sm" className="h-8 w-full justify-center gap-1.5 px-3 font-mono text-xs uppercase tracking-wider md:w-auto">
               <Play className="h-3.5 w-3.5" />
               Run
             </Button>
@@ -459,7 +459,7 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
               onClick={handleRefresh}
               disabled={refreshing || loading}
               size="sm"
-              className="h-8 gap-1.5 px-3 font-mono text-xs uppercase tracking-wider"
+              className="h-8 w-full justify-center gap-1.5 px-3 font-mono text-xs uppercase tracking-wider md:w-auto"
             >
               <RefreshCw className={cn("h-3.5 w-3.5", refreshing && "animate-spin")} />
               Refresh
@@ -469,7 +469,7 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
               onClick={settleDue}
               disabled={loading}
               size="sm"
-              className="h-8 gap-1.5 px-3 font-mono text-xs uppercase tracking-wider"
+              className="h-8 w-full justify-center gap-1.5 px-3 font-mono text-xs uppercase tracking-wider md:w-auto"
             >
               <ArrowUpRight className="h-3.5 w-3.5" />
               Settle due
@@ -702,9 +702,9 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
           <section className="grid gap-3 lg:grid-cols-2">
             <Panel icon={MessageSquareText} eyebrow="Second opinion" title="Codex review" dense className="h-full">
               <div className="space-y-1.5">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-[10px] uppercase tracking-widest text-muted-foreground">Status</span>
-                  <span className="text-xs font-semibold">
+                <div className="flex min-w-0 items-center justify-between gap-2">
+                  <span className="shrink-0 text-[10px] uppercase tracking-widest text-muted-foreground">Status</span>
+                  <span className="min-w-0 truncate text-right text-xs font-semibold">
                     {codexState}
                     {structuredCodex ? ` · ${asPercent(structuredCodex.confidence)} · ${structuredCodex.horizon.toUpperCase()}` : ""}
                   </span>
@@ -732,7 +732,7 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
                         </div>
                       ) : null}
                     </div>
-                    <div className="grid gap-1">
+                    <div className="flex flex-col gap-1">
                       {structuredCodex.roles.map((role) => (
                         <CodexRoleRow key={role.role} role={role} />
                       ))}
@@ -747,19 +747,19 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
                 {settlementWindows.map((settlement) => (
                   <li
                     key={String(settlement.window)}
-                    className="grid grid-cols-[40px_minmax(0,1fr)_auto] items-center gap-2 rounded-md border border-border/60 bg-muted/20 px-2.5 py-1.5"
+                    className="grid grid-cols-[36px_minmax(0,1fr)_auto] items-center gap-2 rounded-md border border-border/60 bg-muted/20 px-2.5 py-1.5"
                   >
                     <span className="text-xs font-bold uppercase">{String(settlement.window)}</span>
-                    <span className="text-[10px] uppercase tracking-widest text-muted-foreground">
+                    <span className="min-w-0 truncate text-[10px] uppercase tracking-widest text-muted-foreground">
                       {settlementReturn(settlement) != null
                         ? `${Number(settlementReturn(settlement)).toFixed(2)}% · vs SPY ${
                             settlement.alpha_vs_spy_pct != null
                               ? `${Number(settlement.alpha_vs_spy_pct).toFixed(2)}%`
                               : "—"
                           }`
-                        : "Return: pending · vs SPY: pending"}
+                        : "pending · vs SPY pending"}
                     </span>
-                    <span className="rounded border border-border/60 px-1.5 py-px text-[9px] uppercase tracking-wider text-muted-foreground">
+                    <span className="shrink-0 rounded border border-border/60 px-1.5 py-px text-[9px] uppercase tracking-wider text-muted-foreground">
                       {String(settlement.status ?? "pending")}
                     </span>
                   </li>
@@ -934,7 +934,7 @@ function Panel({
   className?: string;
 }) {
   return (
-    <section className={cn("rounded-lg border border-border/70 bg-card/60", className)}>
+    <section className={cn("overflow-hidden rounded-lg border border-border/70 bg-card/60", className)}>
       <header className="flex items-center gap-2 border-b border-border/50 px-3 py-2">
         <Icon className="h-3.5 w-3.5 text-muted-foreground" />
         <div className="leading-tight">

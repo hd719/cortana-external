@@ -576,7 +576,7 @@ export function TradingOpsDashboard({ data }: TradingOpsDashboardProps) {
   };
 
   return (
-    <div className="space-y-3">
+    <div className="min-w-0 space-y-3 overflow-x-hidden">
       {/* ── Zone A: Terminal Header Bar ── */}
       <TerminalHeader data={data} liveData={liveData} />
 
