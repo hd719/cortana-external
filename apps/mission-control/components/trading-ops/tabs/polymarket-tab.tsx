@@ -126,33 +126,33 @@ export function PolymarketTab({
 
   return (
     <>
-      <section className="space-y-3">
-        <ArtifactPanel title="Live stream" artifact={polymarketStreamCardArtifact}>
-          {displayPolymarketLiveData ? (
-            <div className="space-y-3 text-sm">
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge variant={badgeVariantForPolymarketStreamer(displayPolymarketLiveData)} className="text-[10px]">
-                  {displayPolymarketLiveData.streamer.marketsConnected ? "Markets live" : "Markets reconnecting"}
-                </Badge>
-                <Badge variant={displayPolymarketLiveData.streamer.privateConnected ? "success" : "outline"} className="text-[10px]">
-                  {displayPolymarketLiveData.streamer.privateConnected ? "Private live" : "Private waiting"}
-                </Badge>
-                <p className="text-xs text-muted-foreground">
-                  Last refresh {lastPolymarketLiveAt ? formatOperatorTimestamp(lastPolymarketLiveAt) : "waiting"}.
-                </p>
-              </div>
-              <dl className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
-                <Metric label="Tracked markets" value={String(displayPolymarketLiveData.streamer.trackedMarketCount)} />
-                <Metric label="Open orders" value={String(displayPolymarketLiveData.account.openOrdersCount ?? 0)} />
-                <Metric label="Positions" value={String(displayPolymarketLiveData.account.positionCount ?? 0)} />
-                <Metric label="Buying power" value={formatMoney(displayPolymarketLiveData.account.buyingPower)} />
-                <Metric label="Last market msg" value={formatOperatorTimestamp(displayPolymarketLiveData.streamer.lastMarketMessageAt)} />
-                <Metric label="Last private msg" value={formatOperatorTimestamp(displayPolymarketLiveData.streamer.lastPrivateMessageAt)} />
-              </dl>
+      <ArtifactPanel title="Live stream" artifact={polymarketStreamCardArtifact}>
+        {displayPolymarketLiveData ? (
+          <div className="space-y-3 text-sm">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant={badgeVariantForPolymarketStreamer(displayPolymarketLiveData)} className="text-[10px]">
+                {displayPolymarketLiveData.streamer.marketsConnected ? "Markets live" : "Markets reconnecting"}
+              </Badge>
+              <Badge variant={displayPolymarketLiveData.streamer.privateConnected ? "success" : "outline"} className="text-[10px]">
+                {displayPolymarketLiveData.streamer.privateConnected ? "Private live" : "Private waiting"}
+              </Badge>
+              <p className="text-xs text-muted-foreground">
+                Last refresh {lastPolymarketLiveAt ? formatOperatorTimestamp(lastPolymarketLiveAt) : "waiting"}.
+              </p>
             </div>
-          ) : null}
-        </ArtifactPanel>
+            <dl className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
+              <Metric label="Tracked markets" value={String(displayPolymarketLiveData.streamer.trackedMarketCount)} />
+              <Metric label="Open orders" value={String(displayPolymarketLiveData.account.openOrdersCount ?? 0)} />
+              <Metric label="Positions" value={String(displayPolymarketLiveData.account.positionCount ?? 0)} />
+              <Metric label="Buying power" value={formatMoney(displayPolymarketLiveData.account.buyingPower)} />
+              <Metric label="Last market msg" value={formatOperatorTimestamp(displayPolymarketLiveData.streamer.lastMarketMessageAt)} />
+              <Metric label="Last private msg" value={formatOperatorTimestamp(displayPolymarketLiveData.streamer.lastPrivateMessageAt)} />
+            </dl>
+          </div>
+        ) : null}
+      </ArtifactPanel>
 
+      <section className="grid grid-cols-1 gap-3 xl:grid-cols-3">
         <ArtifactPanel title="Pinned" artifact={polymarketPinnedCardArtifact}>
           {displayPolymarketLiveData ? (
             <div className="space-y-3 text-sm">
@@ -177,9 +177,7 @@ export function PolymarketTab({
             </div>
           ) : null}
         </ArtifactPanel>
-      </section>
 
-      <section className="grid grid-cols-1 gap-3 xl:grid-cols-3">
         <ArtifactPanel title="Top events" artifact={polymarketEventsCardArtifact}>
           {displayPolymarketLiveData ? (
             <div className="space-y-3 text-sm">
