@@ -3,6 +3,25 @@
 **Document Status:** Lightweight roadmap  
 **Last Updated:** 2026-05-13
 
+## Implementation Progress
+
+V2 through V5 are implemented in PR #346:
+
+- V2 adds evidence snapshots, grounded optional sentiment source adapters, outcome memory, token-budgeted Codex packets, and safer Evidence Ready / Needs More Context / Blocked labeling.
+- V3 adds deterministic watchlists/opportunity boards with configurable scoring and no Codex fanout.
+- V4 adds read-only Schwab portfolio context with cached snapshot support and no order endpoints.
+- V5 adds execution intents, approvals/rejections, and a broker adapter boundary with `validate_intent` and `preview_order` only. No order placement is implemented.
+
+Current QA:
+
+```bash
+uv run --project market_lab pytest market_lab/tests
+cd apps/mission-control && pnpm test lib/market-lab.test.ts
+cd apps/mission-control && pnpm build
+MARKET_LAB_SENTIMENT_ENABLED=0 uv run --project market_lab python -m market_lab.cli opportunities --symbols AAPL,MSFT --json
+uv run --project market_lab python -m market_lab.cli portfolio --json
+```
+
 This file summarizes the version ladder. Each formal version should have the full planning set:
 
 ```text

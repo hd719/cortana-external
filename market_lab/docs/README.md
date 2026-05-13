@@ -45,6 +45,24 @@ Not included in V0:
 - multi-symbol batch reviews
 - replacing or deleting the old backtester
 
+## V2-V5 Status
+
+Implemented in PR #346 on branch `codex/market-lab-v3-tradingagents-gap-docs-20260512`.
+
+Completed:
+
+- V2 evidence snapshots, outcome memory, grounded optional sentiment adapters, token-budgeted Codex packets
+- V3 deterministic watchlists / opportunity boards without Codex fanout
+- V4 read-only Schwab portfolio context with cached snapshots and no order endpoints
+- V5 execution intent approvals plus broker-adapter validation and preview only
+
+Still not included:
+
+- order placement
+- broker cancel/replace
+- autonomous execution
+- paper trading
+
 ## Naming
 
 - `market_lab/` is the single Market Lab home.

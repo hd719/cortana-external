@@ -1,6 +1,6 @@
 # Market Lab V4 Portfolio Intelligence PRD
 
-**Document Status:** Draft
+**Document Status:** Implemented in PR #346
 **Owner:** Trading systems
 **Last Updated:** 2026-05-13
 **Depends On:** Market Lab V2 single-symbol intelligence, Market Lab V3 watchlists

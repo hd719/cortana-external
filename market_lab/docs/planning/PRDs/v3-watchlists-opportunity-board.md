@@ -1,6 +1,6 @@
 # Market Lab V3 Watchlists And Opportunity Board PRD
 
-**Document Status:** Draft
+**Document Status:** Implemented in PR #346
 **Owner:** Trading systems
 **Last Updated:** 2026-05-12
 **Depends On:** Market Lab V2 single-symbol intelligence

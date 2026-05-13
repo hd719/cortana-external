@@ -1,6 +1,6 @@
 # Market Lab V2 TradingAgents-Inspired Market Intelligence PRD
 
-**Document Status:** Draft
+**Document Status:** Implemented in PR #346
 **Owner:** Trading systems
 **Last Updated:** 2026-05-12
 **Depends On:** Market Lab V0, Market Lab V1 Codex Analyst Committee, Schwab market-data lane, settlement history
