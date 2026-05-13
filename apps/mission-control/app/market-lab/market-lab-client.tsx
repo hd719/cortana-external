@@ -740,7 +740,7 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
     <div
       className={cn(
         "market-lab-surface w-full min-w-0 overflow-x-hidden font-mono",
-        embedded ? "" : "mx-auto max-w-[1500px] px-4 py-6 md:px-6",
+        embedded ? "px-2 sm:px-3" : "mx-auto max-w-[1500px] px-4 py-6 md:px-6",
       )}
     >
       {/* ── Cockpit ribbon ── */}
@@ -1265,8 +1265,8 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
                           )}
                           title={entry.sentiment ?? "unlabeled"}
                         />
-                        <div className="min-w-0 font-sans text-[12px] leading-5">
-                          <span className="mr-1.5 align-middle font-mono text-[9px] uppercase tracking-wider text-muted-foreground/80">
+                        <div className="min-w-0 font-mono text-[12px] leading-5">
+                          <span className="mr-1.5 align-middle text-[9px] uppercase tracking-wider text-muted-foreground/80">
                             {sourceLabel(entry.source)}
                           </span>
                           <span className="text-foreground">{entry.item}</span>
@@ -1279,9 +1279,10 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
             ) : null}
           </Panel>
 
-          {/* Compact context row — Memory + Forward Score stack on left, Schwab on right */}
-          <section className="grid gap-3 lg:grid-cols-2">
-            <div className="flex flex-col gap-3">
+          {/* Compact context row — Memory + Forward Score stack on left, Schwab on right.
+              Left col stretches to row height; Forward Score grows so both columns align. */}
+          <section className="grid items-stretch gap-3 lg:grid-cols-2">
+            <div className="flex flex-col gap-3 lg:h-full">
               <Panel icon={ShieldCheck} eyebrow="Memory" title="Outcome memory" dense>
                 {outcomeMemory ? (
                   <div className="grid gap-2 sm:grid-cols-3">
@@ -1301,7 +1302,7 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
                 )}
               </Panel>
 
-              <Panel icon={ArrowUpRight} eyebrow="Forward score" title="Settlement" dense>
+              <Panel icon={ArrowUpRight} eyebrow="Forward score" title="Settlement" dense className="lg:flex-1">
                 <ul className="space-y-1">
                   {settlementWindows.map((settlement) => (
                     <li
