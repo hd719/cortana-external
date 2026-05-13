@@ -263,6 +263,13 @@ const sourceLabel = (source?: string) =>
     reddit: "Reddit",
   })[String(source ?? "")] ?? String(source ?? "source");
 
+const splitSourceSummary = (summary?: string | null, limit = 5) =>
+  String(summary ?? "")
+    .split(";")
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .slice(0, limit);
+
 const statusChipClass = (status?: string) => {
   if (status === "available" || status === "ok") return "border-emerald-400/60 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400";
   if (status === "partial" || status === "empty" || status === "rate_limited") return "border-amber-400/60 bg-amber-500/10 text-amber-600 dark:text-amber-400";
@@ -583,6 +590,16 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
   const currentVsRun = percentMove(selectedPosition?.current_price, review?.price_facts?.price);
   const currentVsAverage = percentMove(selectedPosition?.current_price, selectedPosition?.average_price);
   const sentiment = review?.sentiment_snapshot ?? null;
+  const newsRole = structuredCodex?.roles.find((role) => role.role === "news_sentiment") ?? null;
+  const sentimentDigest = (sentiment?.sources ?? [])
+    .flatMap((source) =>
+      splitSourceSummary(source.summary, 4).map((item) => ({
+        source: source.source,
+        status: source.status,
+        item,
+      })),
+    )
+    .slice(0, 6);
   const latestEvent = events.at(-1);
 
   return (
@@ -885,6 +902,40 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
                     {sentiment.status ?? "unknown"}
                   </span>
                 </div>
+                <div className="mb-2 rounded-md border border-border/60 bg-background/70 px-3 py-2.5">
+                  <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+                    <div className="text-xs font-semibold">News analysis</div>
+                    {newsRole ? (
+                      <span className={cn("rounded border px-1.5 py-px text-[9px] uppercase tracking-wider", statusChipClass(newsRole.stance))}>
+                        {newsRole.stance} · {asPercent(newsRole.confidence)}
+                      </span>
+                    ) : null}
+                  </div>
+                  {newsRole ? (
+                    <div className="space-y-2">
+                      <p className="font-sans text-xs leading-5 text-muted-foreground">{newsRole.summary}</p>
+                      <div className="grid gap-2 md:grid-cols-2">
+                        <InsightList title="Positive signals" items={newsRole.bull_points} empty="No positive news signals." />
+                        <InsightList title="Cautions" items={[...newsRole.bear_points, ...newsRole.missing_evidence.map((item) => `Missing: ${item}`)]} empty="No news cautions." />
+                      </div>
+                    </div>
+                  ) : sentimentDigest.length ? (
+                    <ul className="grid gap-1 md:grid-cols-2">
+                      {sentimentDigest.map((item, index) => (
+                        <li key={`${item.source}-${index}`} className="grid grid-cols-[auto_minmax(0,1fr)] gap-2 font-sans text-xs leading-5 text-muted-foreground">
+                          <span className={cn("mt-1 h-1.5 w-1.5 rounded-full", item.status === "available" ? "bg-emerald-500" : "bg-amber-500")} />
+                          <span>
+                            <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground/80">{sourceLabel(item.source)}</span>
+                            {" · "}
+                            {item.item}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="font-sans text-xs text-muted-foreground">No source summaries available yet.</p>
+                  )}
+                </div>
                 <ul className="grid gap-1 lg:grid-cols-3">
                   {(sentiment.sources ?? []).map((source) => (
                     <li key={source.source} className="rounded-md border border-border/60 bg-background/60 px-2.5 py-1.5">
@@ -898,9 +949,9 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
                         {source.sample_count ?? 0} samples · {source.fetch_method ?? "source adapter"}
                       </div>
                       {source.summary ? (
-                        <p className="mt-1 line-clamp-2 font-sans text-[11px] text-muted-foreground">{source.summary}</p>
+                        <p className="mt-1 line-clamp-3 font-sans text-[11px] leading-4 text-muted-foreground">{source.summary}</p>
                       ) : source.error_message ? (
-                        <p className="mt-1 line-clamp-2 font-sans text-[11px] text-muted-foreground">{source.error_message}</p>
+                        <p className="mt-1 line-clamp-3 font-sans text-[11px] leading-4 text-muted-foreground">{source.error_message}</p>
                       ) : null}
                     </li>
                   ))}

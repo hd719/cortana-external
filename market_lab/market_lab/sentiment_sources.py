@@ -107,9 +107,28 @@ class SentimentSourceClient:
             response = self.request_get(url, timeout=self.timeout_seconds, headers={"accept": "application/json"})
             if response.status_code == 429:
                 return self._result("stocktwits", "rate_limited", "stocktwits_public_stream", url, error="HTTP 429")
-            payload = response.json()
             if response.status_code >= 400:
                 return self._result("stocktwits", "error", "stocktwits_public_stream", url, error=f"HTTP {response.status_code}")
+            content_type = str(getattr(response, "headers", {}).get("content-type", "")).lower()
+            text = str(getattr(response, "text", "") or "")
+            if "json" not in content_type and not text.lstrip().startswith(("{", "[")):
+                return self._result(
+                    "stocktwits",
+                    "error",
+                    "stocktwits_public_stream",
+                    url,
+                    error="StockTwits returned a non-JSON response; public stream may be blocked or temporarily unavailable.",
+                )
+            try:
+                payload = response.json()
+            except Exception:
+                return self._result(
+                    "stocktwits",
+                    "error",
+                    "stocktwits_public_stream",
+                    url,
+                    error="StockTwits returned malformed JSON; public stream may be blocked or temporarily unavailable.",
+                )
             messages = payload.get("messages") if isinstance(payload, dict) else None
             if not isinstance(messages, list) or not messages:
                 return self._result("stocktwits", "empty", "stocktwits_public_stream", url, sample_count=0)

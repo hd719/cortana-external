@@ -129,6 +129,9 @@ describe("MarketLabClient", () => {
     expect(screen.getByText("Current: done")).toBeInTheDocument();
     expect(screen.getByText("Run done")).toBeInTheDocument();
     expect(screen.getByText("Yahoo news")).toBeInTheDocument();
+    expect(screen.getByText("News analysis")).toBeInTheDocument();
+    expect(screen.getAllByText("News is not decisive.").length).toBeGreaterThan(0);
+    expect(screen.getByText(/Missing: news/)).toBeInTheDocument();
     expect(screen.getByText("AAPL headline sample")).toBeInTheDocument();
     expect(screen.getByText("Codex says keep this blocked.")).toBeInTheDocument();
     expect(screen.getByText("Price action")).toBeInTheDocument();
