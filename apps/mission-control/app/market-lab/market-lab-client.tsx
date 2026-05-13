@@ -664,6 +664,35 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
         </div>
       </section>
 
+      {/* Debug artifacts — collapsed by default, close to the run controls */}
+      <details className="group mt-3 rounded-lg border border-border/70 bg-card/60 px-4 py-3">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <FileJson2 className="h-3.5 w-3.5 text-muted-foreground" />
+            <div>
+              <div className="text-[10px] uppercase tracking-widest text-muted-foreground">Collapsed by default</div>
+              <div className="text-sm font-semibold">Debug artifacts</div>
+            </div>
+          </div>
+          <span className="text-[10px] uppercase tracking-widest text-muted-foreground group-open:hidden">Open</span>
+          <span className="hidden text-[10px] uppercase tracking-widest text-muted-foreground group-open:inline">Close</span>
+        </summary>
+        <div className="mt-3 space-y-2">
+          {ARTIFACT_VIEWERS.map(({ kind, label }) => {
+            const artifactPath = review?.artifact_paths?.[kind] ?? null;
+            return (
+              <ArtifactViewer
+                key={kind}
+                label={label}
+                kind={kind}
+                runId={selectedRunId}
+                path={artifactPath}
+              />
+            );
+          })}
+        </div>
+      </details>
+
       {error ? (
         <div className="mt-3 rounded-md border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-200">{error}</div>
       ) : null}
@@ -1168,34 +1197,6 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
         </div>
       </section>
 
-      {/* Debug artifacts — page-level footer, spans both columns */}
-      <details className="group mt-3 rounded-lg border border-border/70 bg-card/60 px-4 py-3">
-        <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <FileJson2 className="h-3.5 w-3.5 text-muted-foreground" />
-            <div>
-              <div className="text-[10px] uppercase tracking-widest text-muted-foreground">Collapsed by default</div>
-              <div className="text-sm font-semibold">Debug artifacts</div>
-            </div>
-          </div>
-          <span className="text-[10px] uppercase tracking-widest text-muted-foreground group-open:hidden">Open</span>
-          <span className="hidden text-[10px] uppercase tracking-widest text-muted-foreground group-open:inline">Close</span>
-        </summary>
-        <div className="mt-3 space-y-2">
-          {ARTIFACT_VIEWERS.map(({ kind, label }) => {
-            const artifactPath = review?.artifact_paths?.[kind] ?? null;
-            return (
-              <ArtifactViewer
-                key={kind}
-                label={label}
-                kind={kind}
-                runId={selectedRunId}
-                path={artifactPath}
-              />
-            );
-          })}
-        </div>
-      </details>
     </div>
   );
 }
