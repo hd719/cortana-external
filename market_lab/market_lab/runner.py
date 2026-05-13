@@ -71,6 +71,11 @@ class ReviewRunner:
             spy_facts = self.market_data.get_quote("SPY")
             optional_evidence = self.market_data.get_optional_evidence(run.symbol)
             if optional_evidence.news_status != "available" or optional_evidence.sentiment_status != "available":
+                self.store.append_event(
+                    run.run_id,
+                    "sentiment_started",
+                    "Checking Yahoo Finance news, StockTwits, and Reddit.",
+                )
                 sentiment_snapshot = self.sentiment_sources.fetch(run.symbol)
                 yahoo_available = any(
                     item.source == "yahoo_finance_news" and item.status == "available"
@@ -86,6 +91,12 @@ class ReviewRunner:
                         "sentiment_status": "available" if social_available else optional_evidence.sentiment_status,
                         "notes": [*optional_evidence.notes, *sentiment_snapshot.notes],
                     },
+                )
+                source_summary = ", ".join(f"{item.source}:{item.status}" for item in sentiment_snapshot.sources)
+                self.store.append_event(
+                    run.run_id,
+                    "sentiment_checked",
+                    f"Sentiment sources {sentiment_snapshot.status}: {source_summary}.",
                 )
             checks.extend(evaluate_price_facts(price_facts))
             checks.extend(evaluate_optional_evidence(optional_evidence))

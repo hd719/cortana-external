@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from market_lab.models import OptionalEvidence, PriceFacts, TrustVerdict
+from market_lab.models import OptionalEvidence, PriceFacts, SentimentSnapshot, SentimentSourceResult, TrustVerdict
 from market_lab.runner import ReviewRunner
 from market_lab.storage import MarketLabStore
 
@@ -21,6 +21,35 @@ class FakeMarketData:
         )
 
 
+class FakeMarketDataMissingSentiment(FakeMarketData):
+    def get_optional_evidence(self, symbol: str) -> OptionalEvidence:
+        return OptionalEvidence(history_status="available", fundamentals_status="available")
+
+
+class FakeSentimentSources:
+    def fetch(self, symbol: str) -> SentimentSnapshot:
+        return SentimentSnapshot(
+            status="available",
+            sources=[
+                SentimentSourceResult(
+                    source="yahoo_finance_news",
+                    status="available",
+                    fetched_at=datetime.now(UTC),
+                    sample_count=2,
+                    fetch_method="fixture",
+                ),
+                SentimentSourceResult(
+                    source="reddit",
+                    status="available",
+                    fetched_at=datetime.now(UTC),
+                    sample_count=1,
+                    fetch_method="fixture",
+                ),
+            ],
+            notes=["fixture sentiment"],
+        )
+
+
 def test_runner_writes_artifact_and_events(tmp_path):
     store = MarketLabStore(tmp_path)
     artifact = ReviewRunner(store=store, market_data=FakeMarketData()).run("AAPL")
@@ -34,3 +63,19 @@ def test_runner_writes_artifact_and_events(tmp_path):
     assert "Market Lab Codex Review Packet" in (tmp_path / "runs" / artifact.run_id / "codex-review-packet.md").read_text(
         encoding="utf-8",
     )
+
+
+def test_runner_fetches_sentiment_and_records_timeline_steps(tmp_path):
+    store = MarketLabStore(tmp_path)
+    artifact = ReviewRunner(
+        store=store,
+        market_data=FakeMarketDataMissingSentiment(),
+        sentiment_sources=FakeSentimentSources(),
+    ).run("AAPL")
+
+    assert artifact.optional_evidence.news_status == "available"
+    assert artifact.optional_evidence.sentiment_status == "available"
+    assert artifact.sentiment_snapshot is not None
+    events = [event["event"] for event in store.read_events(artifact.run_id)]
+    assert "sentiment_started" in events
+    assert "sentiment_checked" in events

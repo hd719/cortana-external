@@ -55,6 +55,26 @@ const detail = {
       codex_review: "/tmp/codex-review.md",
     },
     checks: [{ code: "price_data_stale", severity: "blocker", message: "stale" }],
+    sentiment_snapshot: {
+      status: "partial",
+      missing_sources: ["stocktwits"],
+      sources: [
+        {
+          source: "yahoo_finance_news",
+          status: "available",
+          sample_count: 3,
+          fetch_method: "yahoo_finance_rss",
+          summary: "AAPL headline sample",
+        },
+        {
+          source: "stocktwits",
+          status: "error",
+          sample_count: 0,
+          fetch_method: "stocktwits_public_stream",
+          error_message: "HTTP 403",
+        },
+      ],
+    },
     settlements: [{ window: "1d", status: "pending" }],
   },
   settlements: [{ window: "1d", status: "pending" }],
@@ -88,7 +108,7 @@ describe("MarketLabClient", () => {
         );
       }
       if (String(url).includes("/events")) {
-        return Response.json({ status: "ok", data: [{ event: "done", message: "Run done" }] });
+        return Response.json({ status: "ok", data: [{ event: "done", message: "Run done", timestamp: "2026-05-11T00:02:00Z" }] });
       }
       if (String(url).includes("/api/market-lab/runs/") && !init?.method) {
         return Response.json({ status: "ok", data: detail });
@@ -106,7 +126,10 @@ describe("MarketLabClient", () => {
     await screen.findByText("Blocked because price data is stale.");
 
     expect(screen.getAllByText("blocked").length).toBeGreaterThan(0);
+    expect(screen.getByText("Current: done")).toBeInTheDocument();
     expect(screen.getByText("Run done")).toBeInTheDocument();
+    expect(screen.getByText("Yahoo news")).toBeInTheDocument();
+    expect(screen.getByText("AAPL headline sample")).toBeInTheDocument();
     expect(screen.getByText("Codex says keep this blocked.")).toBeInTheDocument();
     expect(screen.getByText("Price action")).toBeInTheDocument();
     expect(screen.getByText("Price evidence is stale, so the review is blocked before analyst debate.")).toBeInTheDocument();
@@ -182,7 +205,7 @@ describe("MarketLabClient", () => {
         expect.objectContaining({ method: "POST" }),
       );
     });
-    expect(await screen.findByText("Codex review started: stream-1")).toBeInTheDocument();
+    expect(await screen.findByText(/Codex review started in Sessions: stream-1/)).toBeInTheDocument();
   });
 
   it("renders inside a parent dashboard without page chrome", async () => {

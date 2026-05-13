@@ -177,7 +177,5 @@ class MarketDataClient:
             fundamentals_status="available" if fundamentals else "missing",
             news_status="missing",
             sentiment_status="missing",
-            notes=[
-                "news and sentiment are not wired in v0",
-            ],
+            notes=[],
         )

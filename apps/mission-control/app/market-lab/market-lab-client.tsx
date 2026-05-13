@@ -35,6 +35,21 @@ type Settlement = Record<string, unknown> & {
   return_pct?: number;
 };
 
+type TimelineEvent = {
+  event?: string;
+  message?: string;
+  timestamp?: string;
+};
+
+type SentimentSource = {
+  source?: string;
+  status?: string;
+  sample_count?: number;
+  fetch_method?: string;
+  error_message?: string | null;
+  summary?: string | null;
+};
+
 type CodexRoleReview = {
   role: "price_action" | "fundamentals" | "news_sentiment" | "risk" | "final_judge";
   stance: "bullish" | "bearish" | "neutral" | "mixed";
@@ -125,7 +140,7 @@ type RunDetail = {
       included_sections?: string[];
       omitted_sections?: string[];
     } | null;
-    sentiment_snapshot?: { status?: string; missing_sources?: string[]; sources?: Array<Record<string, unknown>> } | null;
+    sentiment_snapshot?: { status?: string; missing_sources?: string[]; sources?: SentimentSource[] } | null;
     portfolio_context?: PortfolioContext | null;
     artifact_paths?: {
       review?: string;
@@ -238,6 +253,23 @@ const formatRunTime = (iso?: string) => {
   }).format(date);
 };
 
+const formatEventTitle = (value?: string) =>
+  String(value ?? "event").replace(/_/g, " ");
+
+const sourceLabel = (source?: string) =>
+  ({
+    yahoo_finance_news: "Yahoo news",
+    stocktwits: "StockTwits",
+    reddit: "Reddit",
+  })[String(source ?? "")] ?? String(source ?? "source");
+
+const statusChipClass = (status?: string) => {
+  if (status === "available" || status === "ok") return "border-emerald-400/60 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400";
+  if (status === "partial" || status === "empty" || status === "rate_limited") return "border-amber-400/60 bg-amber-500/10 text-amber-600 dark:text-amber-400";
+  if (status === "error") return "border-red-400/60 bg-red-500/10 text-red-600 dark:text-red-400";
+  return "border-border/60 bg-muted/40 text-muted-foreground";
+};
+
 const getAge = (iso?: string) => {
   if (!iso) return "—";
   const date = new Date(iso);
@@ -302,7 +334,7 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const [detail, setDetail] = useState<RunDetail | null>(null);
   const [latestPortfolio, setLatestPortfolio] = useState<PortfolioContext | null>(null);
-  const [events, setEvents] = useState<Array<Record<string, unknown>>>([]);
+  const [events, setEvents] = useState<TimelineEvent[]>([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -394,7 +426,7 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
   const loadRunDetail = async (runId: string) => {
     const [runDetail, eventItems] = await Promise.all([
       api<RunDetail>(`/api/market-lab/runs/${encodeURIComponent(runId)}`),
-      api<Array<Record<string, unknown>>>(`/api/market-lab/runs/${encodeURIComponent(runId)}/events`),
+      api<TimelineEvent[]>(`/api/market-lab/runs/${encodeURIComponent(runId)}/events`),
     ]);
     setDetail(runDetail);
     setEvents(eventItems);
@@ -485,7 +517,7 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
         `/api/market-lab/runs/${encodeURIComponent(selectedRunId)}/codex-review`,
         { method: "POST" },
       );
-      setCodexStatus(`Codex review started: ${result.streamId}`);
+      setCodexStatus(`Codex review started in Sessions: ${result.streamId}. It can take a minute; refresh this run after the review attaches.`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to start Codex review");
     } finally {
@@ -550,6 +582,8 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
   const selectedPosition = portfolioContext?.positions?.find((position) => position.symbol === selectedSymbol) ?? null;
   const currentVsRun = percentMove(selectedPosition?.current_price, review?.price_facts?.price);
   const currentVsAverage = percentMove(selectedPosition?.current_price, selectedPosition?.average_price);
+  const sentiment = review?.sentiment_snapshot ?? null;
+  const latestEvent = events.at(-1);
 
   return (
     <div
@@ -837,6 +871,42 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
               <InsightList title="Bullish" items={review?.interpretation?.bullish_points ?? []} empty="No bullish points." />
               <InsightList title="Bearish" items={review?.interpretation?.bearish_points ?? []} empty="No bearish points." />
             </div>
+            {sentiment ? (
+              <div className="mt-3 rounded-md border border-border/60 bg-muted/20 p-2.5">
+                <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <div className="text-[10px] uppercase tracking-widest text-muted-foreground">News and sentiment</div>
+                    <div className="text-xs font-semibold">
+                      Sources checked
+                      {sentiment.missing_sources?.length ? ` · missing ${sentiment.missing_sources.join(", ")}` : ""}
+                    </div>
+                  </div>
+                  <span className={cn("rounded border px-1.5 py-px text-[9px] font-bold uppercase tracking-wider", statusChipClass(sentiment.status))}>
+                    {sentiment.status ?? "unknown"}
+                  </span>
+                </div>
+                <ul className="grid gap-1 lg:grid-cols-3">
+                  {(sentiment.sources ?? []).map((source) => (
+                    <li key={source.source} className="rounded-md border border-border/60 bg-background/60 px-2.5 py-1.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="truncate text-xs font-semibold">{sourceLabel(source.source)}</span>
+                        <span className={cn("rounded border px-1.5 py-px text-[9px] uppercase tracking-wider", statusChipClass(source.status))}>
+                          {source.status ?? "n/a"}
+                        </span>
+                      </div>
+                      <div className="mt-1 font-sans text-[11px] text-muted-foreground">
+                        {source.sample_count ?? 0} samples · {source.fetch_method ?? "source adapter"}
+                      </div>
+                      {source.summary ? (
+                        <p className="mt-1 line-clamp-2 font-sans text-[11px] text-muted-foreground">{source.summary}</p>
+                      ) : source.error_message ? (
+                        <p className="mt-1 line-clamp-2 font-sans text-[11px] text-muted-foreground">{source.error_message}</p>
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
           </Panel>
 
           {/* Compact context row */}
@@ -980,20 +1050,46 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
             {events.length === 0 ? (
               <p className="text-xs text-muted-foreground">No events loaded.</p>
             ) : (
-              <ol className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                {events.map((event, index) => (
-                  <li
-                    key={`${String(event.event ?? "")}-${index}`}
-                    className="grid grid-cols-[12px_minmax(0,1fr)] items-start gap-2 rounded-md border border-border/60 bg-muted/20 px-2.5 py-1.5"
-                  >
-                    <span className="mt-1.5 inline-block h-1.5 w-1.5 rounded-full bg-foreground/70" />
-                    <div className="min-w-0">
-                      <div className="truncate text-xs font-semibold">{String(event.event ?? "event")}</div>
-                      <div className="truncate font-sans text-[11px] text-muted-foreground">{String(event.message ?? "")}</div>
-                    </div>
-                  </li>
-                ))}
-              </ol>
+              <>
+                <div className="mb-2 flex flex-wrap items-center justify-between gap-2 rounded-md border border-border/60 bg-muted/20 px-2.5 py-1.5">
+                  <span className="text-xs font-semibold">Current: {formatEventTitle(latestEvent?.event)}</span>
+                  <span className="text-[10px] uppercase tracking-widest text-muted-foreground">
+                    step {events.length} of {events.length}
+                    {latestEvent?.timestamp ? ` · ${formatRunTime(latestEvent.timestamp)} · ${getAge(latestEvent.timestamp)} ago` : ""}
+                  </span>
+                </div>
+                <ol className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                  {events.map((event, index) => (
+                    <li
+                      key={`${String(event.event ?? "")}-${index}`}
+                      className={cn(
+                        "grid grid-cols-[22px_minmax(0,1fr)] items-start gap-2 rounded-md border px-2.5 py-1.5",
+                        index === events.length - 1 ? "border-foreground/30 bg-foreground/[0.03]" : "border-border/60 bg-muted/20",
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          "mt-0.5 inline-flex h-5 w-5 items-center justify-center rounded-full border text-[10px] font-semibold",
+                          index === events.length - 1
+                            ? "border-foreground/40 bg-background text-foreground"
+                            : "border-border/60 bg-background/60 text-muted-foreground",
+                        )}
+                      >
+                        {index + 1}
+                      </span>
+                      <div className="min-w-0">
+                        <div className="truncate text-xs font-semibold">{formatEventTitle(event.event)}</div>
+                        <div className="truncate font-sans text-[11px] text-muted-foreground">{String(event.message ?? "")}</div>
+                        {event.timestamp ? (
+                          <div className="mt-0.5 text-[10px] uppercase tracking-widest text-muted-foreground/80">
+                            {formatRunTime(event.timestamp)} · {getAge(event.timestamp)} ago
+                          </div>
+                        ) : null}
+                      </div>
+                    </li>
+                  ))}
+                </ol>
+              </>
             )}
           </Panel>
         </div>
