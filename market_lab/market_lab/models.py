@@ -147,6 +147,219 @@ class CodexReviewStructured(Model):
     raw_payload: dict[str, Any] = Field(default_factory=dict)
 
 
+class SentimentSourceResult(Model):
+    source: Literal["yahoo_finance_news", "stocktwits", "reddit"]
+    status: Literal["available", "empty", "missing", "rate_limited", "error"]
+    fetched_at: datetime
+    sample_count: int = 0
+    fetch_method: str
+    request_url: str | None = None
+    summary: str | None = None
+    samples: list[str] = Field(default_factory=list)
+    raw_artifact_path: str | None = None
+    error_message: str | None = None
+
+
+class SentimentSnapshot(Model):
+    status: Literal["available", "partial", "missing", "error"]
+    sources: list[SentimentSourceResult] = Field(default_factory=list)
+    missing_sources: list[str] = Field(default_factory=list)
+    notes: list[str] = Field(default_factory=list)
+
+
+class EvidenceSnapshot(Model):
+    symbol: str
+    generated_at: datetime
+    price_summary: dict[str, Any]
+    benchmark_summary: dict[str, Any]
+    momentum_summary: dict[str, Any] | None = None
+    fundamentals_summary: dict[str, Any] | None = None
+    news_summary: dict[str, Any] | None = None
+    sentiment_summary: dict[str, Any] | None = None
+    risk_flags: list[str] = Field(default_factory=list)
+    missing_context: list[str] = Field(default_factory=list)
+    check_summary: list[dict[str, Any]] = Field(default_factory=list)
+
+    @field_validator("symbol")
+    @classmethod
+    def normalize_evidence_symbol(cls, value: str) -> str:
+        normalized = value.strip().upper()
+        if not normalized:
+            raise ValueError("symbol is required")
+        return normalized
+
+
+class OutcomeMemorySummary(Model):
+    symbol: str
+    lookback_runs: int
+    evidence_ready_count: int
+    needs_more_context_count: int
+    blocked_count: int
+    settled_count: int
+    evidence_ready_success_rate: float | None = None
+    evidence_ready_avg_alpha_vs_spy_pct: float | None = None
+    common_missing_context: list[str] = Field(default_factory=list)
+    notes: list[str] = Field(default_factory=list)
+
+
+class TokenBudgetSummary(Model):
+    mode: Literal["quick", "deep"]
+    estimated_input_tokens: int | None = None
+    max_input_tokens: int
+    included_sections: list[str] = Field(default_factory=list)
+    omitted_sections: list[str] = Field(default_factory=list)
+
+
+class WatchlistDefinition(Model):
+    name: str
+    symbols: list[str]
+    description: str | None = None
+
+    @field_validator("symbols")
+    @classmethod
+    def normalize_watchlist_symbols(cls, value: list[str]) -> list[str]:
+        return [item.strip().upper() for item in value if item.strip()]
+
+
+class OpportunityScoringConfig(Model):
+    fresh_price_spy_points: float = 20
+    no_hard_blockers_points: float = 10
+    momentum_min_points: float = -10
+    momentum_max_points: float = 25
+    outcome_memory_min_points: float = -10
+    outcome_memory_max_points: float = 20
+    missing_context_max_penalty: float = 15
+    risk_flags_max_penalty: float = 30
+    high_threshold: float = 80
+    medium_threshold: float = 60
+    low_threshold: float = 40
+    warnings: list[str] = Field(default_factory=list)
+
+
+class OpportunityCandidate(Model):
+    symbol: str
+    rank: int
+    score: float
+    score_components: dict[str, float] = Field(default_factory=dict)
+    review_label: str
+    reasons: list[str] = Field(default_factory=list)
+    blockers: list[str] = Field(default_factory=list)
+    missing_context: list[str] = Field(default_factory=list)
+    evidence_snapshot_path: str | None = None
+    outcome_memory_summary: dict[str, Any] | None = None
+
+
+class OpportunityBoardArtifact(Model):
+    schema_version: str = "market-lab-opportunity-board/v1"
+    board_id: str
+    watchlist: str
+    generated_at: datetime
+    candidates: list[OpportunityCandidate]
+    scoring_config: OpportunityScoringConfig
+    artifact_path: str | None = None
+
+
+class PortfolioPosition(Model):
+    account_hash: str | None = None
+    symbol: str
+    asset_type: str | None = None
+    quantity: float | None = None
+    average_price: float | None = None
+    current_price: float | None = None
+    day_change: float | None = None
+    day_change_pct: float | None = None
+    quote_source: str | None = None
+    quote_status: str | None = None
+    quote_timestamp: datetime | None = None
+    cost_basis: float | None = None
+    unrealized_pnl: float | None = None
+    market_value: float | None = None
+    weight_pct: float | None = None
+    sector: str | None = None
+    themes: list[str] = Field(default_factory=list)
+
+    @field_validator("symbol")
+    @classmethod
+    def normalize_position_symbol(cls, value: str) -> str:
+        return value.strip().upper()
+
+
+class PortfolioAccount(Model):
+    account_hash: str
+    display_name: str | None = None
+    account_type: str | None = None
+    cash_value: float | None = None
+    liquidation_value: float | None = None
+
+
+class PortfolioContext(Model):
+    status: Literal["available", "unavailable", "reauth_required", "error"]
+    source: str
+    generated_at: datetime
+    accounts: list[PortfolioAccount] = Field(default_factory=list)
+    positions: list[PortfolioPosition] = Field(default_factory=list)
+    exposure_notes: list[str] = Field(default_factory=list)
+    overlap_notes: list[str] = Field(default_factory=list)
+    message: str | None = None
+    artifact_path: str | None = None
+
+
+class ApprovalRecord(Model):
+    operator: str
+    decided_at: datetime
+    decision: Literal["approved", "rejected"]
+    note: str | None = None
+
+
+class ExecutionIntent(Model):
+    intent_id: str
+    symbol: str
+    created_at: datetime
+    expires_at: datetime
+    source_review_id: str
+    evidence_snapshot_path: str
+    portfolio_context_path: str | None = None
+    proposed_action: Literal["buy", "sell", "hold"]
+    proposed_notional: float | None = None
+    status: Literal["draft", "approved", "rejected", "expired", "submitted"]
+    approval: ApprovalRecord | None = None
+    artifact_path: str | None = None
+
+    @field_validator("symbol")
+    @classmethod
+    def normalize_intent_symbol(cls, value: str) -> str:
+        return value.strip().upper()
+
+
+class BrokerValidationResult(Model):
+    intent_id: str
+    checked_at: datetime
+    status: Literal["valid", "blocked", "needs_refresh"]
+    reasons: list[str] = Field(default_factory=list)
+    evidence_fresh: bool
+    price_fresh: bool
+    portfolio_fresh: bool
+    account_available: bool
+    duplicate_order_detected: bool
+
+
+class BrokerOrderPreview(Model):
+    intent_id: str
+    preview_id: str
+    created_at: datetime
+    expires_at: datetime
+    symbol: str
+    side: Literal["buy", "sell"]
+    quote_price: float
+    quote_as_of: datetime
+    estimated_quantity: float | None = None
+    estimated_notional: float | None = None
+    estimated_cost: float | None = None
+    max_price_age_seconds: int
+    max_slippage_pct: float
+    warnings: list[str] = Field(default_factory=list)
+
+
 class SettlementWindow(Model):
     window: Literal["1d", "5d", "20d"]
     status: SettlementStatus
@@ -170,6 +383,9 @@ class ArtifactPaths(Model):
     tradingagents: str | None = None
     codex_packet: str | None = None
     codex_review: str | None = None
+    evidence_snapshot: str | None = None
+    outcome_memory: str | None = None
+    portfolio_context: str | None = None
 
 
 class ReviewArtifact(Model):
@@ -189,6 +405,11 @@ class ReviewArtifact(Model):
     tradingagents: TradingAgentsReview
     codex_review: CodexReview | None = None
     codex_review_structured: CodexReviewStructured | dict[str, Any] | None = None
+    evidence_snapshot: EvidenceSnapshot | None = None
+    outcome_memory: OutcomeMemorySummary | None = None
+    token_budget: TokenBudgetSummary | None = None
+    sentiment_snapshot: SentimentSnapshot | None = None
+    portfolio_context: PortfolioContext | None = None
     settlements: list[SettlementWindow] = Field(default_factory=list)
     artifact_paths: ArtifactPaths
 

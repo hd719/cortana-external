@@ -451,11 +451,11 @@ describe("TradingOpsDashboard", () => {
     const watchlistsTab = screen.getByRole("tab", { name: "Watchlists" });
     fireEvent.mouseDown(watchlistsTab);
     fireEvent.click(watchlistsTab);
-    expect(container).toHaveTextContent("Latest trading run watchlists");
-    expect(container).toHaveTextContent("BUY 0 · WATCH 6 · NO_BUY 2");
-    expect(container).toHaveTextContent("ABBV");
-    expect(container).toHaveTextContent("ACHV");
-    expect(container).toHaveTextContent("AEP");
+    expect(container).toHaveTextContent("Watchlists / Opportunity Board");
+    expect(container).toHaveTextContent("Deterministic review priority. No Codex fanout, no buy/sell signal.");
+    expect(container).toHaveTextContent("Core");
+    expect(container).toHaveTextContent("Benchmarks");
+    expect(container).toHaveTextContent("Score a watchlist to rank symbols for review.");
   });
 
   it("renders live tab data from the Schwab stream snapshot", async () => {

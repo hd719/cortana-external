@@ -8,10 +8,14 @@ Mission statement:
 
 ## Planning Docs
 
-- PRD: [planning/PRDs/v0-forward-looking-trust-reviews.md](planning/PRDs/v0-forward-looking-trust-reviews.md)
-- Tech Spec: [planning/TechSpecs/v0-forward-looking-trust-reviews.md](planning/TechSpecs/v0-forward-looking-trust-reviews.md)
-- Implementation Plan: [planning/Implementation/v0-forward-looking-trust-reviews.md](planning/Implementation/v0-forward-looking-trust-reviews.md)
-- QA Plan: [planning/QA/v0-forward-looking-trust-reviews.md](planning/QA/v0-forward-looking-trust-reviews.md)
+| Version | PRD | Tech Spec | Implementation | QA |
+|---------|-----|-----------|----------------|----|
+| V0 | [PRD](planning/PRDs/v0-forward-looking-trust-reviews.md) | [Tech Spec](planning/TechSpecs/v0-forward-looking-trust-reviews.md) | [Implementation](planning/Implementation/v0-forward-looking-trust-reviews.md) | [QA](planning/QA/v0-forward-looking-trust-reviews.md) |
+| V1 | [PRD](planning/PRDs/v1-codex-analyst-committee.md) | [Tech Spec](planning/TechSpecs/v1-codex-analyst-committee.md) | [Implementation](planning/Implementation/v1-codex-analyst-committee.md) | [QA](planning/QA/v1-codex-analyst-committee.md) |
+| V2 | [PRD](planning/PRDs/v2-tradingagents-inspired-market-intelligence.md) | [Tech Spec](planning/TechSpecs/v2-tradingagents-inspired-market-intelligence.md) | [Implementation](planning/Implementation/v2-tradingagents-inspired-market-intelligence.md) | [QA](planning/QA/v2-tradingagents-inspired-market-intelligence.md) |
+| V3 | [PRD](planning/PRDs/v3-watchlists-opportunity-board.md) | [Tech Spec](planning/TechSpecs/v3-watchlists-opportunity-board.md) | [Implementation](planning/Implementation/v3-watchlists-opportunity-board.md) | [QA](planning/QA/v3-watchlists-opportunity-board.md) |
+| V4 | [PRD](planning/PRDs/v4-portfolio-intelligence.md) | [Tech Spec](planning/TechSpecs/v4-portfolio-intelligence.md) | [Implementation](planning/Implementation/v4-portfolio-intelligence.md) | [QA](planning/QA/v4-portfolio-intelligence.md) |
+| V5 | [PRD](planning/PRDs/v5-execution-readiness.md) | [Tech Spec](planning/TechSpecs/v5-execution-readiness.md) | [Implementation](planning/Implementation/v5-execution-readiness.md) | [QA](planning/QA/v5-execution-readiness.md) |
 
 ## V0 Status
 
@@ -40,6 +44,24 @@ Not included in V0:
 - historical as-of-date backtesting
 - multi-symbol batch reviews
 - replacing or deleting the old backtester
+
+## V2-V5 Status
+
+Implemented in PR #346 on branch `codex/market-lab-v3-tradingagents-gap-docs-20260512`.
+
+Completed:
+
+- V2 evidence snapshots, outcome memory, grounded optional sentiment adapters, token-budgeted Codex packets
+- V3 deterministic watchlists / opportunity boards without Codex fanout
+- V4 read-only Schwab portfolio context with cached snapshots and no order endpoints
+- V5 execution intent approvals plus broker-adapter validation and preview only
+
+Still not included:
+
+- order placement
+- broker cancel/replace
+- autonomous execution
+- paper trading
 
 ## Naming
 

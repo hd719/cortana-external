@@ -4,10 +4,16 @@ import argparse
 import json
 from typing import Any
 
-from .codex_review import codex_prompt_for_packet
+from .codex_review import build_codex_packet, codex_prompt_for_packet
+from .broker_adapter import BrokerAdapter
+from .execution_intents import ExecutionIntentService
+from .models import ReviewArtifact
+from .opportunities import OpportunityBoardService
+from .portfolio_context import PortfolioContextService
 from .runner import ReviewRunner
 from .settlement import SettlementService
 from .storage import MarketLabStore
+from .token_budget import build_token_budget
 
 
 def emit(payload: Any, *, as_json: bool = False) -> None:
@@ -76,6 +82,24 @@ def codex_packet_command(args: argparse.Namespace) -> None:
     review = store.read_review(args.run_id)
     if review is None:
         raise SystemExit(f"Review not found: {args.run_id}")
+    artifact = ReviewArtifact.model_validate(review)
+    prior_runs = [item for item in store.list_runs(limit=25) if item.symbol == artifact.symbol and item.run_id != artifact.run_id]
+    packet_text = build_codex_packet(
+        artifact,
+        prior_runs=prior_runs,
+        prior_settlements={item.run_id: store.list_settlements(item.run_id) for item in prior_runs[:5]},
+        mode=args.mode,
+    )
+    token_budget = build_token_budget(args.mode, packet_text, artifact)
+    artifact = artifact.model_copy(update={"token_budget": token_budget})
+    store.write_review(artifact)
+    packet_text = build_codex_packet(
+        artifact,
+        prior_runs=prior_runs,
+        prior_settlements={item.run_id: store.list_settlements(item.run_id) for item in prior_runs[:5]},
+        mode=args.mode,
+    )
+    store.write_codex_packet(args.run_id, packet_text)
 
     packet_path = review.get("artifact_paths", {}).get("codex_packet")
     if not packet_path:
@@ -95,6 +119,53 @@ def attach_codex_review_command(args: argparse.Namespace) -> None:
         "review_path": artifact.artifact_paths.review,
     }
     emit(payload, as_json=args.json)
+
+
+def opportunities_command(args: argparse.Namespace) -> None:
+    board = OpportunityBoardService().generate(watchlist=args.watchlist, symbols=args.symbols)
+    emit(board.model_dump(mode="json"), as_json=args.json)
+
+
+def opportunity_show_command(args: argparse.Namespace) -> None:
+    board = OpportunityBoardService().load(args.board_id)
+    emit(board.model_dump(mode="json"), as_json=args.json)
+
+
+def portfolio_command(args: argparse.Namespace) -> None:
+    service = PortfolioContextService()
+    context = service.refresh() if args.refresh else service.latest()
+    emit(context.model_dump(mode="json"), as_json=args.json)
+
+
+def intent_create_command(args: argparse.Namespace) -> None:
+    intent = ExecutionIntentService().create_draft(
+        run_id=args.run_id,
+        proposed_action=args.action,
+        proposed_notional=args.notional,
+    )
+    emit(intent.model_dump(mode="json"), as_json=args.json)
+
+
+def intent_approve_command(args: argparse.Namespace) -> None:
+    intent = ExecutionIntentService().approve(args.intent_id, operator=args.operator, note=args.note)
+    emit(intent.model_dump(mode="json"), as_json=args.json)
+
+
+def intent_reject_command(args: argparse.Namespace) -> None:
+    intent = ExecutionIntentService().reject(args.intent_id, operator=args.operator, note=args.note)
+    emit(intent.model_dump(mode="json"), as_json=args.json)
+
+
+def intent_validate_command(args: argparse.Namespace) -> None:
+    intent = ExecutionIntentService().get(args.intent_id)
+    result = BrokerAdapter().validate_intent(intent)
+    emit(result.model_dump(mode="json"), as_json=args.json)
+
+
+def intent_preview_command(args: argparse.Namespace) -> None:
+    intent = ExecutionIntentService().get(args.intent_id)
+    result = BrokerAdapter().preview_order(intent)
+    emit(result.model_dump(mode="json"), as_json=args.json)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -132,6 +203,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     codex_packet = sub.add_parser("codex-packet", help="Show the Codex review prompt for a run.")
     codex_packet.add_argument("run_id")
+    codex_packet.add_argument("--mode", choices=["quick", "deep"], default="quick")
     codex_packet.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
     codex_packet.set_defaults(func=codex_packet_command)
 
@@ -141,6 +213,53 @@ def build_parser() -> argparse.ArgumentParser:
     attach_codex.add_argument("--session-id")
     attach_codex.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
     attach_codex.set_defaults(func=attach_codex_review_command)
+
+    opportunities = sub.add_parser("opportunities", help="Generate a deterministic opportunity board.")
+    opportunities.add_argument("--watchlist", default=None)
+    opportunities.add_argument("--symbols", default=None, help="Comma-separated ad hoc symbols.")
+    opportunities.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
+    opportunities.set_defaults(func=opportunities_command)
+
+    opportunity_show = sub.add_parser("opportunity-show", help="Show a generated opportunity board.")
+    opportunity_show.add_argument("board_id")
+    opportunity_show.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
+    opportunity_show.set_defaults(func=opportunity_show_command)
+
+    portfolio = sub.add_parser("portfolio", help="Show or refresh the read-only portfolio context.")
+    portfolio.add_argument("--refresh", action="store_true")
+    portfolio.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
+    portfolio.set_defaults(func=portfolio_command)
+
+    intent_create = sub.add_parser("intent-create", help="Create a draft execution intent from a review.")
+    intent_create.add_argument("run_id")
+    intent_create.add_argument("--action", choices=["buy", "sell", "hold"], default="hold")
+    intent_create.add_argument("--notional", type=float)
+    intent_create.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
+    intent_create.set_defaults(func=intent_create_command)
+
+    intent_approve = sub.add_parser("intent-approve", help="Approve a draft execution intent.")
+    intent_approve.add_argument("intent_id")
+    intent_approve.add_argument("--operator", default="operator")
+    intent_approve.add_argument("--note")
+    intent_approve.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
+    intent_approve.set_defaults(func=intent_approve_command)
+
+    intent_reject = sub.add_parser("intent-reject", help="Reject an execution intent.")
+    intent_reject.add_argument("intent_id")
+    intent_reject.add_argument("--operator", default="operator")
+    intent_reject.add_argument("--note")
+    intent_reject.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
+    intent_reject.set_defaults(func=intent_reject_command)
+
+    intent_validate = sub.add_parser("intent-validate", help="Validate an approved intent without placing orders.")
+    intent_validate.add_argument("intent_id")
+    intent_validate.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
+    intent_validate.set_defaults(func=intent_validate_command)
+
+    intent_preview = sub.add_parser("intent-preview", help="Preview an approved intent without placing orders.")
+    intent_preview.add_argument("intent_id")
+    intent_preview.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
+    intent_preview.set_defaults(func=intent_preview_command)
     return parser
 
 

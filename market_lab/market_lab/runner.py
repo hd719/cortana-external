@@ -5,20 +5,29 @@ from pathlib import Path
 
 from .checks import evaluate_optional_evidence, evaluate_price_facts
 from .codex_review import build_codex_packet
+from .evidence import build_evidence_snapshot
 from .market_data import MarketDataClient, MarketDataError
+from .memory import build_outcome_memory_summary
 from .models import (
     ArtifactPaths,
     CheckResult,
     CheckSeverity,
+    EvidenceSnapshot,
     Interpretation,
     OptionalEvidence,
+    OutcomeMemorySummary,
     PriceFacts,
+    PortfolioContext,
     ReviewArtifact,
     RunStatus,
+    SentimentSnapshot,
     TradingAgentsReview,
 )
+from .portfolio_context import PortfolioContextService
+from .sentiment_sources import SentimentSourceClient
 from .settlement import build_pending_windows
 from .storage import MarketLabStore
+from .token_budget import build_token_budget
 from .verdict import decide_trust_verdict
 
 
@@ -28,9 +37,13 @@ class ReviewRunner:
         *,
         store: MarketLabStore | None = None,
         market_data: MarketDataClient | None = None,
+        sentiment_sources: SentimentSourceClient | None = None,
+        portfolio_context: PortfolioContextService | None = None,
     ):
         self.store = store or MarketLabStore()
         self.market_data = market_data or MarketDataClient()
+        self.sentiment_sources = sentiment_sources or SentimentSourceClient()
+        self.portfolio_context = portfolio_context or PortfolioContextService()
 
     def run(self, symbol: str) -> ReviewArtifact:
         run = self.store.create_run(symbol)
@@ -43,6 +56,10 @@ class ReviewRunner:
         price_facts: PriceFacts | None = None
         spy_facts: PriceFacts | None = None
         optional_evidence = OptionalEvidence()
+        sentiment_snapshot: SentimentSnapshot | None = None
+        evidence_snapshot: EvidenceSnapshot | None = None
+        outcome_memory: OutcomeMemorySummary | None = None
+        portfolio_context: PortfolioContext | None = None
         checks: list[CheckResult] = []
         trading_review = TradingAgentsReview(
             status="skipped",
@@ -53,6 +70,34 @@ class ReviewRunner:
             price_facts = self.market_data.get_quote(run.symbol)
             spy_facts = self.market_data.get_quote("SPY")
             optional_evidence = self.market_data.get_optional_evidence(run.symbol)
+            if optional_evidence.news_status != "available" or optional_evidence.sentiment_status != "available":
+                self.store.append_event(
+                    run.run_id,
+                    "sentiment_started",
+                    "Checking Yahoo Finance news, StockTwits, and Reddit.",
+                )
+                sentiment_snapshot = self.sentiment_sources.fetch(run.symbol)
+                yahoo_available = any(
+                    item.source == "yahoo_finance_news" and item.status == "available"
+                    for item in sentiment_snapshot.sources
+                )
+                social_available = any(
+                    item.source in {"stocktwits", "reddit"} and item.status == "available"
+                    for item in sentiment_snapshot.sources
+                )
+                optional_evidence = optional_evidence.model_copy(
+                    update={
+                        "news_status": "available" if yahoo_available else optional_evidence.news_status,
+                        "sentiment_status": "available" if social_available else optional_evidence.sentiment_status,
+                        "notes": [*optional_evidence.notes, *sentiment_snapshot.notes],
+                    },
+                )
+                source_summary = ", ".join(f"{item.source}:{item.status}" for item in sentiment_snapshot.sources)
+                self.store.append_event(
+                    run.run_id,
+                    "sentiment_checked",
+                    f"Sentiment sources {sentiment_snapshot.status}: {source_summary}.",
+                )
             checks.extend(evaluate_price_facts(price_facts))
             checks.extend(evaluate_optional_evidence(optional_evidence))
             self.store.append_event(run.run_id, "facts_collected", "Market facts collected.")
@@ -70,6 +115,29 @@ class ReviewRunner:
             bearish_points=[check.message for check in checks if check.severity == CheckSeverity.BLOCKER],
             actionability="review_only",
         )
+        prior_runs = [
+            item
+            for item in self.store.list_runs(limit=25)
+            if item.symbol == run.symbol and item.run_id != run.run_id
+        ]
+        prior_settlements = {item.run_id: self.store.list_settlements(item.run_id) for item in prior_runs[:5]}
+        evidence_snapshot = build_evidence_snapshot(
+            symbol=run.symbol,
+            price_facts=price_facts,
+            spy_facts=spy_facts,
+            checks=checks,
+            optional_evidence=optional_evidence,
+            sentiment_snapshot=sentiment_snapshot,
+        )
+        outcome_memory = build_outcome_memory_summary(
+            symbol=run.symbol,
+            prior_runs=prior_runs,
+            prior_settlements=prior_settlements,
+        )
+        portfolio_context = self.portfolio_context.context_for_symbol(run.symbol)
+        evidence_path = run_dir / "evidence-snapshot.json"
+        outcome_memory_path = run_dir / "outcome-memory.json"
+        portfolio_context_path = run_dir / "portfolio-context.json"
         artifact_paths = ArtifactPaths(
             review=str(run_dir / "review.json"),
             events=run.events_path,
@@ -77,6 +145,9 @@ class ReviewRunner:
             tradingagents=trading_review.output_path,
             codex_packet=str(run_dir / "codex-review-packet.md"),
             codex_review=str(run_dir / "codex-review.md"),
+            evidence_snapshot=str(evidence_path),
+            outcome_memory=str(outcome_memory_path),
+            portfolio_context=str(portfolio_context_path),
         )
         settlements = build_pending_windows(
             requested_at=requested_at,
@@ -97,19 +168,34 @@ class ReviewRunner:
             optional_evidence=optional_evidence,
             interpretation=interpretation,
             tradingagents=trading_review,
+            evidence_snapshot=evidence_snapshot,
+            outcome_memory=outcome_memory,
+            sentiment_snapshot=sentiment_snapshot,
+            portfolio_context=portfolio_context,
             settlements=settlements,
             artifact_paths=artifact_paths,
         )
+        self.store.write_json_atomic(evidence_path, evidence_snapshot.model_dump(mode="json"))
+        self.store.write_json_atomic(outcome_memory_path, outcome_memory.model_dump(mode="json"))
+        self.store.write_json_atomic(portfolio_context_path, portfolio_context.model_dump(mode="json"))
         self.store.write_review(artifact)
-        prior_runs = [
-            item
-            for item in self.store.list_runs(limit=25)
-            if item.symbol == run.symbol and item.run_id != run.run_id
-        ]
-        prior_settlements = {item.run_id: self.store.list_settlements(item.run_id) for item in prior_runs[:5]}
+        packet = build_codex_packet(
+            artifact,
+            prior_runs=prior_runs,
+            prior_settlements=prior_settlements,
+            mode="quick",
+        )
+        token_budget = build_token_budget("quick", packet, artifact)
+        artifact = artifact.model_copy(update={"token_budget": token_budget})
+        self.store.write_review(artifact)
         self.store.write_codex_packet(
             run.run_id,
-            build_codex_packet(artifact, prior_runs=prior_runs, prior_settlements=prior_settlements),
+            build_codex_packet(
+                artifact,
+                prior_runs=prior_runs,
+                prior_settlements=prior_settlements,
+                mode="quick",
+            ),
         )
         self.store.append_event(run.run_id, "codex_packet_written", "Codex review packet written.")
         for window in settlements:

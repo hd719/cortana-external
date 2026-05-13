@@ -16,7 +16,15 @@ export type MarketLabCommand =
   | "settle"
   | "settle-due"
   | "codex-packet"
-  | "attach-codex-review";
+  | "attach-codex-review"
+  | "opportunities"
+  | "opportunity-show"
+  | "portfolio"
+  | "intent-create"
+  | "intent-approve"
+  | "intent-reject"
+  | "intent-validate"
+  | "intent-preview";
 
 export type MarketLabRunSummary = {
   run_id: string;
@@ -76,6 +84,27 @@ export type MarketLabReview = {
     output_path?: string | null;
     session_id?: string | null;
   } | null;
+  evidence_snapshot?: Record<string, unknown> | null;
+  outcome_memory?: {
+    lookback_runs?: number;
+    evidence_ready_count?: number;
+    needs_more_context_count?: number;
+    blocked_count?: number;
+    settled_count?: number;
+    evidence_ready_success_rate?: number | null;
+    evidence_ready_avg_alpha_vs_spy_pct?: number | null;
+    common_missing_context?: string[];
+    notes?: string[];
+  } | null;
+  token_budget?: {
+    mode?: "quick" | "deep";
+    estimated_input_tokens?: number | null;
+    max_input_tokens?: number;
+    included_sections?: string[];
+    omitted_sections?: string[];
+  } | null;
+  sentiment_snapshot?: Record<string, unknown> | null;
+  portfolio_context?: MarketLabPortfolioContext | null;
   artifact_paths?: {
     review?: string;
     events?: string;
@@ -83,9 +112,71 @@ export type MarketLabReview = {
     tradingagents?: string | null;
     codex_packet?: string | null;
     codex_review?: string | null;
+    evidence_snapshot?: string | null;
+    outcome_memory?: string | null;
+    portfolio_context?: string | null;
   };
   settlements?: Array<Record<string, unknown>>;
   checks?: Array<{ code?: string; severity?: string; message?: string }>;
+};
+
+export type MarketLabOpportunityCandidate = {
+  symbol: string;
+  rank: number;
+  score: number;
+  score_components: Record<string, number>;
+  review_label: string;
+  reasons: string[];
+  blockers: string[];
+  missing_context: string[];
+  evidence_snapshot_path?: string | null;
+  outcome_memory_summary?: Record<string, unknown> | null;
+};
+
+export type MarketLabOpportunityBoard = {
+  schema_version: string;
+  board_id: string;
+  watchlist: string;
+  generated_at: string;
+  candidates: MarketLabOpportunityCandidate[];
+  scoring_config: Record<string, unknown>;
+  artifact_path?: string | null;
+};
+
+export type MarketLabPortfolioContext = {
+  status: "available" | "unavailable" | "reauth_required" | "error";
+  source: string;
+  generated_at: string;
+  accounts: Array<{
+    account_hash?: string;
+    display_name?: string | null;
+    account_type?: string | null;
+    cash_value?: number | null;
+    liquidation_value?: number | null;
+  }>;
+  positions: Array<{
+    account_hash?: string | null;
+    symbol?: string;
+    asset_type?: string | null;
+    quantity?: number | null;
+    average_price?: number | null;
+    current_price?: number | null;
+    day_change?: number | null;
+    day_change_pct?: number | null;
+    quote_source?: string | null;
+    quote_status?: string | null;
+    quote_timestamp?: string | null;
+    cost_basis?: number | null;
+    unrealized_pnl?: number | null;
+    market_value?: number | null;
+    weight_pct?: number | null;
+    sector?: string | null;
+    themes?: string[];
+  }>;
+  exposure_notes: string[];
+  overlap_notes: string[];
+  message?: string | null;
+  artifact_path?: string | null;
 };
 
 type ExecError = Error & { stdout?: string | Buffer; stderr?: string | Buffer };
@@ -182,13 +273,32 @@ export const settleDueMarketLabRuns = () =>
 export const getMarketLabCodexPacket = (runId: string) =>
   runMarketLabCli<{ run_id: string; packet_path: string; prompt: string }>("codex-packet", [runId]);
 
+export const generateMarketLabOpportunities = (options: { watchlist?: string; symbols?: string[] }) => {
+  const args = options.symbols?.length
+    ? ["--symbols", options.symbols.join(",")]
+    : ["--watchlist", options.watchlist || "core"];
+  return runMarketLabCli<MarketLabOpportunityBoard>("opportunities", args);
+};
+
+export const getMarketLabOpportunityBoard = (boardId: string) =>
+  runMarketLabCli<MarketLabOpportunityBoard>("opportunity-show", [boardId]);
+
+export const getMarketLabPortfolio = () =>
+  runMarketLabCli<MarketLabPortfolioContext>("portfolio", []);
+
+export const refreshMarketLabPortfolio = () =>
+  runMarketLabCli<MarketLabPortfolioContext>("portfolio", ["--refresh"]);
+
 export type MarketLabArtifactKind =
   | "review"
   | "events"
   | "logs"
   | "tradingagents"
   | "codex_packet"
-  | "codex_review";
+  | "codex_review"
+  | "evidence_snapshot"
+  | "outcome_memory"
+  | "portfolio_context";
 
 const ARTIFACT_KINDS: readonly MarketLabArtifactKind[] = [
   "review",
@@ -197,6 +307,9 @@ const ARTIFACT_KINDS: readonly MarketLabArtifactKind[] = [
   "tradingagents",
   "codex_packet",
   "codex_review",
+  "evidence_snapshot",
+  "outcome_memory",
+  "portfolio_context",
 ];
 
 export const isValidArtifactKind = (kind: string): kind is MarketLabArtifactKind =>

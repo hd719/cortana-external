@@ -129,6 +129,34 @@ class MarketDataClient:
             raw_payload=payload,
         )
 
+    def get_quote_batch(self, symbols: list[str]) -> dict[str, dict[str, Any]]:
+        normalized = []
+        seen: set[str] = set()
+        for symbol in symbols:
+            item = symbol.strip().upper()
+            if item and item not in seen:
+                normalized.append(item)
+                seen.add(item)
+        if not normalized:
+            return {}
+        payload = self.get_payload(
+            "/market-data/quote/batch",
+            params={"symbols": ",".join(normalized), "subsystem": "portfolio"},
+        )
+        data = extract_data(payload) or {}
+        items = data.get("items") if isinstance(data, dict) else None
+        if not isinstance(items, list):
+            return {}
+        quotes: dict[str, dict[str, Any]] = {}
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            item_data = item.get("data") if isinstance(item.get("data"), dict) else {}
+            symbol = str(item.get("symbol") or item_data.get("symbol") or "").strip().upper()
+            if symbol:
+                quotes[symbol] = item
+        return quotes
+
     def get_history(self, symbol: str, *, period: str = "3mo") -> dict[str, Any] | None:
         try:
             return self.get_payload(f"/market-data/history/{quote(symbol.strip().upper())}", params={"period": period})
@@ -149,7 +177,5 @@ class MarketDataClient:
             fundamentals_status="available" if fundamentals else "missing",
             news_status="missing",
             sentiment_status="missing",
-            notes=[
-                "news and sentiment are not wired in v0",
-            ],
+            notes=[],
         )

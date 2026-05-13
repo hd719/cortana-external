@@ -35,6 +35,22 @@ type Settlement = Record<string, unknown> & {
   return_pct?: number;
 };
 
+type TimelineEvent = {
+  event?: string;
+  message?: string;
+  timestamp?: string;
+};
+
+type SentimentSource = {
+  source?: string;
+  status?: string;
+  sample_count?: number;
+  fetch_method?: string;
+  error_message?: string | null;
+  summary?: string | null;
+  samples?: string[];
+};
+
 type CodexRoleReview = {
   role: "price_action" | "fundamentals" | "news_sentiment" | "risk" | "final_judge";
   stance: "bullish" | "bearish" | "neutral" | "mixed";
@@ -60,6 +76,39 @@ type CodexStructuredReview = {
   operator_note: string;
 };
 
+type PortfolioContext = {
+  status: "available" | "unavailable" | "reauth_required" | "error";
+  source: string;
+  generated_at: string;
+  accounts: Array<{
+    account_hash?: string;
+    display_name?: string | null;
+    account_type?: string | null;
+    cash_value?: number | null;
+    liquidation_value?: number | null;
+  }>;
+  positions: Array<{
+    account_hash?: string | null;
+    symbol?: string;
+    asset_type?: string | null;
+    quantity?: number | null;
+    average_price?: number | null;
+    current_price?: number | null;
+    day_change?: number | null;
+    day_change_pct?: number | null;
+    quote_source?: string | null;
+    quote_status?: string | null;
+    quote_timestamp?: string | null;
+    cost_basis?: number | null;
+    unrealized_pnl?: number | null;
+    market_value?: number | null;
+    weight_pct?: number | null;
+  }>;
+  exposure_notes: string[];
+  overlap_notes: string[];
+  message?: string | null;
+};
+
 type RunDetail = {
   run: RunSummary;
   review: {
@@ -76,12 +125,33 @@ type RunDetail = {
       output_path?: string | null;
       session_id?: string | null;
     } | null;
+    evidence_snapshot?: { missing_context?: string[]; risk_flags?: string[] } | null;
+    outcome_memory?: {
+      lookback_runs?: number;
+      evidence_ready_count?: number;
+      settled_count?: number;
+      evidence_ready_success_rate?: number | null;
+      evidence_ready_avg_alpha_vs_spy_pct?: number | null;
+      notes?: string[];
+    } | null;
+    token_budget?: {
+      mode?: "quick" | "deep";
+      estimated_input_tokens?: number | null;
+      max_input_tokens?: number;
+      included_sections?: string[];
+      omitted_sections?: string[];
+    } | null;
+    sentiment_snapshot?: { status?: string; missing_sources?: string[]; sources?: SentimentSource[] } | null;
+    portfolio_context?: PortfolioContext | null;
     artifact_paths?: {
       review?: string;
       events?: string;
       logs?: string;
       codex_packet?: string | null;
       codex_review?: string | null;
+      evidence_snapshot?: string | null;
+      outcome_memory?: string | null;
+      portfolio_context?: string | null;
     };
     checks?: Array<{ code?: string; severity?: string; message?: string }>;
     settlements?: Settlement[];
@@ -104,7 +174,7 @@ const verdictMeta: Record<Verdict, {
   ribbon: string;
 }> = {
   trusted: {
-    label: "Trusted",
+    label: "Evidence Ready",
     code: "OK",
     icon: ShieldCheck,
     dot: "bg-emerald-500 dark:bg-emerald-400",
@@ -114,7 +184,7 @@ const verdictMeta: Record<Verdict, {
     ribbon: "border-emerald-500/40 bg-emerald-500/[0.04]",
   },
   uncertain: {
-    label: "Uncertain",
+    label: "Needs More Context",
     code: "??",
     icon: ShieldQuestion,
     dot: "bg-amber-500 dark:bg-amber-400",
@@ -149,6 +219,20 @@ const asMoney = (value?: number) =>
 const asPercent = (value?: number) =>
   typeof value === "number" ? `${Math.round(value * 100)}%` : "—";
 
+const asSignedPercent = (value?: number | null) =>
+  typeof value === "number" ? `${value >= 0 ? "+" : ""}${value.toFixed(2)}%` : "—";
+
+const asSignedMoney = (value?: number | null) =>
+  typeof value === "number" ? `${value >= 0 ? "+" : "-"}$${Math.abs(value).toFixed(2)}` : "—";
+
+const asShares = (value?: number | null) =>
+  typeof value === "number" ? value.toLocaleString("en-US", { maximumFractionDigits: 4 }) : "—";
+
+const percentMove = (current?: number | null, basis?: number | null) => {
+  if (typeof current !== "number" || typeof basis !== "number" || basis === 0) return null;
+  return ((current - basis) / basis) * 100;
+};
+
 const roleLabel = (role: CodexRoleReview["role"]) =>
   ({
     price_action: "Price action",
@@ -168,6 +252,35 @@ const formatRunTime = (iso?: string) => {
     hour: "numeric",
     minute: "2-digit",
   }).format(date);
+};
+
+const formatEventTitle = (value?: string) =>
+  String(value ?? "event").replace(/_/g, " ");
+
+const sourceLabel = (source?: string) =>
+  ({
+    yahoo_finance_news: "Yahoo news",
+    stocktwits: "StockTwits",
+    reddit: "Reddit",
+  })[String(source ?? "")] ?? String(source ?? "source");
+
+const splitSourceSummary = (summary?: string | null, limit = 5) =>
+  String(summary ?? "")
+    .split(";")
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .slice(0, limit);
+
+const sourceSamples = (source: SentimentSource, limit = 5) => {
+  const samples = Array.isArray(source.samples) ? source.samples.filter(Boolean) : [];
+  return (samples.length ? samples : splitSourceSummary(source.summary, limit)).slice(0, limit);
+};
+
+const statusChipClass = (status?: string) => {
+  if (status === "available" || status === "ok") return "border-emerald-400/60 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400";
+  if (status === "partial" || status === "empty" || status === "rate_limited") return "border-amber-400/60 bg-amber-500/10 text-amber-600 dark:text-amber-400";
+  if (status === "error") return "border-red-400/60 bg-red-500/10 text-red-600 dark:text-red-400";
+  return "border-border/60 bg-muted/40 text-muted-foreground";
 };
 
 const getAge = (iso?: string) => {
@@ -223,17 +336,24 @@ type MarketLabClientProps = {
   embedded?: boolean;
 };
 
+type PortfolioNotice = {
+  message: string;
+  tone: "success" | "warning";
+};
+
 export function MarketLabClient({ embedded = false }: MarketLabClientProps = {}) {
   const [symbol, setSymbol] = useState("AAPL");
   const [runs, setRuns] = useState<RunSummary[]>([]);
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const [detail, setDetail] = useState<RunDetail | null>(null);
-  const [events, setEvents] = useState<Array<Record<string, unknown>>>([]);
+  const [latestPortfolio, setLatestPortfolio] = useState<PortfolioContext | null>(null);
+  const [events, setEvents] = useState<TimelineEvent[]>([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [codexStatus, setCodexStatus] = useState<string | null>(null);
   const [settlementStatus, setSettlementStatus] = useState<string | null>(null);
+  const [portfolioStatus, setPortfolioStatus] = useState<PortfolioNotice | null>(null);
   const [tapeMode, setTapeMode] = useState<TapeMode>("recent");
   const [closedGroups, setClosedGroups] = useState<Set<string>>(new Set());
 
@@ -293,12 +413,19 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
     setSelectedRunId((current) => current ?? data.runs[0]?.run_id ?? null);
   };
 
+  const loadLatestPortfolio = async () => {
+    const portfolio = await api<PortfolioContext>("/api/market-lab/portfolio/latest");
+    setLatestPortfolio(portfolio.status === "available" ? portfolio : null);
+  };
+
   const handleRefresh = async () => {
     setRefreshing(true);
     setError(null);
     setSettlementStatus(null);
+    setPortfolioStatus(null);
     try {
       await loadRuns();
+      await loadLatestPortfolio();
       if (selectedRunId) {
         await loadRunDetail(selectedRunId);
       }
@@ -312,7 +439,7 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
   const loadRunDetail = async (runId: string) => {
     const [runDetail, eventItems] = await Promise.all([
       api<RunDetail>(`/api/market-lab/runs/${encodeURIComponent(runId)}`),
-      api<Array<Record<string, unknown>>>(`/api/market-lab/runs/${encodeURIComponent(runId)}/events`),
+      api<TimelineEvent[]>(`/api/market-lab/runs/${encodeURIComponent(runId)}/events`),
     ]);
     setDetail(runDetail);
     setEvents(eventItems);
@@ -320,6 +447,9 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
 
   useEffect(() => {
     loadRuns().catch((err: Error) => setError(err.message));
+    loadLatestPortfolio().catch(() => {
+      setLatestPortfolio(null);
+    });
   }, []);
 
   useEffect(() => {
@@ -332,6 +462,7 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
     setError(null);
     setCodexStatus(null);
     setSettlementStatus(null);
+    setPortfolioStatus(null);
     try {
       const result = await api<{ run_id: string }>("/api/market-lab/runs", {
         method: "POST",
@@ -352,6 +483,7 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
     setLoading(true);
     setError(null);
     setSettlementStatus(null);
+    setPortfolioStatus(null);
     try {
       const result = await api<{ settlements: Settlement[] }>(
         `/api/market-lab/runs/${encodeURIComponent(selectedRunId)}/settle`,
@@ -370,6 +502,7 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
     setLoading(true);
     setError(null);
     setSettlementStatus(null);
+    setPortfolioStatus(null);
     try {
       const result = await api<{ settled_run_ids: string[] }>("/api/market-lab/settle-due", { method: "POST" });
       const count = result.settled_run_ids?.length ?? 0;
@@ -391,14 +524,48 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
     setError(null);
     setCodexStatus(null);
     setSettlementStatus(null);
+    setPortfolioStatus(null);
     try {
       const result = await api<{ streamId: string; packet_path: string }>(
         `/api/market-lab/runs/${encodeURIComponent(selectedRunId)}/codex-review`,
         { method: "POST" },
       );
-      setCodexStatus(`Codex review started: ${result.streamId}`);
+      setCodexStatus(`Codex review started in Sessions: ${result.streamId}. It can take a minute; refresh this run after the review attaches.`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to start Codex review");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const refreshPortfolio = async () => {
+    setLoading(true);
+    setError(null);
+    setPortfolioStatus(null);
+    try {
+      const result = await api<PortfolioContext>("/api/market-lab/portfolio/refresh", { method: "POST" });
+      setLatestPortfolio(result.status === "available" ? result : null);
+      if (result.status === "available") {
+        setPortfolioStatus({
+          message: "Schwab portfolio cache refreshed. New Market Lab runs will attach the latest read-only context.",
+          tone: "success",
+        });
+      } else if (result.status === "reauth_required") {
+        setPortfolioStatus({
+          message: "Schwab OAuth is refreshed, but account/position access is not authorized for this app yet.",
+          tone: "warning",
+        });
+      } else {
+        setPortfolioStatus({
+          message: result.message ?? "Schwab portfolio context is not available yet.",
+          tone: "warning",
+        });
+      }
+      if (selectedRunId) {
+        await loadRunDetail(selectedRunId);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to refresh portfolio context");
     } finally {
       setLoading(false);
     }
@@ -421,6 +588,77 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
   const priceBasis = review?.price_facts?.price_basis;
   const spySource = review?.spy_facts?.source;
   const codexState = structuredCodex?.verdict ?? review?.codex_review?.verdict ?? review?.codex_review?.status ?? "not requested";
+  const tokenBudget = review?.token_budget;
+  const outcomeMemory = review?.outcome_memory;
+  const portfolioContext = review?.portfolio_context ?? latestPortfolio;
+  const usingPortfolioFallback = !review?.portfolio_context && Boolean(latestPortfolio);
+  const selectedPosition = portfolioContext?.positions?.find((position) => position.symbol === selectedSymbol) ?? null;
+  const currentVsRun = percentMove(selectedPosition?.current_price, review?.price_facts?.price);
+  const currentVsAverage = percentMove(selectedPosition?.current_price, selectedPosition?.average_price);
+  const sentiment = review?.sentiment_snapshot ?? null;
+  const newsRole = structuredCodex?.roles.find((role) => role.role === "news_sentiment") ?? null;
+  const sentimentDigest = (sentiment?.sources ?? [])
+    .flatMap((source) =>
+      sourceSamples(source, 5).map((item) => ({
+        source: source.source,
+        status: source.status,
+        item,
+      })),
+    )
+    .slice(0, 12);
+  const latestEvent = events.at(-1);
+  const timelinePanel = (
+    <Panel icon={Activity} eyebrow="Run path" title="Timeline" dense className="mt-3">
+      {events.length === 0 ? (
+        <p className="text-xs text-muted-foreground">No events loaded.</p>
+      ) : (
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border/60 bg-muted/20 px-2.5 py-1.5">
+            <span className="text-xs font-semibold">Current: {formatEventTitle(latestEvent?.event)}</span>
+            <span className="text-[10px] uppercase tracking-widest text-muted-foreground">
+              step {events.length} of {events.length}
+              {latestEvent?.timestamp ? ` · ${formatRunTime(latestEvent.timestamp)} · ${getAge(latestEvent.timestamp)} ago` : ""}
+            </span>
+          </div>
+          <ol className="grid gap-1.5 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-5">
+            {events.map((event, index) => {
+              const isCurrent = index === events.length - 1;
+              const message = String(event.message ?? "");
+              return (
+                <li
+                  key={`${String(event.event ?? "")}-${index}`}
+                  className={cn(
+                    "grid min-h-[58px] grid-cols-[20px_minmax(0,1fr)] items-start gap-2 rounded-md border px-2 py-1.5",
+                    isCurrent ? "border-foreground/35 bg-foreground/[0.035]" : "border-border/60 bg-muted/20",
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "mt-0.5 inline-flex h-5 w-5 items-center justify-center rounded-full border text-[10px] font-semibold",
+                      isCurrent
+                        ? "border-foreground/40 bg-background text-foreground"
+                        : "border-border/60 bg-background/60 text-muted-foreground",
+                    )}
+                  >
+                    {index + 1}
+                  </span>
+                  <div className="min-w-0" title={message}>
+                    <div className="truncate text-[11px] font-semibold">{formatEventTitle(event.event)}</div>
+                    <div className="line-clamp-1 font-sans text-[10px] leading-4 text-muted-foreground">{message}</div>
+                    {event.timestamp ? (
+                      <div className="mt-0.5 truncate text-[9px] uppercase tracking-widest text-muted-foreground/80">
+                        {formatRunTime(event.timestamp)} · {getAge(event.timestamp)} ago
+                      </div>
+                    ) : null}
+                  </div>
+                </li>
+              );
+            })}
+          </ol>
+        </div>
+      )}
+    </Panel>
+  );
 
   return (
     <div
@@ -478,6 +716,35 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
         </div>
       </section>
 
+      {/* Debug artifacts — collapsed by default, close to the run controls */}
+      <details className="group mt-3 rounded-lg border border-border/70 bg-card/60 px-4 py-3">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <FileJson2 className="h-3.5 w-3.5 text-muted-foreground" />
+            <div>
+              <div className="text-[10px] uppercase tracking-widest text-muted-foreground">Collapsed by default</div>
+              <div className="text-sm font-semibold">Debug artifacts</div>
+            </div>
+          </div>
+          <span className="text-[10px] uppercase tracking-widest text-muted-foreground group-open:hidden">Open</span>
+          <span className="hidden text-[10px] uppercase tracking-widest text-muted-foreground group-open:inline">Close</span>
+        </summary>
+        <div className="mt-3 space-y-2">
+          {ARTIFACT_VIEWERS.map(({ kind, label }) => {
+            const artifactPath = review?.artifact_paths?.[kind] ?? null;
+            return (
+              <ArtifactViewer
+                key={kind}
+                label={label}
+                kind={kind}
+                runId={selectedRunId}
+                path={artifactPath}
+              />
+            );
+          })}
+        </div>
+      </details>
+
       {error ? (
         <div className="mt-3 rounded-md border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-200">{error}</div>
       ) : null}
@@ -487,6 +754,20 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
       {settlementStatus ? (
         <div className="mt-3 rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/30 dark:text-emerald-200">{settlementStatus}</div>
       ) : null}
+      {portfolioStatus ? (
+        <div
+          className={cn(
+            "mt-3 rounded-md border px-3 py-2 text-xs",
+            portfolioStatus.tone === "success"
+              ? "border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/30 dark:text-emerald-200"
+              : "border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200",
+          )}
+        >
+          {portfolioStatus.message}
+        </div>
+      ) : null}
+
+      {timelinePanel}
 
       {/* ── Body: tape + decision area ── */}
       <section className="mt-3 grid gap-3 xl:grid-cols-[240px_minmax(0,1fr)]">
@@ -619,7 +900,7 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
                 <div className="mt-1.5 flex items-baseline gap-3">
                   <h2 className="text-3xl font-bold tracking-tight">{selectedSymbol}</h2>
                   <span className={cn("text-xs font-semibold uppercase tracking-widest", meta.accent)}>
-                    verdict {verdict}
+                    {meta.label}
                   </span>
                 </div>
                 <SymbolHistory
@@ -696,50 +977,152 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
               <InsightList title="Bullish" items={review?.interpretation?.bullish_points ?? []} empty="No bullish points." />
               <InsightList title="Bearish" items={review?.interpretation?.bearish_points ?? []} empty="No bearish points." />
             </div>
-          </Panel>
-
-          {/* Codex + Settlement — paired row, h-full so bottoms align */}
-          <section className="grid gap-3 lg:grid-cols-2">
-            <Panel icon={MessageSquareText} eyebrow="Second opinion" title="Codex review" dense className="h-full">
-              <div className="space-y-1.5">
-                <div className="flex min-w-0 items-center justify-between gap-2">
-                  <span className="shrink-0 text-[10px] uppercase tracking-widest text-muted-foreground">Status</span>
-                  <span className="min-w-0 truncate text-right text-xs font-semibold">
-                    {codexState}
-                    {structuredCodex ? ` · ${asPercent(structuredCodex.confidence)} · ${structuredCodex.horizon.toUpperCase()}` : ""}
+            {sentiment ? (
+              <div className="mt-3 rounded-md border border-border/60 bg-muted/20 p-3">
+                <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <div className="text-[10px] uppercase tracking-widest text-muted-foreground">News and sentiment</div>
+                    <div className="text-xs font-semibold">
+                      Sources checked
+                      {sentiment.missing_sources?.length ? ` · missing ${sentiment.missing_sources.join(", ")}` : ""}
+                    </div>
+                  </div>
+                  <span className={cn("rounded border px-1.5 py-px text-[9px] font-bold uppercase tracking-wider", statusChipClass(sentiment.status))}>
+                    {sentiment.status ?? "unknown"}
                   </span>
                 </div>
-                <p className="font-sans text-xs leading-5 text-muted-foreground">
-                  {structuredCodex?.summary ?? review?.codex_review?.summary ?? "Use Ask Codex to request an operator-readable critique."}
-                </p>
-                {review?.codex_review?.session_id ? (
-                  <div className="truncate text-[10px] text-muted-foreground/80">
-                    session: {review.codex_review.session_id}
-                  </div>
-                ) : null}
-                {structuredCodex ? (
-                  <div className="space-y-2 pt-2">
-                    <div className="rounded-md border border-border/60 bg-muted/20 px-2.5 py-2">
-                      <div className="text-[10px] uppercase tracking-widest text-muted-foreground">Context quality</div>
-                      <p className="mt-1 font-sans text-xs leading-5 text-muted-foreground">{structuredCodex.context_quality}</p>
-                      {structuredCodex.missing_context.length ? (
-                        <div className="mt-2 flex flex-wrap gap-1">
-                          {structuredCodex.missing_context.map((item) => (
-                            <span key={item} className="rounded border border-border/60 px-1.5 py-px text-[9px] uppercase tracking-wider text-muted-foreground">
-                              {item}
-                            </span>
-                          ))}
-                        </div>
+                <div className="mb-2 grid gap-2 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.35fr)]">
+                  <div className="rounded-md border border-border/60 bg-background/70 px-3 py-2.5">
+                    <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+                      <div className="text-sm font-semibold">News analysis</div>
+                      {newsRole ? (
+                        <span className={cn("rounded border px-1.5 py-px text-[9px] uppercase tracking-wider", statusChipClass(newsRole.stance))}>
+                          {newsRole.stance} · {asPercent(newsRole.confidence)}
+                        </span>
                       ) : null}
                     </div>
-                    <div className="flex flex-col gap-1">
-                      {structuredCodex.roles.map((role) => (
-                        <CodexRoleRow key={role.role} role={role} />
-                      ))}
-                    </div>
+                    {newsRole ? (
+                      <div className="space-y-2">
+                        <p className="font-sans text-sm leading-6 text-muted-foreground">{newsRole.summary}</p>
+                        <div className="grid gap-2 md:grid-cols-2">
+                          <InsightList title="Positive signals" items={newsRole.bull_points} empty="No positive news signals." />
+                          <InsightList title="Cautions" items={[...newsRole.bear_points, ...newsRole.missing_evidence.map((item) => `Missing: ${item}`)]} empty="No news cautions." />
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="font-sans text-sm leading-6 text-muted-foreground">
+                        No Codex news role attached yet. Showing fetched source samples from Yahoo, StockTwits, and Reddit.
+                      </p>
+                    )}
                   </div>
-                ) : null}
+                  <div className="rounded-md border border-border/60 bg-background/70 px-3 py-2.5">
+                    <div className="mb-2 text-sm font-semibold">Fetched news and posts</div>
+                    {sentimentDigest.length ? (
+                      <ul className="grid gap-1.5 md:grid-cols-2">
+                        {sentimentDigest.map((item, index) => (
+                          <li key={`${item.source}-${index}`} className="grid grid-cols-[auto_minmax(0,1fr)] gap-2 rounded border border-border/50 bg-muted/20 px-2.5 py-2 font-sans text-xs leading-5 text-muted-foreground">
+                            <span className={cn("mt-1.5 h-1.5 w-1.5 rounded-full", item.status === "available" ? "bg-emerald-500" : "bg-amber-500")} />
+                            <span>
+                              <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground/80">{sourceLabel(item.source)}</span>
+                              {" · "}
+                              {item.item}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="font-sans text-xs text-muted-foreground">No source summaries available yet.</p>
+                    )}
+                  </div>
+                </div>
+                <ul className="grid gap-2 lg:grid-cols-3">
+                  {(sentiment.sources ?? []).map((source) => (
+                    <li key={source.source} className="rounded-md border border-border/60 bg-background/60 px-3 py-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="truncate text-xs font-semibold">{sourceLabel(source.source)}</span>
+                        <span className={cn("rounded border px-1.5 py-px text-[9px] uppercase tracking-wider", statusChipClass(source.status))}>
+                          {source.status ?? "n/a"}
+                        </span>
+                      </div>
+                      <div className="mt-1 font-sans text-[11px] text-muted-foreground">
+                        {source.sample_count ?? 0} samples · {source.fetch_method ?? "source adapter"}
+                      </div>
+                      {sourceSamples(source, 3).length ? (
+                        <ul className="mt-1.5 space-y-1 font-sans text-[11px] leading-4 text-muted-foreground">
+                          {sourceSamples(source, 3).map((sample, index) => (
+                            <li key={`${source.source}-sample-${index}`} className="line-clamp-2">
+                              {sample}
+                            </li>
+                          ))}
+                        </ul>
+                      ) : source.error_message ? (
+                        <p className="mt-1 line-clamp-3 font-sans text-[11px] leading-4 text-muted-foreground">{source.error_message}</p>
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
               </div>
+            ) : null}
+          </Panel>
+
+          {/* Compact context row */}
+          <section className="grid gap-3 xl:grid-cols-3">
+            <Panel icon={ShieldCheck} eyebrow="Memory" title="Outcome memory" dense className="h-full">
+              {outcomeMemory ? (
+                <div className="grid gap-2 sm:grid-cols-3">
+                  <Metric label="Prior runs" value={String(outcomeMemory.lookback_runs ?? 0)} />
+                  <Metric label="Settled" value={String(outcomeMemory.settled_count ?? 0)} />
+                  <Metric
+                    label="Avg alpha"
+                    value={
+                      typeof outcomeMemory.evidence_ready_avg_alpha_vs_spy_pct === "number"
+                        ? `${outcomeMemory.evidence_ready_avg_alpha_vs_spy_pct.toFixed(2)}%`
+                        : "n/a"
+                    }
+                  />
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">No outcome memory attached.</p>
+              )}
+            </Panel>
+
+            <Panel icon={ShieldQuestion} eyebrow="Portfolio" title="Schwab portfolio" dense className="h-full">
+              <div className="mb-2 flex justify-end">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={refreshPortfolio}
+                  disabled={loading}
+                  className="h-7 gap-1.5 px-2.5 font-mono text-[11px] uppercase tracking-wider"
+                >
+                  <RefreshCw className="h-3 w-3" />
+                  Refresh Schwab
+                </Button>
+              </div>
+              {portfolioContext ? (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-semibold">{portfolioContext.status}</span>
+                    <span className="text-[10px] uppercase tracking-widest text-muted-foreground">
+                      {portfolioContext.source}{usingPortfolioFallback ? " · latest cache" : ""}
+                    </span>
+                  </div>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <Metric label={selectedSymbol} value={selectedPosition ? "owned" : "not owned"} />
+                    <Metric label="Quantity" value={asShares(selectedPosition?.quantity)} />
+                    <Metric label="Current" value={asMoney(selectedPosition?.current_price ?? undefined)} />
+                    <Metric label="Today" value={`${asSignedMoney(selectedPosition?.day_change)} · ${asSignedPercent(selectedPosition?.day_change_pct)}`} />
+                    <Metric label="Vs run" value={asSignedPercent(currentVsRun)} />
+                    <Metric label="Vs avg" value={asSignedPercent(currentVsAverage)} />
+                  </div>
+                  {[...(portfolioContext.exposure_notes ?? []), ...(portfolioContext.overlap_notes ?? [])].slice(0, 3).map((note) => (
+                    <p key={note} className="font-sans text-xs text-muted-foreground">{note}</p>
+                  ))}
+                  {portfolioContext.message ? <p className="font-sans text-xs text-muted-foreground">{portfolioContext.message}</p> : null}
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">No portfolio context attached.</p>
+              )}
             </Panel>
 
             <Panel icon={ArrowUpRight} eyebrow="Forward score" title="Settlement" dense className="h-full">
@@ -768,63 +1151,72 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
             </Panel>
           </section>
 
-          {/* Timeline — full width, events flow as a horizontal grid */}
-          <Panel icon={Activity} eyebrow="Run path" title="Timeline" dense className="flex-1">
-            {events.length === 0 ? (
-              <p className="text-xs text-muted-foreground">No events loaded.</p>
-            ) : (
-              <ol className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                {events.map((event, index) => (
-                  <li
-                    key={`${String(event.event ?? "")}-${index}`}
-                    className="grid grid-cols-[12px_minmax(0,1fr)] items-start gap-2 rounded-md border border-border/60 bg-muted/20 px-2.5 py-1.5"
-                  >
-                    <span className="mt-1.5 inline-block h-1.5 w-1.5 rounded-full bg-foreground/70" />
-                    <div className="min-w-0">
-                      <div className="truncate text-xs font-semibold">{String(event.event ?? "event")}</div>
-                      <div className="truncate font-sans text-[11px] text-muted-foreground">{String(event.message ?? "")}</div>
-                    </div>
-                  </li>
-                ))}
-              </ol>
-            )}
+          <Panel icon={MessageSquareText} eyebrow="Second opinion" title="Codex review" dense>
+            <div className="space-y-1.5">
+              <div className="flex min-w-0 items-center justify-between gap-2">
+                <span className="shrink-0 text-[10px] uppercase tracking-widest text-muted-foreground">Status</span>
+                <span className="min-w-0 truncate text-right text-xs font-semibold">
+                  {codexState}
+                  {structuredCodex ? ` · ${asPercent(structuredCodex.confidence)} · ${structuredCodex.horizon.toUpperCase()}` : ""}
+                </span>
+              </div>
+              <p className="font-sans text-xs leading-5 text-muted-foreground">
+                {structuredCodex?.summary ?? review?.codex_review?.summary ?? "Use Ask Codex to request an operator-readable critique."}
+              </p>
+              {review?.codex_review?.session_id ? (
+                <div className="truncate text-[10px] text-muted-foreground/80">
+                  session: {review.codex_review.session_id}
+                </div>
+              ) : null}
+              {tokenBudget ? (
+                <div className="mt-2 rounded-md border border-border/60 bg-muted/20 px-2.5 py-2">
+                  <div className="text-[10px] uppercase tracking-widest text-muted-foreground">Token mode</div>
+                  <p className="mt-1 font-sans text-xs text-muted-foreground">
+                    {String(tokenBudget.mode ?? "quick").toUpperCase()} · {tokenBudget.estimated_input_tokens ?? "?"}/{tokenBudget.max_input_tokens ?? "?"} est. tokens
+                  </p>
+                </div>
+              ) : null}
+              {structuredCodex ? (
+                <div className="space-y-2 pt-2">
+                  <div className="rounded-md border border-border/60 bg-muted/20 px-2.5 py-2">
+                    <div className="text-[10px] uppercase tracking-widest text-muted-foreground">Context quality</div>
+                    <p className="mt-1 font-sans text-xs leading-5 text-muted-foreground">{structuredCodex.context_quality}</p>
+                    {structuredCodex.missing_context.length ? (
+                      <div className="mt-2 flex flex-wrap gap-1">
+                        {structuredCodex.missing_context.map((item) => (
+                          <span key={item} className="rounded border border-border/60 px-1.5 py-px text-[9px] uppercase tracking-wider text-muted-foreground">
+                            {item}
+                          </span>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                  <div className="grid gap-1 lg:grid-cols-2">
+                    {structuredCodex.roles.map((role) => (
+                      <CodexRoleRow key={role.role} role={role} />
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+            </div>
           </Panel>
+
         </div>
       </section>
 
-      {/* Debug artifacts — page-level footer, spans both columns */}
-      <details className="group mt-3 rounded-lg border border-border/70 bg-card/60 px-4 py-3">
-        <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <FileJson2 className="h-3.5 w-3.5 text-muted-foreground" />
-            <div>
-              <div className="text-[10px] uppercase tracking-widest text-muted-foreground">Collapsed by default</div>
-              <div className="text-sm font-semibold">Debug artifacts</div>
-            </div>
-          </div>
-          <span className="text-[10px] uppercase tracking-widest text-muted-foreground group-open:hidden">Open</span>
-          <span className="hidden text-[10px] uppercase tracking-widest text-muted-foreground group-open:inline">Close</span>
-        </summary>
-        <div className="mt-3 space-y-2">
-          {ARTIFACT_VIEWERS.map(({ kind, label }) => {
-            const artifactPath = review?.artifact_paths?.[kind] ?? null;
-            return (
-              <ArtifactViewer
-                key={kind}
-                label={label}
-                kind={kind}
-                runId={selectedRunId}
-                path={artifactPath}
-              />
-            );
-          })}
-        </div>
-      </details>
     </div>
   );
 }
 
-type ArtifactKey = "review" | "events" | "logs" | "codex_packet" | "codex_review";
+type ArtifactKey =
+  | "review"
+  | "events"
+  | "logs"
+  | "codex_packet"
+  | "codex_review"
+  | "evidence_snapshot"
+  | "outcome_memory"
+  | "portfolio_context";
 
 const ARTIFACT_VIEWERS: Array<{ kind: ArtifactKey; label: string }> = [
   { kind: "review", label: "review.json" },
@@ -832,6 +1224,9 @@ const ARTIFACT_VIEWERS: Array<{ kind: ArtifactKey; label: string }> = [
   { kind: "logs", label: "logs.txt" },
   { kind: "codex_packet", label: "codex packet" },
   { kind: "codex_review", label: "codex review" },
+  { kind: "evidence_snapshot", label: "evidence snapshot" },
+  { kind: "outcome_memory", label: "outcome memory" },
+  { kind: "portfolio_context", label: "portfolio context" },
 ];
 
 function ArtifactViewer({
@@ -953,6 +1348,15 @@ function PriceCell({ label, value, detail }: { label: string; value: string; det
       <div className="text-[10px] uppercase tracking-widest text-muted-foreground">{label}</div>
       <div className="mt-0.5 text-lg font-bold leading-tight">{value}</div>
       <div className="mt-0.5 truncate text-[10px] text-muted-foreground">{detail}</div>
+    </div>
+  );
+}
+
+function Metric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-md border border-border/60 bg-background/40 px-2.5 py-2">
+      <div className="text-[10px] uppercase tracking-widest text-muted-foreground">{label}</div>
+      <div className="mt-0.5 truncate text-sm font-semibold">{value}</div>
     </div>
   );
 }
