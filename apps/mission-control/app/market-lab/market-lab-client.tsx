@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
   ArrowUpRight,
@@ -283,6 +283,22 @@ const statusChipClass = (status?: string) => {
   return "border-border/60 bg-muted/40 text-muted-foreground";
 };
 
+const stanceChipClass = (stance?: string) => {
+  const s = String(stance ?? "").toLowerCase();
+  if (s === "bullish" || s === "bull") return "border-emerald-400/60 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400";
+  if (s === "bearish" || s === "bear") return "border-red-400/60 bg-red-500/10 text-red-600 dark:text-red-400";
+  return "border-border/60 bg-muted/40 text-muted-foreground";
+};
+
+type SentimentLabel = "bull" | "bear" | null;
+
+const deriveSentiment = (item: string): { label: SentimentLabel; cleaned: string } => {
+  const match = String(item).match(/^(bullish|bearish):\s*/i);
+  if (!match) return { label: null, cleaned: String(item) };
+  const label = match[1].toLowerCase() === "bullish" ? "bull" : "bear";
+  return { label, cleaned: String(item).slice(match[0].length) };
+};
+
 const getAge = (iso?: string) => {
   if (!iso) return "—";
   const date = new Date(iso);
@@ -356,6 +372,13 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
   const [portfolioStatus, setPortfolioStatus] = useState<PortfolioNotice | null>(null);
   const [tapeMode, setTapeMode] = useState<TapeMode>("recent");
   const [closedGroups, setClosedGroups] = useState<Set<string>>(new Set());
+  const [pinnedStep, setPinnedStep] = useState<number | null>(null);
+  const activePillRef = useRef<HTMLButtonElement | null>(null);
+  const [feedSrc, setFeedSrc] = useState<string>("all");
+  const [feedSent, setFeedSent] = useState<"all" | "bull" | "bear" | "unlabeled">("all");
+  const [codexExpanded, setCodexExpanded] = useState(false);
+  const [tapeOpen, setTapeOpen] = useState(false);
+  const [expandedCheck, setExpandedCheck] = useState<string | null>(null);
 
   const selectedRun = useMemo(
     () => runs.find((run) => run.run_id === selectedRunId) ?? null,
@@ -455,7 +478,14 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
   useEffect(() => {
     if (!selectedRunId) return;
     loadRunDetail(selectedRunId).catch((err: Error) => setError(err.message));
+    setPinnedStep(null);
   }, [selectedRunId]);
+
+  useEffect(() => {
+    if (typeof activePillRef.current?.scrollIntoView === "function") {
+      activePillRef.current.scrollIntoView({ behavior: "auto", inline: "center", block: "nearest" });
+    }
+  }, [events.length]);
 
   const startRun = async () => {
     setLoading(true);
@@ -597,64 +627,108 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
   const currentVsAverage = percentMove(selectedPosition?.current_price, selectedPosition?.average_price);
   const sentiment = review?.sentiment_snapshot ?? null;
   const newsRole = structuredCodex?.roles.find((role) => role.role === "news_sentiment") ?? null;
-  const sentimentDigest = (sentiment?.sources ?? [])
-    .flatMap((source) =>
-      sourceSamples(source, 5).map((item) => ({
+  // Per-headline sentiment label derived via tier-2 self-label only (e.g. StockTwits "Bullish:"/"Bearish:" prefix).
+  // TODO: per-headline labels once Codex news_sentiment role surfaces them; substring-matching its summary points is too lossy.
+  const sentimentDigest = (sentiment?.sources ?? []).flatMap((source) =>
+    sourceSamples(source, 20).map((item) => {
+      const { label, cleaned } = deriveSentiment(item);
+      return {
         source: source.source,
         status: source.status,
-        item,
-      })),
-    )
-    .slice(0, 12);
+        item: cleaned,
+        sentiment: label,
+      };
+    }),
+  );
+  const sentimentCounts = sentimentDigest.reduce(
+    (acc, entry) => {
+      if (entry.sentiment === "bull") acc.bull += 1;
+      else if (entry.sentiment === "bear") acc.bear += 1;
+      else acc.unlabeled += 1;
+      return acc;
+    },
+    { bull: 0, bear: 0, unlabeled: 0 },
+  );
+  const labeledTotal = sentimentCounts.bull + sentimentCounts.bear;
+  const filteredFeed = sentimentDigest.filter((entry) => {
+    if (feedSrc !== "all" && entry.source !== feedSrc) return false;
+    if (feedSent === "all") return true;
+    if (feedSent === "unlabeled") return entry.sentiment === null;
+    return entry.sentiment === feedSent;
+  });
+  const sourceCounts = sentimentDigest.reduce(
+    (acc, entry) => {
+      const key = String(entry.source ?? "other");
+      acc[key] = (acc[key] ?? 0) + 1;
+      return acc;
+    },
+    {} as Record<string, number>,
+  );
   const latestEvent = events.at(-1);
+  const shownEvent = pinnedStep !== null ? events[pinnedStep] : latestEvent;
+  const runComplete = String(latestEvent?.event ?? "") === "done";
   const timelinePanel = (
     <Panel icon={Activity} eyebrow="Run path" title="Timeline" dense className="mt-3">
       {events.length === 0 ? (
         <p className="text-xs text-muted-foreground">No events loaded.</p>
       ) : (
         <div className="space-y-2">
-          <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border/60 bg-muted/20 px-2.5 py-1.5">
-            <span className="text-xs font-semibold">Current: {formatEventTitle(latestEvent?.event)}</span>
-            <span className="text-[10px] uppercase tracking-widest text-muted-foreground">
-              step {events.length} of {events.length}
-              {latestEvent?.timestamp ? ` · ${formatRunTime(latestEvent.timestamp)} · ${getAge(latestEvent.timestamp)} ago` : ""}
-            </span>
-          </div>
-          <ol className="grid gap-1.5 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-5">
+          <ol className="-mx-1 flex snap-x snap-mandatory gap-1.5 overflow-x-auto px-1 py-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {events.map((event, index) => {
-              const isCurrent = index === events.length - 1;
+              const isActive = index === events.length - 1;
+              const isPinned = pinnedStep === index;
+              const isDone = !isActive || runComplete;
               const message = String(event.message ?? "");
+              const timeBits = event.timestamp
+                ? ` · ${formatRunTime(event.timestamp)} · ${getAge(event.timestamp)} ago`
+                : "";
+              const tooltip = `${formatEventTitle(event.event)}${message ? " — " + message : ""}${timeBits}`;
               return (
-                <li
-                  key={`${String(event.event ?? "")}-${index}`}
-                  className={cn(
-                    "grid min-h-[58px] grid-cols-[20px_minmax(0,1fr)] items-start gap-2 rounded-md border px-2 py-1.5",
-                    isCurrent ? "border-foreground/35 bg-foreground/[0.035]" : "border-border/60 bg-muted/20",
-                  )}
-                >
-                  <span
+                <li key={`${String(event.event ?? "")}-${index}`} className="shrink-0 snap-start">
+                  <button
+                    type="button"
+                    ref={isActive ? activePillRef : null}
+                    aria-current={isActive ? "step" : undefined}
+                    title={tooltip}
+                    onClick={() => setPinnedStep(isPinned ? null : index)}
                     className={cn(
-                      "mt-0.5 inline-flex h-5 w-5 items-center justify-center rounded-full border text-[10px] font-semibold",
-                      isCurrent
-                        ? "border-foreground/40 bg-background text-foreground"
-                        : "border-border/60 bg-background/60 text-muted-foreground",
+                      "inline-flex items-center gap-1.5 whitespace-nowrap rounded-md border px-2 py-1.5 text-[11px] font-semibold transition-colors",
+                      isActive
+                        ? "border-foreground/40 bg-foreground/10 text-foreground"
+                        : isPinned
+                          ? "border-foreground/30 bg-muted/40 text-foreground"
+                          : "border-border/60 bg-muted/20 text-muted-foreground hover:bg-muted/40",
                     )}
                   >
-                    {index + 1}
-                  </span>
-                  <div className="min-w-0" title={message}>
-                    <div className="truncate text-[11px] font-semibold">{formatEventTitle(event.event)}</div>
-                    <div className="line-clamp-1 font-sans text-[10px] leading-4 text-muted-foreground">{message}</div>
-                    {event.timestamp ? (
-                      <div className="mt-0.5 truncate text-[9px] uppercase tracking-widest text-muted-foreground/80">
-                        {formatRunTime(event.timestamp)} · {getAge(event.timestamp)} ago
-                      </div>
-                    ) : null}
-                  </div>
+                    <span
+                      className={cn(
+                        "inline-flex h-4 w-4 items-center justify-center rounded-full border text-[9px]",
+                        isActive
+                          ? "border-foreground/50 bg-background text-foreground"
+                          : "border-border/60 bg-background/60 text-muted-foreground",
+                      )}
+                    >
+                      {isDone ? "✓" : index + 1}
+                    </span>
+                    <span className="capitalize">{formatEventTitle(event.event)}</span>
+                  </button>
                 </li>
               );
             })}
           </ol>
+          {shownEvent ? (
+            <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 rounded-md border border-border/60 bg-muted/20 px-2.5 py-1.5 text-[11px]">
+              <span className="font-semibold capitalize">{formatEventTitle(shownEvent.event)}</span>
+              {shownEvent.message ? (
+                <span className="text-muted-foreground">{String(shownEvent.message)}</span>
+              ) : null}
+              {shownEvent.timestamp ? (
+                <span className="ml-auto text-[10px] uppercase tracking-widest text-muted-foreground/80">
+                  {formatRunTime(shownEvent.timestamp)} · {getAge(shownEvent.timestamp)} ago
+                </span>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       )}
     </Panel>
@@ -770,17 +844,30 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
       {timelinePanel}
 
       {/* ── Body: tape + decision area ── */}
-      <section className="mt-3 grid gap-3 xl:grid-cols-[240px_minmax(0,1fr)]">
+      <section className="mt-3 flex flex-col-reverse gap-3 lg:grid lg:grid-cols-[180px_minmax(0,1fr)]">
         {/* Run tape */}
-        <aside className="self-start rounded-lg border border-border/70 bg-card/60 xl:sticky xl:top-3">
-          <div className="space-y-2 border-b border-border/50 px-3 py-2">
-            <div className="flex items-center justify-between">
+        <aside className="self-start rounded-lg border border-border/70 bg-card/60 lg:sticky lg:top-3">
+          <button
+            type="button"
+            onClick={() => setTapeOpen((v) => !v)}
+            aria-expanded={tapeOpen}
+            className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left lg:hidden"
+          >
+            <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">History</span>
+            <span className="flex items-center gap-2">
+              <span className="text-[10px] uppercase tracking-widest text-muted-foreground">{runs.length}</span>
+              <span className={cn("text-xs text-muted-foreground transition-transform", tapeOpen && "rotate-90")}>›</span>
+            </span>
+          </button>
+          <div className={cn("lg:block", tapeOpen ? "block" : "hidden")}>
+          <div className="space-y-2 border-b border-border/50 px-3 py-2 lg:border-t-0">
+            <div className="hidden items-center justify-between lg:flex">
               <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Run tape</span>
               <span className="text-[10px] uppercase tracking-widest text-muted-foreground">{runs.length}</span>
             </div>
             <TapeModeTabs mode={tapeMode} onChange={setTapeMode} />
           </div>
-          <div className="max-h-[520px] min-h-0 overflow-y-auto p-1 [scrollbar-gutter:stable] xl:max-h-[min(calc(100svh-180px),720px)]">
+          <div className="max-h-[60vh] min-h-0 overflow-y-auto p-1 [scrollbar-gutter:stable] lg:max-h-[min(calc(100svh-180px),720px)]">
             {runs.length === 0 ? (
               <p className="px-2 py-6 text-center text-xs text-muted-foreground">No runs yet.</p>
             ) : tapeMode === "recent" ? (
@@ -874,6 +961,7 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
               </div>
             )}
           </div>
+          </div>
         </aside>
 
         {/* Decision area */}
@@ -953,37 +1041,62 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
             {checks.length === 0 ? (
               <p className="text-xs text-muted-foreground">No checks loaded for this run yet.</p>
             ) : (
-              <ul className="grid gap-1 lg:grid-cols-2">
-                {checks.map((check) => {
-                  const sev = severityChip(check.severity, check.code);
-                  return (
-                    <li
-                      key={check.code}
-                      className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-2 rounded-md border border-border/60 bg-muted/20 px-2.5 py-1.5"
-                    >
-                      <span className={cn("rounded px-1.5 py-px text-[9px] font-bold uppercase tracking-wider", sev.cls)}>
-                        {sev.label}
-                      </span>
-                      <div className="min-w-0">
-                        <div className="truncate text-xs font-semibold">{check.code ?? "check"}</div>
-                        <div className="truncate font-sans text-xs text-muted-foreground">{check.message ?? ""}</div>
-                      </div>
-                    </li>
-                  );
-                })}
-              </ul>
+              <>
+                <div className="flex flex-wrap gap-1.5">
+                  {checks.map((check) => {
+                    const sev = severityChip(check.severity, check.code);
+                    const code = check.code ?? "check";
+                    const isExpanded = expandedCheck === code;
+                    return (
+                      <button
+                        key={code}
+                        type="button"
+                        onClick={() => setExpandedCheck(isExpanded ? null : code)}
+                        title={check.message ?? ""}
+                        className={cn(
+                          "inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-[10px] font-semibold uppercase tracking-wider transition-colors",
+                          sev.cls,
+                          isExpanded && "ring-1 ring-foreground/40",
+                        )}
+                      >
+                        <span className="opacity-70">{sev.label}</span>
+                        <span className="font-mono normal-case tracking-normal">{code}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+                {expandedCheck ? (
+                  <div className="mt-2 rounded-md border border-border/50 bg-background/60 px-2.5 py-1.5 font-sans text-[11px] text-muted-foreground">
+                    <span className="font-mono font-semibold text-foreground">{expandedCheck}</span>
+                    {" · "}
+                    {checks.find((c) => (c.code ?? "check") === expandedCheck)?.message ?? ""}
+                  </div>
+                ) : null}
+              </>
             )}
-            <div className="mt-3 grid gap-2 md:grid-cols-2">
-              <InsightList title="Bullish" items={review?.interpretation?.bullish_points ?? []} empty="No bullish points." />
-              <InsightList title="Bearish" items={review?.interpretation?.bearish_points ?? []} empty="No bearish points." />
-            </div>
+            {(() => {
+              const bullPoints = review?.interpretation?.bullish_points ?? [];
+              const bearPoints = review?.interpretation?.bearish_points ?? [];
+              if (!bullPoints.length && !bearPoints.length) return null;
+              return (
+                <div className="mt-3 grid gap-2 md:grid-cols-2">
+                  {bullPoints.length ? (
+                    <InsightList title="Bullish" items={bullPoints} empty="" />
+                  ) : null}
+                  {bearPoints.length ? (
+                    <InsightList title="Bearish" items={bearPoints} empty="" />
+                  ) : null}
+                </div>
+              );
+            })()}
             {sentiment ? (
               <div className="mt-3 rounded-md border border-border/60 bg-muted/20 p-3">
+                {/* Header */}
                 <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                  <div>
+                  <div className="min-w-0">
                     <div className="text-[10px] uppercase tracking-widest text-muted-foreground">News and sentiment</div>
                     <div className="text-xs font-semibold">
-                      Sources checked
+                      {sentimentDigest.length} items
                       {sentiment.missing_sources?.length ? ` · missing ${sentiment.missing_sources.join(", ")}` : ""}
                     </div>
                   </div>
@@ -991,76 +1104,136 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
                     {sentiment.status ?? "unknown"}
                   </span>
                 </div>
-                <div className="mb-2 grid gap-2 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.35fr)]">
-                  <div className="rounded-md border border-border/60 bg-background/70 px-3 py-2.5">
-                    <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
-                      <div className="text-sm font-semibold">News analysis</div>
-                      {newsRole ? (
-                        <span className={cn("rounded border px-1.5 py-px text-[9px] uppercase tracking-wider", statusChipClass(newsRole.stance))}>
-                          {newsRole.stance} · {asPercent(newsRole.confidence)}
+
+                {/* Sentiment summary bar */}
+                {sentimentDigest.length ? (
+                  <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-md border border-border/50 bg-background/60 px-2.5 py-1.5 text-[11px]">
+                    {labeledTotal > 0 ? (
+                      <>
+                        <span className="flex items-center gap-1.5">
+                          <span className="font-semibold text-emerald-600 dark:text-emerald-400">Bull {Math.round((sentimentCounts.bull / labeledTotal) * 100)}%</span>
+                          <span className="hidden h-1.5 w-12 rounded-full bg-muted/50 sm:inline-block sm:w-20">
+                            <span className="block h-full rounded-full bg-emerald-500" style={{ width: `${(sentimentCounts.bull / labeledTotal) * 100}%` }} />
+                          </span>
                         </span>
-                      ) : null}
-                    </div>
-                    {newsRole ? (
-                      <div className="space-y-2">
-                        <p className="font-sans text-sm leading-6 text-muted-foreground">{newsRole.summary}</p>
-                        <div className="grid gap-2 md:grid-cols-2">
-                          <InsightList title="Positive signals" items={newsRole.bull_points} empty="No positive news signals." />
-                          <InsightList title="Cautions" items={[...newsRole.bear_points, ...newsRole.missing_evidence.map((item) => `Missing: ${item}`)]} empty="No news cautions." />
+                        <span className="flex items-center gap-1.5">
+                          <span className="font-semibold text-red-600 dark:text-red-400">Bear {Math.round((sentimentCounts.bear / labeledTotal) * 100)}%</span>
+                          <span className="hidden h-1.5 w-12 rounded-full bg-muted/50 sm:inline-block sm:w-20">
+                            <span className="block h-full rounded-full bg-red-500" style={{ width: `${(sentimentCounts.bear / labeledTotal) * 100}%` }} />
+                          </span>
+                        </span>
+                      </>
+                    ) : null}
+                    {sentimentCounts.unlabeled > 0 ? (
+                      <span className="text-muted-foreground">+{sentimentCounts.unlabeled} unlabeled</span>
+                    ) : null}
+                  </div>
+                ) : null}
+
+                {/* Codex one-liner */}
+                {newsRole ? (
+                  <button
+                    type="button"
+                    onClick={() => setCodexExpanded((v) => !v)}
+                    title={newsRole.summary}
+                    className="mb-2 flex w-full flex-wrap items-baseline gap-x-2 gap-y-1 rounded-md border border-border/50 bg-background/60 px-2.5 py-1.5 text-left text-[11px] hover:bg-background/80"
+                  >
+                    <span className={cn("rounded border px-1.5 py-px text-[9px] font-bold uppercase tracking-wider", stanceChipClass(newsRole.stance))}>
+                      Codex · {newsRole.stance} · {asPercent(newsRole.confidence)}
+                    </span>
+                    <span className={cn("min-w-0 flex-1 text-muted-foreground", codexExpanded ? "" : "line-clamp-1")}>
+                      {newsRole.summary}
+                    </span>
+                  </button>
+                ) : null}
+
+                {/* Filter chips */}
+                {sentimentDigest.length ? (
+                  <div className="mb-2 -mx-1 flex items-center gap-1.5 overflow-x-auto px-1 sm:flex-wrap sm:overflow-visible">
+                    {[
+                      { key: "all", label: "All", count: sentimentDigest.length },
+                      ...(sentiment.sources ?? [])
+                        .map((s) => ({
+                          key: String(s.source ?? ""),
+                          label: sourceLabel(s.source),
+                          count: sourceCounts[String(s.source ?? "")] ?? 0,
+                        }))
+                        .filter((opt) => opt.key && opt.count > 0),
+                    ].map((opt) => (
+                      <button
+                        key={`src-${opt.key}`}
+                        type="button"
+                        onClick={() => setFeedSrc(opt.key)}
+                        className={cn(
+                          "shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider transition-colors",
+                          feedSrc === opt.key
+                            ? "border-foreground/40 bg-foreground/10 text-foreground"
+                            : "border-border/60 bg-muted/30 text-muted-foreground hover:bg-muted/50",
+                        )}
+                      >
+                        {opt.label} <span className="font-normal opacity-70">{opt.count}</span>
+                      </button>
+                    ))}
+                    <span className="mx-1 hidden h-3.5 w-px shrink-0 self-center bg-border/60 sm:inline-block" />
+                    {(
+                      [
+                        { key: "all", label: "All", dot: "bg-muted-foreground/60" },
+                        { key: "bull", label: "Bull", dot: "bg-emerald-500" },
+                        { key: "bear", label: "Bear", dot: "bg-red-500" },
+                        { key: "unlabeled", label: "Unlabeled", dot: "bg-muted-foreground/40" },
+                      ] as const
+                    ).map((opt) => (
+                      <button
+                        key={`sent-${opt.key}`}
+                        type="button"
+                        onClick={() => setFeedSent(opt.key)}
+                        className={cn(
+                          "inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider transition-colors",
+                          feedSent === opt.key
+                            ? "border-foreground/40 bg-foreground/10 text-foreground"
+                            : "border-border/60 bg-muted/30 text-muted-foreground hover:bg-muted/50",
+                        )}
+                      >
+                        <span className={cn("h-1.5 w-1.5 rounded-full", opt.dot)} />
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+
+                {/* Feed */}
+                {sentimentDigest.length === 0 ? (
+                  <p className="font-sans text-xs text-muted-foreground">No source summaries available yet.</p>
+                ) : filteredFeed.length === 0 ? (
+                  <p className="font-sans text-xs text-muted-foreground">No items match these filters.</p>
+                ) : (
+                  <ul className="max-h-[60vh] overflow-y-auto rounded-md border border-border/50 bg-background/60 sm:max-h-[400px]">
+                    {filteredFeed.map((entry, index) => (
+                      <li
+                        key={`${entry.source}-${index}`}
+                        className="grid grid-cols-[auto_minmax(0,1fr)] items-baseline gap-2 border-b border-border/30 px-2.5 py-2 last:border-b-0"
+                      >
+                        <span
+                          className={cn(
+                            "relative top-1.5 inline-block h-2 w-2 shrink-0 rounded-full",
+                            entry.sentiment === "bull"
+                              ? "bg-emerald-500"
+                              : entry.sentiment === "bear"
+                                ? "bg-red-500"
+                                : "border border-border/60 bg-transparent",
+                          )}
+                          title={entry.sentiment ?? "unlabeled"}
+                        />
+                        <div className="min-w-0 font-sans text-[12px] leading-5">
+                          <span className="mr-1.5 align-middle font-mono text-[9px] uppercase tracking-wider text-muted-foreground/80">
+                            {sourceLabel(entry.source)}
+                          </span>
+                          <span className="text-foreground">{entry.item}</span>
                         </div>
-                      </div>
-                    ) : (
-                      <p className="font-sans text-sm leading-6 text-muted-foreground">
-                        No Codex news role attached yet. Showing fetched source samples from Yahoo, StockTwits, and Reddit.
-                      </p>
-                    )}
-                  </div>
-                  <div className="rounded-md border border-border/60 bg-background/70 px-3 py-2.5">
-                    <div className="mb-2 text-sm font-semibold">Fetched news and posts</div>
-                    {sentimentDigest.length ? (
-                      <ul className="grid gap-1.5 md:grid-cols-2">
-                        {sentimentDigest.map((item, index) => (
-                          <li key={`${item.source}-${index}`} className="grid grid-cols-[auto_minmax(0,1fr)] gap-2 rounded border border-border/50 bg-muted/20 px-2.5 py-2 font-sans text-xs leading-5 text-muted-foreground">
-                            <span className={cn("mt-1.5 h-1.5 w-1.5 rounded-full", item.status === "available" ? "bg-emerald-500" : "bg-amber-500")} />
-                            <span>
-                              <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground/80">{sourceLabel(item.source)}</span>
-                              {" · "}
-                              {item.item}
-                            </span>
-                          </li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <p className="font-sans text-xs text-muted-foreground">No source summaries available yet.</p>
-                    )}
-                  </div>
-                </div>
-                <ul className="grid gap-2 lg:grid-cols-3">
-                  {(sentiment.sources ?? []).map((source) => (
-                    <li key={source.source} className="rounded-md border border-border/60 bg-background/60 px-3 py-2">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="truncate text-xs font-semibold">{sourceLabel(source.source)}</span>
-                        <span className={cn("rounded border px-1.5 py-px text-[9px] uppercase tracking-wider", statusChipClass(source.status))}>
-                          {source.status ?? "n/a"}
-                        </span>
-                      </div>
-                      <div className="mt-1 font-sans text-[11px] text-muted-foreground">
-                        {source.sample_count ?? 0} samples · {source.fetch_method ?? "source adapter"}
-                      </div>
-                      {sourceSamples(source, 3).length ? (
-                        <ul className="mt-1.5 space-y-1 font-sans text-[11px] leading-4 text-muted-foreground">
-                          {sourceSamples(source, 3).map((sample, index) => (
-                            <li key={`${source.source}-sample-${index}`} className="line-clamp-2">
-                              {sample}
-                            </li>
-                          ))}
-                        </ul>
-                      ) : source.error_message ? (
-                        <p className="mt-1 line-clamp-3 font-sans text-[11px] leading-4 text-muted-foreground">{source.error_message}</p>
-                      ) : null}
-                    </li>
-                  ))}
-                </ul>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
             ) : null}
           </Panel>
@@ -1368,17 +1541,17 @@ function TapeModeTabs({ mode, onChange }: { mode: TapeMode; onChange: (mode: Tap
     { key: "verdict", label: "Verdict" },
   ];
   return (
-    <div className="grid grid-cols-3 gap-px rounded-md border border-border/50 bg-muted/20 p-0.5">
+    <div className="-mx-1 flex gap-1 overflow-x-auto px-1 sm:flex-wrap sm:overflow-visible">
       {tabs.map((tab) => (
         <button
           key={tab.key}
           type="button"
           onClick={() => onChange(tab.key)}
           className={cn(
-            "rounded px-1.5 py-0.5 text-[10px] uppercase tracking-widest transition",
+            "shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider transition-colors",
             mode === tab.key
-              ? "bg-background font-bold text-foreground shadow-sm"
-              : "text-muted-foreground hover:text-foreground",
+              ? "border-foreground/40 bg-foreground/10 text-foreground"
+              : "border-border/60 bg-muted/30 text-muted-foreground hover:bg-muted/50",
           )}
         >
           {tab.label}
@@ -1407,26 +1580,22 @@ function RunTapeRow({
     <button
       type="button"
       onClick={() => onSelect(run.run_id)}
+      title={run.run_id}
       className={cn(
-        "group w-full rounded-md border border-transparent px-2 py-1.5 text-left transition hover:bg-muted/50",
+        "group flex w-full items-center gap-1.5 rounded-md border border-transparent px-2 py-1.5 text-left transition hover:bg-muted/50",
         selected && "border-border/70 bg-muted/60",
       )}
     >
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex min-w-0 items-center gap-2">
-          <span className={cn("inline-block h-1.5 w-1.5 shrink-0 rounded-full", runMeta.dot)} />
-          {hideSymbol ? null : <span className="text-xs font-semibold">{run.symbol}</span>}
-          {hideVerdictChip ? (
-            <span className="text-xs font-semibold">{run.symbol}</span>
-          ) : (
-            <span className={cn("rounded px-1 py-px text-[9px] font-bold uppercase tracking-wider", runMeta.chip)}>
-              {run.trust_verdict ?? run.status}
-            </span>
-          )}
-        </div>
-        <span className="shrink-0 text-[10px] text-muted-foreground">{getAge(run.requested_at)}</span>
-      </div>
-      <div className="mt-0.5 truncate text-[10px] text-muted-foreground/80">{run.run_id}</div>
+      <span className={cn("inline-block h-1.5 w-1.5 shrink-0 rounded-full", runMeta.dot)} />
+      {hideSymbol ? null : <span className="text-xs font-semibold">{run.symbol}</span>}
+      {hideVerdictChip ? (
+        <span className="text-xs font-semibold">{run.symbol}</span>
+      ) : (
+        <span className={cn("rounded px-1 py-px text-[9px] font-bold uppercase tracking-wider", runMeta.chip)}>
+          {run.trust_verdict ?? run.status}
+        </span>
+      )}
+      <span className="ml-auto shrink-0 text-[10px] text-muted-foreground">{getAge(run.requested_at)}</span>
     </button>
   );
 }

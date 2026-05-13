@@ -126,13 +126,16 @@ describe("MarketLabClient", () => {
     await screen.findByText("Blocked because price data is stale.");
 
     expect(screen.getAllByText("blocked").length).toBeGreaterThan(0);
-    expect(screen.getByText("Current: done")).toBeInTheDocument();
+    // Timeline: active step pill carries aria-current="step" and the step's message renders in the caption beneath the strip.
+    expect(document.querySelector('[aria-current="step"]')).not.toBeNull();
     expect(screen.getByText("Run done")).toBeInTheDocument();
     expect(screen.getAllByText("Yahoo news").length).toBeGreaterThan(0);
-    expect(screen.getByText("News analysis")).toBeInTheDocument();
+    // News & sentiment: Codex one-liner replaces the old "News analysis" column; summary still renders.
     expect(screen.getAllByText("News is not decisive.").length).toBeGreaterThan(0);
-    expect(screen.getByText(/Missing: news/)).toBeInTheDocument();
     expect(screen.getByText("AAPL headline sample")).toBeInTheDocument();
+    // Evidence: bullish/bearish row is hidden when both arrays empty (fixture has no points).
+    expect(screen.queryByText("No bullish points.")).toBeNull();
+    expect(screen.queryByText("No bearish points.")).toBeNull();
     expect(screen.getByText("Codex says keep this blocked.")).toBeInTheDocument();
     expect(screen.getByText("Price action")).toBeInTheDocument();
     expect(screen.getByText("Price evidence is stale, so the review is blocked before analyst debate.")).toBeInTheDocument();
@@ -209,6 +212,64 @@ describe("MarketLabClient", () => {
       );
     });
     expect(await screen.findByText(/Codex review started in Sessions: stream-1/)).toBeInTheDocument();
+  });
+
+  it("derives sentiment counts from Bullish:/Bearish: prefixed samples and filters the feed", async () => {
+    const sentimentDetail = {
+      ...detail,
+      review: {
+        ...detail.review,
+        sentiment_snapshot: {
+          status: "available",
+          missing_sources: [],
+          sources: [
+            {
+              source: "stocktwits",
+              status: "available",
+              sample_count: 3,
+              fetch_method: "stocktwits_public_stream",
+              samples: [
+                "Bullish: $AAPL breakout setup",
+                "Bullish: $AAPL strong earnings tailwind",
+                "Bearish: $AAPL valuation stretched",
+              ],
+            },
+            {
+              source: "yahoo_finance_news",
+              status: "available",
+              sample_count: 1,
+              fetch_method: "yahoo_finance_rss",
+              samples: ["Apple announces new product line"],
+            },
+          ],
+        },
+      },
+    };
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+      if (String(url).includes("/events")) {
+        return Response.json({ status: "ok", data: [] });
+      }
+      if (String(url).includes("/api/market-lab/runs/") && !init?.method) {
+        return Response.json({ status: "ok", data: sentimentDetail });
+      }
+      return Response.json({ status: "ok", data: { runs: [run] } });
+    }));
+
+    render(<MarketLabClient />);
+    await screen.findByText("$AAPL breakout setup");
+
+    // Summary bar: 2 bull / 1 bear of 3 labeled → 67% / 33%. 1 unlabeled.
+    expect(screen.getByText("Bull 67%")).toBeInTheDocument();
+    expect(screen.getByText("Bear 33%")).toBeInTheDocument();
+    expect(screen.getByText("+1 unlabeled")).toBeInTheDocument();
+
+    // Sentiment prefixes are stripped from the rendered headline.
+    expect(screen.queryByText(/^Bullish: \$AAPL breakout setup$/)).toBeNull();
+
+    // Filter to Bull only — the unlabeled Yahoo headline disappears.
+    fireEvent.click(screen.getByRole("button", { name: /^bull$/i }));
+    expect(screen.queryByText("Apple announces new product line")).toBeNull();
+    expect(screen.getByText("$AAPL breakout setup")).toBeInTheDocument();
   });
 
   it("renders inside a parent dashboard without page chrome", async () => {
