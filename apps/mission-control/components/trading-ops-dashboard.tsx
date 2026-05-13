@@ -7,7 +7,6 @@ import { AlertTriangle, Gauge, Landmark, Radar, ShieldCheck } from "lucide-react
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import type {
-  ArtifactState,
   FinancialServiceHealthRow,
   PolymarketAccountOverview,
   PolymarketResultRow,
@@ -20,6 +19,42 @@ import type {
   TradingOpsPolymarketData,
 } from "@/lib/trading-ops-contract";
 import { formatCurrency as formatMoney, formatOperatorTimestamp, formatPercentDecimal as formatPercent } from "@/lib/format-utils";
+import {
+  buildLiveArtifact,
+  buildLiveExecutionGateArtifact,
+  buildPendingArtifact,
+  buildPolymarketLiveArtifact,
+  buildPolymarketStatusArtifact,
+  buildWarmupArtifact,
+} from "@/lib/trading-ops/artifacts";
+import {
+  badgeVariantForMarketSeverity,
+  badgeVariantForPolymarketStreamer,
+  badgeVariantForServiceHealth,
+  badgeVariantForStreamer,
+} from "@/lib/trading-ops/badge-variants";
+import {
+  formatDetailedMoney,
+  formatLabel,
+  formatMarketPrice,
+  formatMarketQuantity,
+  formatProbability,
+  formatProbabilityDelta,
+  formatSignedDetailedMoney,
+  signedValueTextClass,
+} from "@/lib/trading-ops/format";
+import {
+  collectTradingRunSymbols,
+  derivePinnedCurrentValue,
+  describePolymarketBoardEmptyState,
+  isPolymarketAggregateHandoffPending,
+  isPolymarketLivePayload,
+  isPolymarketLiveReady,
+  isPolymarketPayload,
+  newestTimestamp,
+  preferredFlashMark,
+  shouldKeepPolymarketNeutral,
+} from "@/lib/trading-ops/polymarket-helpers";
 import { Metric, StageChip, StrategyWatchlistSection, ArtifactPanel } from "./trading-ops/shared";
 import { TerminalHeader } from "./trading-ops/terminal-header";
 import { TerminalCell } from "./trading-ops/terminal-cell";
@@ -38,16 +73,6 @@ const POLYMARKET_STARTUP_GRACE_MS = 12_000;
 const POLYMARKET_HANDOFF_RETRY_MS = 1_000;
 const POLYMARKET_HANDOFF_MAX_RETRIES = 3;
 const COMPACT_TAPE_ORDER = ["SPY", "QQQ", "IWM", "DOW", "NASDAQ"];
-const TRANSIENT_POLYMARKET_LOADING_PATTERNS = [
-  /abort(?:ed)?/iu,
-  /timed?\s*out/iu,
-  /timeout/iu,
-  /failed to fetch/iu,
-  /network(?:\s+request)?\s+failed/iu,
-  /stream not ready/iu,
-  /reconnect/iu,
-  /waiting for first/iu,
-];
 
 /* ── main component ── */
 
@@ -1178,415 +1203,6 @@ function FinancialServiceCard({ row }: { row: FinancialServiceHealthRow }) {
 }
 
 
-type LiveExecutionGateOverview = {
-  verdictLabel: string;
-  buyCount: number;
-  freshBuyCount: number;
-  watchCount: number;
-  degradedWatchCount: number;
-  staleWatchCount: number;
-  actionItems: string[];
-};
-
-function buildLiveExecutionGateArtifact(
-  liveData: TradingOpsLiveData | null,
-  liveError: string | null,
-  lastSuccessfulAt: string | null,
-): ArtifactState<LiveExecutionGateOverview> {
-  if (!liveData) {
-    return {
-      state: liveError ? "error" : "missing",
-      label: liveError ? "Gate unavailable" : "Waiting for live gate",
-      message: liveError ?? "Need a live snapshot before judging execution safety.",
-      data: null,
-      updatedAt: lastSuccessfulAt,
-      source: "/api/trading-ops/live/stream",
-      warnings: liveError ? [liveError] : [],
-    };
-  }
-
-  const buyRows = [...liveData.watchlists.dipBuyer.buy, ...liveData.watchlists.canslim.buy];
-  const watchRows = [...liveData.watchlists.dipBuyer.watch, ...liveData.watchlists.canslim.watch];
-  const freshBuyCount = buyRows.filter((row) => row.state === "ok").length;
-  const degradedWatchCount = watchRows.filter((row) => row.state !== "ok").length;
-  const staleWatchCount = watchRows.filter((row) => (row.stalenessSeconds ?? 0) > 60).length;
-  const blocked =
-    !liveData.streamer.connected ||
-    freshBuyCount < buyRows.length ||
-    (watchRows.length > 0 && degradedWatchCount / watchRows.length >= 0.5);
-  const actionItems = blocked
-    ? [
-        !liveData.streamer.connected
-          ? "Streamer is not fully live, so this watchlist should not drive entries."
-          : `At least one BUY quote is degraded or missing (${freshBuyCount}/${buyRows.length} fresh).`,
-        watchRows.length > 0
-          ? `${degradedWatchCount}/${watchRows.length} WATCH names are degraded, and ${staleWatchCount} are older than 60s.`
-          : "No WATCH names are active right now.",
-      ]
-    : [
-        "BUY rows are fresh enough to review.",
-        "WATCH rows are mostly current, but still confirm the exact ticker before acting.",
-      ];
-
-  return {
-    state: blocked ? "degraded" : "ok",
-    label: blocked ? "Blocked" : "Pass",
-    message: blocked
-      ? "Live quotes are not clean enough to treat BUY/WATCH as execution-grade right now."
-      : "Live quotes are fresh enough for a manual execution review.",
-    data: {
-      verdictLabel: blocked ? "Blocked" : "Pass",
-      buyCount: buyRows.length,
-      freshBuyCount,
-      watchCount: watchRows.length,
-      degradedWatchCount,
-      staleWatchCount,
-      actionItems,
-    },
-    updatedAt: lastSuccessfulAt ?? liveData.generatedAt,
-    source: "/api/trading-ops/live/stream",
-    warnings: actionItems,
-    badgeText: blocked ? "blocked" : "pass",
-  };
-}
-
-function formatSignedPercentLabel(value: number | null | undefined): string {
-  if (value == null) return "n/a";
-  return `${value >= 0 ? "+" : "-"}${Math.abs(value).toFixed(2)}%`;
-}
-
-function compactValue(parts: Array<string | null | undefined>): string {
-  return parts.filter((part): part is string => typeof part === "string" && part.length > 0).join(" · ") || "n/a";
-}
-
-function buildLiveArtifact(
-  liveData: TradingOpsLiveData | null,
-  liveError: string | null,
-  lastSuccessfulAt: string | null,
-): ArtifactState<TradingOpsLiveData> {
-  if (!liveData) {
-    return {
-      state: liveError ? "error" : "missing",
-      label: liveError ? "Live unavailable" : "Loading live data",
-      message: liveError ?? "Streaming live tape and streamer health.",
-      data: null,
-      updatedAt: lastSuccessfulAt,
-      source: "/api/trading-ops/live/stream",
-      warnings: liveError ? [liveError] : [],
-    };
-  }
-
-  const hasProblems =
-    liveData.streamer.operatorState !== "healthy" ||
-    liveData.tape.rows.some((row) => row.state !== "ok");
-  const hasUsableLiveRows = liveData.tape.rows.some((row) => row.price != null);
-
-  return {
-    state: hasProblems ? "degraded" : "ok",
-    label: liveData.streamer.connected ? "Live stream" : hasUsableLiveRows ? "Stale live data" : "Live unavailable",
-    message: liveError
-      ? `${liveData.tape.freshnessMessage} Last request error: ${liveError}`
-      : liveData.tape.freshnessMessage,
-    data: liveData,
-    updatedAt: lastSuccessfulAt ?? liveData.generatedAt,
-    source: "/api/trading-ops/live/stream",
-    warnings: liveError ? [liveError, ...liveData.warnings] : liveData.warnings,
-  };
-}
-
-function badgeVariantForStreamer(streamer: TradingOpsLiveData["streamer"]) {
-  if (streamer.connected && streamer.operatorState === "healthy") return "success" as const;
-  if (streamer.connected) return "warning" as const;
-  return "info" as const;
-}
-
-function badgeVariantForServiceHealth(state: FinancialServiceHealthRow["state"]) {
-  if (state === "ok") return "success" as const;
-  if (state === "degraded") return "warning" as const;
-  if (state === "error") return "destructive" as const;
-  return "outline" as const;
-}
-
-function buildPolymarketStatusArtifact(
-  data: TradingOpsPolymarketData | null,
-  error: string | null,
-): ArtifactState<TradingOpsPolymarketData> {
-  if (!data) {
-    return buildPendingArtifact<TradingOpsPolymarketData>("Loading Polymarket status", error);
-  }
-
-  const artifacts = [data.account, data.signal, data.watchlist];
-  const state = summarizeArtifactStates(artifacts.map((artifact) => artifact.state));
-  const updatedAt = newestTimestamp(artifacts.map((artifact) => artifact.updatedAt ?? null));
-  const warnings = artifacts.flatMap((artifact) => artifact.warnings);
-  const suppressTransientError = state === "missing" && isTransientPolymarketLoadingMessage(error);
-
-  return {
-    state,
-    label: "Polymarket status",
-    message: [data.account.message, data.signal.data?.overlaySummary].filter(Boolean).join(" ") || "Polymarket status is loaded.",
-    data,
-    updatedAt,
-    source: "/api/trading-ops/polymarket",
-    warnings: error && !suppressTransientError ? [error, ...warnings] : warnings,
-    badgeText: data.signal.data?.alignment ?? (state === "missing" ? data.account.badgeText ?? "loading" : data.account.badgeText),
-  };
-}
-
-function buildPolymarketLiveArtifact(
-  data: TradingOpsPolymarketLiveData | null,
-  error: string | null,
-  lastSuccessfulAt: string | null,
-): ArtifactState<TradingOpsPolymarketLiveData> {
-  if (!data) {
-    return {
-      state: "missing",
-      label: "Loading Polymarket live",
-      message: "Waiting for first Polymarket live snapshot.",
-      data: null,
-      updatedAt: lastSuccessfulAt,
-      source: "/api/trading-ops/polymarket/live/stream",
-      warnings: error && !isTransientPolymarketLoadingMessage(error) ? [error] : [],
-      badgeText: "loading",
-    };
-  }
-
-  if (isPolymarketLiveLoading(data, error)) {
-    return {
-      state: "missing",
-      label: "Loading Polymarket live",
-      message: "Waiting for the first Polymarket live snapshot.",
-      data,
-      updatedAt: lastSuccessfulAt ?? data.generatedAt,
-      source: "/api/trading-ops/polymarket/live/stream",
-      warnings: [],
-      badgeText: "loading",
-    };
-  }
-
-  const hasProblems =
-    data.streamer.operatorState !== "healthy" ||
-    data.markets.some((market) => market.state !== "ok");
-
-  return {
-    state: hasProblems ? "degraded" : "ok",
-    label: data.streamer.marketsConnected ? "Polymarket live stream" : "Polymarket fallback snapshots",
-    message: error
-      ? `Live Polymarket stream is running with warnings. Last request error: ${error}`
-      : "Live Polymarket market and account updates are flowing.",
-    data,
-    updatedAt: lastSuccessfulAt ?? data.generatedAt,
-    source: "/api/trading-ops/polymarket/live/stream",
-    warnings: error ? [error, ...data.warnings] : data.warnings,
-  };
-}
-
-function buildPendingArtifact<T>(label: string, error: string | null): ArtifactState<T> {
-  return {
-    state: "missing",
-    label,
-    message: error ? "Waiting for first Polymarket snapshot." : `${label}.`,
-    data: null,
-    updatedAt: null,
-    source: "/api/trading-ops/polymarket",
-    warnings: error && !isTransientPolymarketLoadingMessage(error) ? [error] : [],
-    badgeText: "loading",
-  };
-}
-
-function buildWarmupArtifact<T>(label: string, message: string, source: string): ArtifactState<T> {
-  return {
-    state: "missing",
-    label,
-    message,
-    data: null,
-    updatedAt: null,
-    source,
-    warnings: [],
-    badgeText: "loading",
-  };
-}
-
-function isPolymarketLiveReady(data: TradingOpsPolymarketLiveData | null): boolean {
-  if (!data) {
-    return false;
-  }
-
-  return data.streamer.marketsConnected && data.streamer.privateConnected;
-}
-
-function shouldKeepPolymarketNeutral(options: {
-  warmupComplete: boolean;
-  data: TradingOpsPolymarketData | null;
-  dataError: string | null;
-  liveData: TradingOpsPolymarketLiveData | null;
-  liveError: string | null;
-  handoffPending: boolean;
-}): boolean {
-  if (!options.warmupComplete && !isPolymarketLiveReady(options.liveData)) {
-    return true;
-  }
-
-  if (options.handoffPending) {
-    return true;
-  }
-
-  if (isPolymarketLiveLoading(options.liveData, options.liveError)) {
-    return true;
-  }
-
-  if (!options.data && isTransientPolymarketLoadingMessage(options.dataError)) {
-    return true;
-  }
-
-  return [options.data?.account, options.data?.signal, options.data?.watchlist].every((artifact) => isLoadingArtifact(artifact));
-}
-
-function isPolymarketAggregateHandoffPending(options: {
-  data: TradingOpsPolymarketData | null;
-  liveData: TradingOpsPolymarketLiveData | null;
-}): boolean {
-  if (!options.data || !options.liveData) {
-    return false;
-  }
-
-  const liveBoardReady =
-    options.liveData.streamer.marketsConnected ||
-    options.liveData.streamer.trackedMarketCount > 0 ||
-    options.liveData.markets.length > 0;
-  const livePrivateReady =
-    options.liveData.streamer.privateConnected ||
-    options.liveData.streamer.lastPrivateMessageAt != null ||
-    options.liveData.account.lastBalanceUpdateAt != null;
-
-  const accountPending = livePrivateReady && (options.data.account.state === "missing" || options.data.account.state === "error");
-  const signalPending = liveBoardReady && isLoadingArtifact(options.data.signal);
-  const watchlistPending = liveBoardReady && isLoadingArtifact(options.data.watchlist);
-
-  return accountPending || signalPending || watchlistPending;
-}
-
-function isLoadingArtifact(artifact: ArtifactState<unknown> | null | undefined): boolean {
-  if (!artifact || artifact.state !== "missing") {
-    return false;
-  }
-
-  if (artifact.badgeText === "loading") {
-    return true;
-  }
-
-  return /waiting for/i.test(artifact.message) || /loading/i.test(artifact.label);
-}
-
-function isPolymarketLiveLoading(
-  data: TradingOpsPolymarketLiveData | null,
-  error: string | null,
-): boolean {
-  if (!data) {
-    return isTransientPolymarketLoadingMessage(error);
-  }
-
-  if (data.streamer.marketsConnected || data.streamer.privateConnected) {
-    return false;
-  }
-
-  if (data.streamer.lastMarketMessageAt || data.streamer.lastPrivateMessageAt) {
-    return false;
-  }
-
-  if (data.markets.length > 0) {
-    return false;
-  }
-
-  const startupSignals = [
-    data.streamer.operatorState,
-    data.streamer.lastError,
-    error,
-    ...data.warnings,
-  ].filter((value): value is string => typeof value === "string" && value.trim().length > 0);
-
-  return startupSignals.length === 0 || startupSignals.every((value) => isTransientPolymarketLoadingMessage(value));
-}
-
-function isTransientPolymarketLoadingMessage(message: string | null | undefined): boolean {
-  if (typeof message !== "string") {
-    return false;
-  }
-
-  return TRANSIENT_POLYMARKET_LOADING_PATTERNS.some((pattern) => pattern.test(message));
-}
-
-function summarizeArtifactStates(states: Array<TradingOpsPolymarketData["account"]["state"]>): TradingOpsPolymarketData["account"]["state"] {
-  if (states.includes("error")) return "error";
-  if (states.includes("degraded")) return "degraded";
-  if (states.includes("ok")) return "ok";
-  return "missing";
-}
-
-function newestTimestamp(values: Array<string | null | undefined>): string | null {
-  const timestamps = values
-    .filter((value): value is string => typeof value === "string" && value.length > 0)
-    .map((value) => ({ value, time: Date.parse(value) }))
-    .filter((entry) => !Number.isNaN(entry.time))
-    .sort((left, right) => right.time - left.time);
-
-  return timestamps[0]?.value ?? null;
-}
-
-function collectTradingRunSymbols(data: TradingOpsDashboardData): Set<string> {
-  const tradingRun = data.tradingRun.data;
-  if (!tradingRun) return new Set<string>();
-
-  return new Set(
-    [
-      ...tradingRun.dipBuyerBuy,
-      ...tradingRun.dipBuyerWatch,
-      ...tradingRun.dipBuyerNoBuy,
-      ...tradingRun.canslimBuy,
-      ...tradingRun.canslimWatch,
-      ...tradingRun.canslimNoBuy,
-    ].map((symbol) => symbol.toUpperCase()),
-  );
-}
-
-function formatLabel(value: string | null | undefined): string {
-  if (!value) return "n/a";
-  return value.replaceAll("_", " ");
-}
-
-function formatProbability(value: number | null | undefined): string {
-  if (value == null || Number.isNaN(value)) return "n/a";
-  return `${Math.round(value * 100)}%`;
-}
-
-function formatProbabilityDelta(value: number | null | undefined): string {
-  if (value == null || Number.isNaN(value)) return "24h n/a";
-  const points = Math.round(value * 100);
-  const sign = points > 0 ? "+" : "";
-  return `${sign}${points} pts/24h`;
-}
-
-function badgeVariantForMarketSeverity(severity: string) {
-  if (severity === "major") return "warning" as const;
-  if (severity === "notable") return "info" as const;
-  return "outline" as const;
-}
-
-function badgeVariantForPolymarketStreamer(data: TradingOpsPolymarketLiveData) {
-  if (data.streamer.marketsConnected && data.streamer.privateConnected) return "success" as const;
-  if (data.streamer.marketsConnected || data.streamer.privateConnected) return "warning" as const;
-  return "outline" as const;
-}
-
-function formatMarketPrice(value: number | null | undefined): string {
-  if (value == null || Number.isNaN(value)) return "n/a";
-  return `$${value.toFixed(value >= 1 ? 3 : 4)}`;
-}
-
-function formatMarketQuantity(value: number | null | undefined): string {
-  if (value == null || Number.isNaN(value)) return "n/a";
-  return value >= 1000 ? value.toLocaleString() : String(Number(value.toFixed(2)));
-}
 
 function renderPolymarketMarketCard(
   market: TradingOpsPolymarketLiveData["markets"][number],
@@ -1770,54 +1386,6 @@ function RosterChangeSummary({
   );
 }
 
-function formatDetailedMoney(value: number | null | undefined): string {
-  if (value == null || Number.isNaN(value)) return "n/a";
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(value);
-}
-
-function formatSignedDetailedMoney(value: number | null | undefined): string {
-  if (value == null || Number.isNaN(value)) return "n/a";
-  const sign = value > 0 ? "+" : value < 0 ? "-" : "";
-  return `${sign}${formatDetailedMoney(Math.abs(value))}`;
-}
-
-function signedValueTextClass(value: number | null | undefined): string {
-  if (value == null || Number.isNaN(value)) return "text-foreground";
-  if (value > 0) return "text-emerald-600 dark:text-emerald-400";
-  if (value < 0) return "text-red-600 dark:text-red-400";
-  return "text-muted-foreground";
-}
-
-function derivePinnedCurrentValue(
-  market: TradingOpsPolymarketLiveData["markets"][number],
-  result: PolymarketResultRow | null,
-): number | null {
-  if (!result) {
-    return null;
-  }
-
-  if (result.currentValue != null) {
-    return result.currentValue;
-  }
-
-  if (result.netPosition == null) {
-    return null;
-  }
-
-  const mark =
-    market.lastTrade ??
-    (market.bestBid != null && market.bestAsk != null ? (market.bestBid + market.bestAsk) / 2 : null) ??
-    market.bestBid ??
-    market.bestAsk;
-
-  return mark == null ? null : Number((mark * result.netPosition).toFixed(4));
-}
-
 function usePolymarketFlashClass(values: {
   bid: number | null;
   ask: number | null;
@@ -1857,17 +1425,6 @@ function usePolymarketFlashClass(values: {
   if (flash === "up") return "bg-emerald-500/14 border-emerald-500/40 shadow-[0_0_0_1px_rgba(16,185,129,0.22)]";
   if (flash === "down") return "bg-red-500/12 border-red-500/35 shadow-[0_0_0_1px_rgba(239,68,68,0.18)]";
   return "";
-}
-
-function preferredFlashMark(values: {
-  bid: number | null;
-  ask: number | null;
-  last: number | null;
-  spread: number | null;
-}): number | null {
-  if (values.last != null) return values.last;
-  if (values.bid != null && values.ask != null) return (values.bid + values.ask) / 2;
-  return values.bid ?? values.ask ?? values.spread;
 }
 
 function usePolymarketRosterState(
@@ -1937,49 +1494,3 @@ function usePolymarketRosterState(
   };
 }
 
-function describePolymarketBoardEmptyState(options: {
-  bucket: "events" | "sports";
-  visibleCount: number;
-  pinnedCount: number;
-  candidateCount: number;
-  warnings: string[];
-}): { kind: "active" | "exhausted" | "warning" | "waiting"; message: string; detail: string } {
-  if (options.visibleCount > 0) {
-    return { kind: "active", message: "", detail: "" };
-  }
-
-  const bucketLabel = options.bucket === "events" ? "event" : "sports";
-  if (options.candidateCount > 0 && options.pinnedCount >= options.candidateCount) {
-    return {
-      kind: "exhausted",
-      message: `All current ${bucketLabel} candidates are pinned.`,
-      detail: `Remove a pinned ${bucketLabel} market to resume the rotating board.`,
-    };
-  }
-
-  if (options.warnings.length > 0) {
-    return {
-      kind: "warning",
-      message: `Live ${bucketLabel} roster is temporarily unavailable.`,
-      detail: options.warnings[0] ?? `Waiting for the next ${bucketLabel} board refresh.`,
-    };
-  }
-
-  return {
-    kind: "waiting",
-    message: `Waiting for live ${bucketLabel} contracts.`,
-    detail: `Waiting for the first live ${bucketLabel} rotation.`,
-  };
-}
-
-function isPolymarketPayload(value: unknown): value is TradingOpsPolymarketData {
-  if (!value || typeof value !== "object") return false;
-  const record = value as Record<string, unknown>;
-  return Boolean(record.account && record.signal && record.watchlist && record.results);
-}
-
-function isPolymarketLivePayload(value: unknown): value is TradingOpsPolymarketLiveData {
-  if (!value || typeof value !== "object") return false;
-  const record = value as Record<string, unknown>;
-  return Boolean(record.streamer && record.account && Array.isArray(record.markets));
-}
