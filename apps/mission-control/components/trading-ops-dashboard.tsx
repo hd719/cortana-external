@@ -10,6 +10,8 @@ import type {
   PolymarketSignalOverview,
   PolymarketWatchlistOverview,
   TradingOpsDashboardData,
+  TradingOpsPolymarketData,
+  TradingOpsPolymarketLiveData,
 } from "@/lib/trading-ops-contract";
 import {
   buildLiveArtifact,
