@@ -12,6 +12,13 @@ from .models import PortfolioAccount, PortfolioContext, PortfolioPosition
 from .storage import default_cache_dir, repo_root
 
 
+def _resolve_token_path(path: Path | str) -> Path:
+    token_path = Path(path).expanduser()
+    if token_path.is_absolute():
+        return token_path.resolve()
+    return (repo_root() / token_path).resolve()
+
+
 class SchwabPortfolioClient:
     def __init__(
         self,
@@ -23,7 +30,8 @@ class SchwabPortfolioClient:
         timeout_seconds: float | None = None,
     ):
         self.base_url = (base_url or os.getenv("SCHWAB_TRADER_API_BASE_URL") or "https://api.schwabapi.com/trader/v1").rstrip("/")
-        self.token_path = Path(token_path).expanduser().resolve() if token_path else repo_root() / ".cache" / "market_data" / "schwab-token.json"
+        self.token_paths = self._token_paths(token_path)
+        self.token_path = self.token_paths[0]
         self.access_token = access_token or os.getenv("SCHWAB_ACCESS_TOKEN")
         self.request_get = request_get or requests.get
         self.timeout_seconds = timeout_seconds or float(os.getenv("MARKET_LAB_SCHWAB_TIMEOUT_SECONDS", "4.0"))
@@ -35,7 +43,7 @@ class SchwabPortfolioClient:
                 status="unavailable",
                 source="schwab",
                 generated_at=datetime.now(UTC),
-                message="Schwab access token is unavailable.",
+                message="Schwab Accounts and Trading access token is unavailable.",
             )
         try:
             account_numbers = self._get("/accounts/accountNumbers", token)
@@ -68,8 +76,15 @@ class SchwabPortfolioClient:
     def _access_token(self) -> str | None:
         if self.access_token:
             return self.access_token
+        for token_path in self.token_paths:
+            token = self._read_access_token(token_path)
+            if token:
+                return token
+        return None
+
+    def _read_access_token(self, token_path: Path) -> str | None:
         try:
-            payload = json.loads(self.token_path.read_text(encoding="utf-8"))
+            payload = json.loads(token_path.read_text(encoding="utf-8"))
         except Exception:
             return None
         expires_at = payload.get("expiresAt")
@@ -77,6 +92,29 @@ class SchwabPortfolioClient:
             return None
         token = payload.get("accessToken") or payload.get("access_token")
         return str(token).strip() if token else None
+
+    def _token_paths(self, token_path: Path | str | None) -> list[Path]:
+        candidates: list[Path] = []
+        if token_path:
+            candidates.append(_resolve_token_path(token_path))
+        for env_name in ("MARKET_LAB_SCHWAB_PORTFOLIO_TOKEN_PATH", "SCHWAB_STREAMER_TOKEN_PATH"):
+            value = os.getenv(env_name)
+            if value:
+                candidates.append(_resolve_token_path(value))
+        candidates.extend(
+            [
+                repo_root() / ".cache" / "market_data" / "schwab-streamer-token.json",
+                repo_root() / ".cache" / "market_data" / "schwab-token.json",
+            ]
+        )
+        seen: set[Path] = set()
+        unique: list[Path] = []
+        for candidate in candidates:
+            resolved = candidate.resolve()
+            if resolved not in seen:
+                unique.append(resolved)
+                seen.add(resolved)
+        return unique
 
 
 def normalize_schwab_portfolio(account_numbers_payload: Any, accounts_payload: Any) -> PortfolioContext:

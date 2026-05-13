@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import json
+from datetime import UTC, datetime, timedelta
+
 from market_lab.portfolio_context import PortfolioContextService
-from market_lab.schwab_portfolio import normalize_schwab_portfolio
+from market_lab.schwab_portfolio import SchwabPortfolioClient, normalize_schwab_portfolio
 
 
 def test_schwab_portfolio_normalizes_positions_without_raw_order_calls():
@@ -35,3 +38,18 @@ def test_portfolio_context_unavailable_without_cache(tmp_path):
     context = PortfolioContextService(cache_dir=tmp_path).latest()
 
     assert context.status == "unavailable"
+
+
+def test_schwab_portfolio_prefers_fresh_accounts_trading_token(tmp_path):
+    expired = tmp_path / "schwab-token.json"
+    fresh = tmp_path / "schwab-streamer-token.json"
+    expired.write_text(json.dumps({"accessToken": "market-data-token", "expiresAt": 1}), encoding="utf-8")
+    fresh.write_text(
+        json.dumps({"accessToken": "accounts-trading-token", "expiresAt": int((datetime.now(UTC) + timedelta(minutes=5)).timestamp() * 1000)}),
+        encoding="utf-8",
+    )
+
+    client = SchwabPortfolioClient(token_path=expired)
+    client.token_paths = [expired, fresh]
+
+    assert client._access_token() == "accounts-trading-token"
