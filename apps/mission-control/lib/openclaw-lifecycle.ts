@@ -26,8 +26,6 @@ export type OpenClawLifecycleEvent = {
   role?: string;
   jobType?: string;
   summary?: string;
-  taskId?: number;
-  taskStatus?: string;
   metadata?: JsonValue;
   timestamp?: string;
 };
@@ -98,13 +96,6 @@ export const launchPhaseFromLifecycle = (
   return existingExternalStatus === "queued" || !existingExternalStatus
     ? "phase2_running_confirmed"
     : "phase2_running_unconfirmed";
-};
-
-export const taskStatusFromLifecycle = (status: OpenClawLifecycleStatus) => {
-  if (status === "running") return "in_progress";
-  if (status === "done") return "done";
-  if (status === "failed" || status === "timeout" || status === "killed") return "failed";
-  return null;
 };
 
 const toIso = (timestamp?: number) =>

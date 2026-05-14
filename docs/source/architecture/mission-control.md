@@ -2,11 +2,13 @@
 
 Mission Control is the operational UI in `cortana-external`.
 
+Durable work tracking belongs in GitHub Issues. Mission Control does not own local task-board, approval-inbox, feedback-inbox, decision-trace, or autonomy read-model workflows.
+
 ## Current App Surfaces
 
 - Dashboard for agents, jobs, events, and high-level system state
 - Trading Ops for latest-run truth, live tape, watchlists, system health, deep dive, and Polymarket
-- Approvals, Council, Feedback, and Task Board for control-plane operations
+- Council and human-required actions for control-plane operations
 - Mjolnir for the fitness/recovery surface
 
 ## Trading Ops Architecture
@@ -37,7 +39,7 @@ Those live routes read through the external-service boundary instead of calling 
 ## Runtime Dependencies
 
 - Next.js + React for the app shell
-- Prisma + PostgreSQL for stored run, agent, approval, and task state
+- Prisma + PostgreSQL for stored run, agent, and runtime state
 - external-service for market-data and Polymarket live inputs
 - local launchd for the production-style app process
 

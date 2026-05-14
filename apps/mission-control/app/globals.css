@@ -216,41 +216,6 @@
   animation: thinking-drift 4s ease-in-out infinite;
 }
 
-/* ── Kanban board (Task Board) ── */
-
-@layer utilities {
-  .kanban-column {
-    @apply flex flex-col rounded-lg border border-border/50 bg-muted/10;
-  }
-
-  .kanban-column-header {
-    @apply sticky top-0 z-10 flex items-center justify-between gap-2
-      rounded-t-lg border-b border-border/40 bg-background/95 px-3 py-2.5
-      backdrop-blur-sm;
-  }
-
-  .kanban-card {
-    @apply rounded-lg border border-border/50 bg-card p-3 shadow-sm
-      transition-colors hover:border-border;
-  }
-
-  .kanban-priority-1 {
-    @apply border-l-[3px] border-l-red-500 dark:border-l-red-400;
-  }
-
-  .kanban-priority-2 {
-    @apply border-l-[3px] border-l-amber-500 dark:border-l-amber-400;
-  }
-
-  .kanban-priority-3 {
-    @apply border-l-[3px] border-l-blue-500 dark:border-l-blue-400;
-  }
-
-  .kanban-priority-4 {
-    @apply border-l-[3px] border-l-border;
-  }
-}
-
 /* ── Page transitions ── */
 
 ::view-transition-old(root) {

@@ -27,7 +27,6 @@ const NAV_LABELS = [
   "Sessions",
   "Services",
   "Trading Ops",
-  "Task Board",
   "Mjolnir",
   "Memories",
   "Docs",

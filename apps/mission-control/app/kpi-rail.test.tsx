@@ -19,7 +19,7 @@ describe("KpiRail", () => {
           generatedAt: new Date().toISOString(),
           metrics: {
             subagentsSpawnedToday: 0,
-            tasksCompletedToday: 0,
+            runsCompletedToday: 0,
             selfHealsToday: 0,
             activeRunsNow: 0,
           },
@@ -64,7 +64,7 @@ describe("KpiRail", () => {
           generatedAt: new Date().toISOString(),
           metrics: {
             subagentsSpawnedToday: 3,
-            tasksCompletedToday: 0,
+            runsCompletedToday: 0,
             selfHealsToday: 1,
             activeRunsNow: 0,
           },

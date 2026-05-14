@@ -113,7 +113,7 @@ export function KpiRail() {
     <div className="flex flex-col overflow-hidden rounded-lg border border-border/60 bg-card/40 lg:h-full">
       <Section title="Today" href="/services">
         <Stat label="Sub-agents" value={todayLoaded ? todayMetrics?.subagentsSpawnedToday ?? 0 : "—"} highlight={(todayMetrics?.subagentsSpawnedToday ?? 0) > 0} />
-        <Stat label="Tasks done" value={todayLoaded ? todayMetrics?.tasksCompletedToday ?? 0 : "—"} highlight={(todayMetrics?.tasksCompletedToday ?? 0) > 0} />
+        <Stat label="Runs done" value={todayLoaded ? todayMetrics?.runsCompletedToday ?? 0 : "—"} highlight={(todayMetrics?.runsCompletedToday ?? 0) > 0} />
         <Stat label="Self-heals" value={todayLoaded ? todayMetrics?.selfHealsToday ?? 0 : "—"} highlight={(todayMetrics?.selfHealsToday ?? 0) > 0} />
         <Stat label="Active runs" value={todayLoaded ? todayMetrics?.activeRunsNow ?? 0 : "—"} highlight={(todayMetrics?.activeRunsNow ?? 0) > 0} />
       </Section>

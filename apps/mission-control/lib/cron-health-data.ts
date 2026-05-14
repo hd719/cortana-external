@@ -2,7 +2,7 @@ import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import prisma from "@/lib/prisma";
-import { getTaskPrisma } from "@/lib/task-prisma";
+import { getCortanaPrisma } from "@/lib/cortana-prisma";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -263,8 +263,8 @@ export async function fetchCronHealthData() {
   const parsed = JSON.parse(raw) as JobsFile;
   const jobs = (parsed.jobs || []).filter((job) => job.enabled !== false);
 
-  const taskPrisma = getTaskPrisma();
-  const client = taskPrisma ?? prisma;
+  const cortanaPrisma = getCortanaPrisma();
+  const client = cortanaPrisma ?? prisma;
 
   const query = `
     SELECT DISTINCT ON (cron_name)
@@ -279,12 +279,12 @@ export async function fetchCronHealthData() {
   `;
 
   let rows: HealthRow[] = [];
-  let source: "cortana" | "app" = taskPrisma ? "cortana" : "app";
+  let source: "cortana" | "app" = cortanaPrisma ? "cortana" : "app";
 
   try {
     rows = await client.$queryRawUnsafe<HealthRow[]>(query);
   } catch (error) {
-    if (!taskPrisma) throw error;
+    if (!cortanaPrisma) throw error;
     source = "app";
     rows = await prisma.$queryRawUnsafe<HealthRow[]>(query);
   }

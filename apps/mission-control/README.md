@@ -1,6 +1,8 @@
 # Mission Control
 
-Next.js + PostgreSQL dashboard for Cortana agents and Trading Ops truth surfaces. Provides a unified view of agents, runs/jobs, alerts/events, and live market ops with shadcn/ui components.
+Next.js + PostgreSQL dashboard for Cortana agents and Trading Ops truth surfaces. Provides a unified view of agents, runs/jobs, alerts/events, services, sessions, Mjolnir, and live market ops with shadcn/ui components.
+
+Durable operational follow-up lives in GitHub Issues. Mission Control no longer exposes Task Board, approvals inbox, feedback inbox, decision trace, or autonomy read-model pages.
 
 ## Stack
 - Next.js (App Router, TypeScript)
@@ -97,7 +99,6 @@ That path rewrites the LaunchAgent to a direct `next start` entrypoint, clears s
 - `GET /api/events` — latest alerts/events
 - `GET /api/council` / `POST /api/council` — list and create council sessions
 - `POST /api/council/jobs/deliberate` — council deliberation fanout job
-- `GET /api/task-board` — task board slices (ready, blocked, due, pillar rollups, recent outcomes)
 - `GET /api/human-required-actions` — open Cortana human-required queue items for read-only display
 - `GET /api/live` — SSE stream for near-live UI refresh ticks
 - `GET /api/codex/sessions` — list visible Codex sessions grouped by local workspace/project
@@ -115,40 +116,21 @@ That path rewrites the LaunchAgent to a direct `next start` entrypoint, clears s
 ## Pages
 - `/` — Dashboard with stats, agent health widgets, runs table, and alerts feed
 - `/trading-ops` — latest-run truth, live tape, streamer health, watchlists, system health, deep dive, and Polymarket boards
-- `/task-board` — Task board cards (Ready now, Blocked, Due soon/Overdue, By pillar, and Recent execution log)
 - `/agents` — Agent overview
 - `/sessions` — Codex session workspace with project-grouped thread rail, transcript view, inspector, and reply/start controls
 - `/council` — Council deliberation sessions, member votes, and synthesis rationale
 - `/jobs` — Runs/jobs list
 
-## Task board data model
-- Mission Control reads from the Cortana task queue tables when available: `cortana_tasks` and `cortana_epics` (see `prisma/schema.prisma`).
-- Task board reads can use a dedicated Cortana DB URL (`CORTANA_DATABASE_URL`). If unset and `DATABASE_URL` points to `mission_control`, Mission Control automatically tries the same Postgres instance with database `cortana` for task reads to avoid stale adapter copies.
-- Enable live sync triggers in Cortana DB:
-  ```bash
-  export PATH="/opt/homebrew/opt/postgresql@17/bin:$PATH"
-  psql cortana -f scripts/sql/task-change-triggers.sql
-  ```
-- If your Postgres doesn't already expose these tables, running `pnpm db:migrate` will create adapter/read-model tables with the same names/columns:
-  - `cortana_epics`: id (serial), title, source, status, deadline, created_at, completed_at, metadata JSONB
-  - `cortana_tasks`: id (serial), title, description, priority (1-5), status (text), due_at, remind_at, execute_at, auto_executable, execution_plan, depends_on int[], completed_at, outcome, metadata JSONB, epic_id FK, parent_id FK, assigned_to, source, created_at, updated_at
-- Pillar grouping uses `metadata -> 'pillar'` (expected values: Time, Health, Wealth, Career; falls back to Unspecified).
-- Ready Now = `status = 'pending'` + `auto_executable = true` + dependencies either empty or all `done`.
-- Blocked = `status = 'pending'` with dependencies not marked `done`.
-- Due soon = pending + due within 48h; Overdue = pending + due_at in the past.
-- Recent outcomes list tasks with `completed_at` or `outcome` populated.
-
 ## Realtime + OpenClaw lifecycle bridge
 - UI live updates are implemented in `components/auto-refresh.tsx`.
   - Uses `EventSource` against `/api/live` (2s server tick) and falls back to visibility-aware polling.
-  - Applied on Dashboard, Jobs, Agents, Agent detail, and Task Board pages.
+  - Applied on Dashboard, Jobs, Agents, and Agent detail pages.
 - OpenClaw lifecycle bridge supports two ingestion paths:
   1) Push webhook adapter in `lib/openclaw-bridge.ts` + `/api/openclaw/subagent-events`
   2) Pull sync adapter in `lib/openclaw-sync.ts` that reads `~/.openclaw/subagents/runs.json` (or `OPENCLAW_SUBAGENT_RUNS_PATH`) and upserts real sub-agent runs into Mission Control on data fetch.
 - Reliability controls now implemented:
   - **Two-phase launch confirmation**: queued (phase 1) and running (phase 2). Running without prior queue evidence is marked `phase2_running_unconfirmed` and emits warning events.
   - **Stale UI guard + auto-reconcile**: long-running states not present in live run store are auto-marked `stale` and emit `subagent.reconciled_stale` events.
-  - **Event-driven live sync**: PostgreSQL LISTEN/NOTIFY (`task_change`) streams `cortana_tasks` / `cortana_epics` inserts, updates, and deletes into Mission Control immediately.
 - **Source-of-truth reconciliation job**: fallback guardrail runs every 15 minutes to catch missed updates and surfaces drift warnings when listener is disconnected.
   - **Fallback transparency layer**: Jobs/Agent detail display provider/model/auth path and explicit fallback-path badges when detected in run payload metadata.
   - **Evidence-graded status messaging**: each run gets confidence grade (`high|medium|low`) based on observed lifecycle evidence.

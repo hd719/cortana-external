@@ -1,5 +1,5 @@
 import prisma from "@/lib/prisma";
-import { getTaskPrisma } from "./task-prisma";
+import { getCortanaPrisma } from "./cortana-prisma";
 
 export type CouncilSession = {
   id: string;
@@ -140,8 +140,8 @@ const mapMessage = (row: CouncilMessageRow): CouncilMessage => ({
 });
 
 export async function getCouncilSessions(filters: CouncilFilters = {}): Promise<CouncilSession[]> {
-  const taskPrisma = getTaskPrisma();
-  const preferred = taskPrisma ?? prisma;
+  const cortanaPrisma = getCortanaPrisma();
+  const preferred = cortanaPrisma ?? prisma;
 
   const limit = Math.max(1, Math.min(filters.limit ?? 100, 500));
   const rangeHours = Math.max(1, Math.min(filters.rangeHours ?? 168, 24 * 30));
@@ -188,7 +188,7 @@ export async function getCouncilSessions(filters: CouncilFilters = {}): Promise<
     const rows = await runQuery(preferred);
     return rows.map(mapSession);
   } catch (error) {
-    if (!taskPrisma) throw error;
+    if (!cortanaPrisma) throw error;
     const rows = await runQuery(prisma);
     return rows.map(mapSession);
   }
@@ -196,8 +196,8 @@ export async function getCouncilSessions(filters: CouncilFilters = {}): Promise<
 
 export async function getCouncilSessionById(id: string): Promise<CouncilSession | null> {
   const safeId = escapeLiteral(id);
-  const taskPrisma = getTaskPrisma();
-  const preferred = taskPrisma ?? prisma;
+  const cortanaPrisma = getCortanaPrisma();
+  const preferred = cortanaPrisma ?? prisma;
 
   const sessionAndMembersQuery = `
     SELECT
@@ -284,7 +284,7 @@ export async function getCouncilSessionById(id: string): Promise<CouncilSession 
       messages: messageRows.map(mapMessage),
     };
   } catch (error) {
-    if (!taskPrisma) throw error;
+    if (!cortanaPrisma) throw error;
 
     const { sessionRows, messageRows } = await run(prisma);
     if (sessionRows.length === 0) return null;
@@ -345,8 +345,8 @@ export async function createCouncilSession(data: {
       model_policy
   `;
 
-  const taskPrisma = getTaskPrisma();
-  const preferred = taskPrisma ?? prisma;
+  const cortanaPrisma = getCortanaPrisma();
+  const preferred = cortanaPrisma ?? prisma;
 
   const run = async (client: typeof prisma) =>
     client.$queryRawUnsafe<CouncilSessionRow[]>(sql);
@@ -355,7 +355,7 @@ export async function createCouncilSession(data: {
     const rows = await run(preferred);
     return mapSession(rows[0]);
   } catch (error) {
-    if (!taskPrisma) throw error;
+    if (!cortanaPrisma) throw error;
     const rows = await run(prisma);
     return mapSession(rows[0]);
   }
@@ -383,8 +383,8 @@ export async function submitVote(
     WHERE id = ${memberId} AND session_id = '${safeSessionId}'
   `;
 
-  const taskPrisma = getTaskPrisma();
-  const preferred = taskPrisma ?? prisma;
+  const cortanaPrisma = getCortanaPrisma();
+  const preferred = cortanaPrisma ?? prisma;
 
   const run = async (client: typeof prisma) => {
     await client.$executeRawUnsafe(sql);
@@ -393,7 +393,7 @@ export async function submitVote(
   try {
     await run(preferred);
   } catch (error) {
-    if (!taskPrisma) throw error;
+    if (!cortanaPrisma) throw error;
     await run(prisma);
   }
 }
@@ -419,8 +419,8 @@ export async function finalizeDecision(
     WHERE id = '${safeSessionId}'
   `;
 
-  const taskPrisma = getTaskPrisma();
-  const preferred = taskPrisma ?? prisma;
+  const cortanaPrisma = getCortanaPrisma();
+  const preferred = cortanaPrisma ?? prisma;
 
   const run = async (client: typeof prisma) => {
     await client.$executeRawUnsafe(sql);
@@ -429,7 +429,7 @@ export async function finalizeDecision(
   try {
     await run(preferred);
   } catch (error) {
-    if (!taskPrisma) throw error;
+    if (!cortanaPrisma) throw error;
     await run(prisma);
   }
 }
@@ -457,8 +457,8 @@ export async function addCouncilMembers(
     VALUES ${values}
   `;
 
-  const taskPrisma = getTaskPrisma();
-  const preferred = taskPrisma ?? prisma;
+  const cortanaPrisma = getCortanaPrisma();
+  const preferred = cortanaPrisma ?? prisma;
 
   const run = async (client: typeof prisma) => {
     await client.$executeRawUnsafe(sql);
@@ -467,7 +467,7 @@ export async function addCouncilMembers(
   try {
     await run(preferred);
   } catch (error) {
-    if (!taskPrisma) throw error;
+    if (!cortanaPrisma) throw error;
     await run(prisma);
   }
 }
@@ -493,8 +493,8 @@ export async function appendCouncilMessage(data: {
     VALUES ('${safeSessionId}', ${data.turnNo}, '${safeSpeaker}', '${safeType}', '${safeContent}', ${metadata})
   `;
 
-  const taskPrisma = getTaskPrisma();
-  const preferred = taskPrisma ?? prisma;
+  const cortanaPrisma = getCortanaPrisma();
+  const preferred = cortanaPrisma ?? prisma;
 
   const run = async (client: typeof prisma) => {
     await client.$executeRawUnsafe(sql);
@@ -503,7 +503,7 @@ export async function appendCouncilMessage(data: {
   try {
     await run(preferred);
   } catch (error) {
-    if (!taskPrisma) throw error;
+    if (!cortanaPrisma) throw error;
     await run(prisma);
   }
 }

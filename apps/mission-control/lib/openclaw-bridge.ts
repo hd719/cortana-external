@@ -7,16 +7,9 @@ import {
   normalizeLifecycleStatus,
   runStatusFromLifecycle,
   severityFromLifecycle,
-  taskStatusFromLifecycle,
   type JsonValue,
   type OpenClawLifecycleEvent,
 } from "@/lib/openclaw-lifecycle";
-
-type CortanaTaskUpdateManyMutationInput = {
-  status?: string;
-  outcome?: string | null;
-  completedAt?: Date | null;
-};
 
 export { normalizeLifecycleStatus, type OpenClawLifecycleEvent } from "@/lib/openclaw-lifecycle";
 
@@ -141,29 +134,6 @@ export async function ingestOpenClawLifecycleEvent(event: OpenClawLifecycleEvent
       },
     },
   });
-
-  if (event.taskId) {
-    const taskUpdate: CortanaTaskUpdateManyMutationInput = {};
-
-    if (event.taskStatus) {
-      taskUpdate.status = event.taskStatus;
-    } else {
-      const taskStatus = taskStatusFromLifecycle(normalizedStatus);
-      if (taskStatus) taskUpdate.status = taskStatus;
-    }
-
-    if (isTerminal) {
-      taskUpdate.outcome = event.summary ?? `Run ${event.runId}: ${normalizedStatus}`;
-      taskUpdate.completedAt = startedAt;
-    }
-
-    if (Object.keys(taskUpdate).length > 0) {
-      await prisma.cortanaTask.updateMany({
-        where: { id: event.taskId },
-        data: taskUpdate,
-      });
-    }
-  }
 
   return run;
 }

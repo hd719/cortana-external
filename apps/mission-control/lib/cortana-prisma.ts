@@ -1,8 +1,8 @@
 import { PrismaClient } from "@prisma/client";
 
 const globalForTaskPrisma: typeof globalThis & {
-  taskPrisma?: PrismaClient;
-  taskPrismaSourceUrl?: string;
+  cortanaPrisma?: PrismaClient;
+  cortanaPrismaSourceUrl?: string;
 } = globalThis;
 
 export const isPrimaryDatabaseCortana = () => {
@@ -37,17 +37,17 @@ const deriveCortanaUrl = () => {
   return null;
 };
 
-export const getTaskPrisma = () => {
+export const getCortanaPrisma = () => {
   const url = deriveCortanaUrl();
   if (!url || url === process.env.DATABASE_URL) return null;
 
-  if (!globalForTaskPrisma.taskPrisma || globalForTaskPrisma.taskPrismaSourceUrl !== url) {
-    globalForTaskPrisma.taskPrisma = new PrismaClient({
+  if (!globalForTaskPrisma.cortanaPrisma || globalForTaskPrisma.cortanaPrismaSourceUrl !== url) {
+    globalForTaskPrisma.cortanaPrisma = new PrismaClient({
       datasources: { db: { url } },
       log: process.env.NODE_ENV === "development" ? ["warn", "error"] : ["error"],
     });
-    globalForTaskPrisma.taskPrismaSourceUrl = url;
+    globalForTaskPrisma.cortanaPrismaSourceUrl = url;
   }
 
-  return globalForTaskPrisma.taskPrisma;
+  return globalForTaskPrisma.cortanaPrisma;
 };

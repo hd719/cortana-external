@@ -5,7 +5,7 @@ import path from "node:path";
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getTelegramUsageHandlerPath } from "@/lib/runtime-paths";
-import { getTaskPrisma } from "@/lib/task-prisma";
+import { getCortanaPrisma } from "@/lib/cortana-prisma";
 
 type ActionKey = "chaos-test" | "reflection-sweep" | "check-budget" | "force-heartbeat";
 
@@ -17,10 +17,11 @@ type HealthCheckResult = {
 
 type ReflectionItem = {
   id: number;
-  title: string;
-  status: string;
-  completed_at: Date | string | null;
-  outcome: string | null;
+  event_type: string | null;
+  source: string | null;
+  severity: string | null;
+  message: string | null;
+  timestamp: Date | string | null;
 };
 
 type BudgetSummary = {
@@ -38,7 +39,7 @@ const VALID_ACTIONS: ActionKey[] = [
   "force-heartbeat",
 ];
 
-const getTaskClient = () => getTaskPrisma() ?? prisma;
+const getCortanaClient = () => getCortanaPrisma() ?? prisma;
 
 const normalizeNumber = (value: unknown): number | null => {
   if (typeof value === "number" && Number.isFinite(value)) return value;
@@ -77,7 +78,7 @@ const tryParseJson = (value: string): unknown => {
 
 const runChaosTest = async () => {
   const checks: HealthCheckResult[] = [];
-  const client = getTaskClient();
+  const client = getCortanaClient();
 
   try {
     await client.$queryRawUnsafe("SELECT 1");
@@ -175,10 +176,10 @@ const runChaosTest = async () => {
 };
 
 const runReflectionSweep = async () => {
-  const client = getTaskClient();
+  const client = getCortanaClient();
 
   const items = (await client.$queryRawUnsafe<ReflectionItem[]>(
-    "SELECT id, title, status, completed_at, outcome FROM cortana_tasks WHERE status = 'done' AND completed_at > NOW() - INTERVAL '24 hours' ORDER BY completed_at DESC LIMIT 10"
+    "SELECT id, event_type, source, severity, message, timestamp FROM cortana_events WHERE timestamp > NOW() - INTERVAL '24 hours' AND severity IN ('warning', 'critical', 'error') ORDER BY timestamp DESC, id DESC LIMIT 10"
   ));
 
   return {
@@ -230,7 +231,7 @@ const runBudgetCheck = () => {
 };
 
 const runForceHeartbeat = async () => {
-  const client = getTaskClient();
+  const client = getCortanaClient();
 
   await client.$executeRawUnsafe(
     "INSERT INTO cortana_events (event_type, source, severity, message) VALUES ('manual_heartbeat', 'dashboard', 'info', 'Manual heartbeat forced from Mission Control')"

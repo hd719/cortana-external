@@ -61,7 +61,7 @@ export const WORKSPACE_SECTIONS: Array<{ id: string; label: string; description:
 export const WORKSPACE_FIELDS: WorkspaceFieldDefinition[] = [
   // ── OpenClaw Bridge ──
   { key: "DATABASE_URL", label: "Mission Control database URL", help: "Primary Prisma/Postgres connection for Mission Control.", fileId: "missionControl", sectionId: "openclaw-bridge", input: "textarea", placeholder: "postgres://localhost:5432/mission_control?sslmode=disable" },
-  { key: "CORTANA_DATABASE_URL", label: "Cortana source database URL", help: "Optional read source for task-board and governance tables.", fileId: "missionControl", sectionId: "openclaw-bridge", input: "textarea", placeholder: "postgres://localhost:5432/cortana?sslmode=disable" },
+  { key: "CORTANA_DATABASE_URL", label: "Cortana source database URL", help: "Optional read source for operational tables.", fileId: "missionControl", sectionId: "openclaw-bridge", input: "textarea", placeholder: "postgres://localhost:5432/cortana?sslmode=disable" },
   { key: "DOCS_PATH", label: "Docs path", help: "Override the docs library source loaded in Mission Control.", fileId: "missionControl", sectionId: "openclaw-bridge", input: "text", placeholder: "/Users/hd/Developer/cortana/docs" },
   { key: "AGENT_MODELS_PATH", label: "Agent models path", help: "Maps agent ids to preferred OpenClaw model labels.", fileId: "missionControl", sectionId: "openclaw-bridge", input: "text", placeholder: "/Users/hd/Developer/cortana/config/agent-models.json" },
   { key: "HEARTBEAT_STATE_PATH", label: "Heartbeat state path", help: "Location of the OpenClaw heartbeat state file Mission Control watches.", fileId: "missionControl", sectionId: "openclaw-bridge", input: "text", placeholder: "/Users/hd/.openclaw/memory/heartbeat-state.json" },

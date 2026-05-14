@@ -32,8 +32,6 @@ describe("computeHealthScore", () => {
       completedRuns: 0,
       failedRuns: 0,
       cancelledRuns: 0,
-      completedTasks: 0,
-      failedTasks: 0,
     });
 
     expect(score).toBe(NO_DATA_DEFAULT_SCORE);
@@ -45,8 +43,6 @@ describe("computeHealthScore", () => {
       completedRuns: 0,
       failedRuns: 5,
       cancelledRuns: 0,
-      completedTasks: 0,
-      failedTasks: 0,
     });
 
     expect(score).toBeLessThan(HEALTH_THRESHOLDS.DEGRADED_MIN);
@@ -58,21 +54,17 @@ describe("computeHealthScore", () => {
       completedRuns: 10,
       failedRuns: 1,
       cancelledRuns: 0,
-      completedTasks: 0,
-      failedTasks: 0,
     });
 
     expect(score).toBeGreaterThan(HEALTH_THRESHOLDS.HEALTHY_MIN);
     expect(deriveHealthBand(score)).toBe("healthy");
   });
 
-  it("returns a high score for all successful runs/tasks", () => {
+  it("returns a high score for all successful runs", () => {
     const score = computeHealthScore({
       completedRuns: 20,
       failedRuns: 0,
       cancelledRuns: 0,
-      completedTasks: 40,
-      failedTasks: 0,
     });
 
     expect(score).toBeGreaterThan(90);
@@ -83,8 +75,6 @@ describe("computeHealthScore", () => {
       completedRuns: 8,
       failedRuns: 6,
       cancelledRuns: 2,
-      completedTasks: 10,
-      failedTasks: 6,
     });
 
     expect(score).toBeGreaterThan(HEALTH_THRESHOLDS.DEGRADED_MIN);
@@ -101,8 +91,6 @@ describe("computeHealthScore", () => {
       completedRuns: 40,
       failedRuns: 5,
       cancelledRuns: 0,
-      completedTasks: 60,
-      failedTasks: 8,
     };
 
     const recentFailures = computeHealthScore(baseStats, [
@@ -125,8 +113,6 @@ describe("computeHealthScore", () => {
       completedRuns: 5,
       failedRuns: 1,
       cancelledRuns: 0,
-      completedTasks: 7,
-      failedTasks: 1,
     };
 
     const withEmpty = computeHealthScore(stats, []);
