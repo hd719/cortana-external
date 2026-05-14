@@ -77,7 +77,7 @@ export function StatusStrip() {
       <Link href="/services" className="inline-flex items-center gap-1.5 hover:underline">
         <span className={cn("inline-block h-2 w-2 rounded-full", heartbeatDotClass[hbStatus])} />
         <span className="font-semibold">{heartbeatLabel[hbStatus]}</span>
-        <span className="text-muted-foreground">hb {heartbeatAge(heartbeat.data?.ageMs ?? null)}</span>
+        <span className="text-muted-foreground">{heartbeatAge(heartbeat.data?.ageMs ?? null)}</span>
       </Link>
 
       <span className="text-muted-foreground/40">·</span>
