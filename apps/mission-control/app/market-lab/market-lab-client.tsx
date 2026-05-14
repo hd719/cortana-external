@@ -1136,10 +1136,10 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
               return (
                 <div className="mt-3 grid gap-2 md:grid-cols-2">
                   {bullPoints.length ? (
-                    <InsightList title="Bullish" items={bullPoints} empty="" />
+                    <InsightList title="Bullish" items={bullPoints} empty="" tone="bull" />
                   ) : null}
                   {bearPoints.length ? (
-                    <InsightList title="Bearish" items={bearPoints} empty="" />
+                    <InsightList title="Bearish" items={bearPoints} empty="" tone="bear" />
                   ) : null}
                 </div>
               );
@@ -1269,11 +1269,11 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
                     {filteredFeed.map((entry, index) => (
                       <li
                         key={`${entry.source}-${index}`}
-                        className="grid grid-cols-[auto_minmax(0,1fr)] items-baseline gap-2 border-b border-border/30 px-2.5 py-2 last:border-b-0"
+                        className="flex items-start gap-2 border-b border-border/30 px-2.5 py-2 last:border-b-0"
                       >
                         <span
                           className={cn(
-                            "relative top-1.5 inline-block h-2 w-2 shrink-0 rounded-full",
+                            "mt-1.5 inline-block h-2 w-2 shrink-0 rounded-full",
                             entry.sentiment === "bull"
                               ? "bg-emerald-500"
                               : entry.sentiment === "bear"
@@ -1282,11 +1282,11 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
                           )}
                           title={entry.sentiment ?? "unlabeled"}
                         />
-                        <div className="min-w-0 font-mono text-[12px] leading-5">
-                          <span className={cn("mr-1.5 align-middle text-[9px] font-semibold uppercase tracking-wider", sourceColorClass(entry.source))}>
+                        <div className="min-w-0 flex-1 font-mono text-[12px] leading-5">
+                          <span className={cn("mr-1.5 align-baseline text-[9px] font-semibold uppercase tracking-wider", sourceColorClass(entry.source))}>
                             {sourceLabel(entry.source)}
                           </span>
-                          <span className="text-foreground">{entry.item}</span>
+                          <span className="align-baseline text-foreground">{entry.item}</span>
                         </div>
                       </li>
                     ))}
@@ -1756,17 +1756,49 @@ function CodexRoleRow({ role }: { role: CodexRoleReview }) {
   );
 }
 
-function InsightList({ title, items, empty }: { title: string; items: string[]; empty: string }) {
+function InsightList({
+  title,
+  items,
+  empty,
+  tone,
+}: {
+  title: string;
+  items: string[];
+  empty: string;
+  tone?: "bull" | "bear";
+}) {
+  const toneStyles =
+    tone === "bull"
+      ? {
+          container: "border-emerald-500/40 bg-emerald-500/[0.06]",
+          rail: "border-l-2 border-l-emerald-500 dark:border-l-emerald-400",
+          title: "text-emerald-600 dark:text-emerald-400",
+          bullet: "▲",
+        }
+      : tone === "bear"
+        ? {
+            container: "border-red-500/40 bg-red-500/[0.06]",
+            rail: "border-l-2 border-l-red-500 dark:border-l-red-400",
+            title: "text-red-600 dark:text-red-400",
+            bullet: "▼",
+          }
+        : {
+            container: "border-border/60 bg-muted/20",
+            rail: "",
+            title: "text-muted-foreground",
+            bullet: "·",
+          };
   return (
-    <div className="rounded-md border border-border/60 bg-muted/20 px-2.5 py-2">
-      <div className="text-[10px] uppercase tracking-widest text-muted-foreground">{title}</div>
+    <div className={cn("rounded-md border px-2.5 py-2", toneStyles.container, toneStyles.rail)}>
+      <div className={cn("text-[10px] font-bold uppercase tracking-widest", toneStyles.title)}>{title}</div>
       {items.length === 0 ? (
         <p className="mt-1 font-sans text-xs text-muted-foreground">{empty}</p>
       ) : (
         <ul className="mt-1 space-y-0.5 font-sans text-xs">
           {items.map((item) => (
-            <li key={item} className="leading-5">
-              · {item}
+            <li key={item} className="flex gap-1.5 leading-5">
+              <span className={cn("shrink-0 text-[10px]", toneStyles.title)}>{toneStyles.bullet}</span>
+              <span>{item}</span>
             </li>
           ))}
         </ul>
