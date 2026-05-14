@@ -739,7 +739,7 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
                 <span className="text-muted-foreground">{String(shownEvent.message)}</span>
               ) : null}
               {shownEvent.timestamp ? (
-                <span className="ml-auto text-[10px] uppercase tracking-widest text-muted-foreground/80">
+                <span className="w-full text-[10px] uppercase tracking-widest text-muted-foreground/80 sm:ml-auto sm:w-auto">
                   {formatRunTime(shownEvent.timestamp)} · {getAge(shownEvent.timestamp)} ago
                 </span>
               ) : null}
