@@ -427,11 +427,9 @@ function KanbanCard({ task, compact, columnKey }: { task: TaskBoardTask; compact
   const isOverdue = task.dueAt && task.dueAt < new Date();
 
   let pillar: string | null = null;
-  let feedbackId: string | null = null;
   if (task.metadata && typeof task.metadata === "object" && !Array.isArray(task.metadata)) {
     const meta = task.metadata as Record<string, unknown>;
     if (typeof meta.pillar === "string") pillar = meta.pillar;
-    if (typeof meta.feedback_id === "string" && meta.feedback_id.trim()) feedbackId = meta.feedback_id.trim();
   }
 
   if (compact) {
@@ -527,7 +525,7 @@ function KanbanCard({ task, compact, columnKey }: { task: TaskBoardTask; compact
         )}
       </div>
 
-      {/* Footer: due date, dependencies, feedback */}
+      {/* Footer: due date and dependencies */}
       <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
         {task.dueAt && (
           <span className={cn("flex items-center gap-1", isOverdue && "font-medium text-red-600 dark:text-red-400")}>
@@ -540,14 +538,6 @@ function KanbanCard({ task, compact, columnKey }: { task: TaskBoardTask; compact
             <AlertTriangle className="h-3 w-3" />
             {task.blockedBy.length} blocker{task.blockedBy.length > 1 ? "s" : ""}
           </span>
-        )}
-        {feedbackId && (
-          <Link
-            href={`/feedback?id=${encodeURIComponent(feedbackId)}`}
-            className="hover:text-foreground hover:underline"
-          >
-            feedback
-          </Link>
         )}
       </div>
     </div>

@@ -10,7 +10,6 @@ export type TodayStatsPayload = {
     tasksCompletedToday: number;
     selfHealsToday: number;
     activeRunsNow: number;
-    decisionsLoggedToday: number;
   };
 };
 

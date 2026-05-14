@@ -10,11 +10,6 @@ type CountRow = { count: bigint | number };
 const parseCount = (value: bigint | number | null | undefined) =>
   Number(typeof value === "bigint" ? value : value ?? 0);
 
-const isMissingRelationError = (error: unknown) => {
-  const message = error instanceof Error ? error.message.toLowerCase() : "";
-  return message.includes("does not exist") || message.includes("undefined table");
-};
-
 export async function GET() {
   const taskPrisma = getTaskPrisma();
   const taskClient = taskPrisma ?? prisma;
@@ -48,24 +43,6 @@ export async function GET() {
     return parseCount(rows[0]?.count);
   };
 
-  const fetchDecisionCount = async (db: typeof prisma) => {
-    try {
-      const rows = await db.$queryRawUnsafe<CountRow[]>(
-        `SELECT COUNT(*)::bigint AS count
-         FROM cortana_decision_traces
-         WHERE created_at >= $1 AND created_at < $2`,
-        start,
-        end
-      );
-      return parseCount(rows[0]?.count);
-    } catch (error) {
-      if (isMissingRelationError(error)) {
-        return 0;
-      }
-      throw error;
-    }
-  };
-
   const activeRunsNow = await prisma.run.count({
     where: {
       OR: [
@@ -78,12 +55,11 @@ export async function GET() {
   let source: "cortana" | "app" = taskPrisma ? "cortana" : "app";
 
   try {
-    const [subagentsSpawnedToday, tasksCompletedToday, selfHealsToday, decisionsLoggedToday] =
+    const [subagentsSpawnedToday, tasksCompletedToday, selfHealsToday] =
       await Promise.all([
         fetchEventCount(taskClient, "event_type ILIKE 'subagent%'"),
         fetchTaskCount(taskClient),
         fetchEventCount(taskClient, "event_type = 'auto_heal'"),
-        fetchDecisionCount(taskClient),
       ]);
 
     return NextResponse.json(
@@ -95,7 +71,6 @@ export async function GET() {
           tasksCompletedToday,
           selfHealsToday,
           activeRunsNow,
-          decisionsLoggedToday,
         },
       },
       {
@@ -111,12 +86,11 @@ export async function GET() {
 
     source = "app";
 
-    const [subagentsSpawnedToday, tasksCompletedToday, selfHealsToday, decisionsLoggedToday] =
+    const [subagentsSpawnedToday, tasksCompletedToday, selfHealsToday] =
       await Promise.all([
         fetchEventCount(prisma, "event_type ILIKE 'subagent%'"),
         fetchTaskCount(prisma),
         fetchEventCount(prisma, "event_type = 'auto_heal'"),
-        fetchDecisionCount(prisma),
       ]);
 
     return NextResponse.json(
@@ -128,7 +102,6 @@ export async function GET() {
           tasksCompletedToday,
           selfHealsToday,
           activeRunsNow,
-          decisionsLoggedToday,
         },
       },
       {

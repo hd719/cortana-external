@@ -23,9 +23,6 @@ describe("StatusStrip", () => {
       if (url.includes("/api/db-status")) {
         return jsonResponse({ postgres: true, lancedb: true });
       }
-      if (url.includes("/api/autonomy-score")) {
-        return jsonResponse({ ok: true, score: 92, trend: { direction: "up", delta: 1.5 }, updatedAt: new Date().toISOString(), source: "cortana" });
-      }
       return jsonResponse({});
     });
 
@@ -35,7 +32,6 @@ describe("StatusStrip", () => {
     expect((await screen.findAllByText("Indexing memex")).length).toBeGreaterThan(0);
     expect(screen.getByText("PG")).toBeInTheDocument();
     expect(screen.getByText("Vector")).toBeInTheDocument();
-    expect((await screen.findAllByText("92")).length).toBeGreaterThan(0);
     // Collapsed by default — <details> open attribute should be absent.
     expect(document.querySelector("details")?.hasAttribute("open")).toBe(false);
   });

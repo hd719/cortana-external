@@ -471,32 +471,39 @@ describe("listVisibleCodexSessions", () => {
   });
 
   it("shows sessions without workspace metadata under Other instead of dropping them", async () => {
-    codexSessionMocks.listCodexSessions.mockResolvedValueOnce([
+    const result = buildVisibleCodexSessionGroups(
+      [
+        {
+          sessionId: "unknown",
+          threadName: "Trace cooldown run branch",
+          updatedAt: 500,
+          cwd: null,
+          model: null,
+          source: null,
+          cliVersion: null,
+          lastMessagePreview: null,
+          transcriptPath: null,
+        },
+        {
+          sessionId: "known",
+          threadName: "Inspect AGENTS.md",
+          updatedAt: 400,
+          cwd: path.join(os.homedir(), "Developer", "cortana"),
+          model: "gpt-5.4",
+          source: "vscode",
+          cliVersion: "0.122.0",
+          lastMessagePreview: null,
+          transcriptPath: "/tmp/known.jsonl",
+        },
+      ],
+      [],
       {
-        sessionId: "unknown",
-        threadName: "Trace cooldown run branch",
-        updatedAt: 500,
-        cwd: null,
-        model: null,
-        source: null,
-        cliVersion: null,
-        lastMessagePreview: null,
-        transcriptPath: null,
+        activeWorkspaceRoots: [],
+        savedWorkspaceRoots: [],
+        collapsedGroups: [],
       },
-      {
-        sessionId: "known",
-        threadName: "Inspect AGENTS.md",
-        updatedAt: 400,
-        cwd: path.join(os.homedir(), "Developer", "cortana"),
-        model: "gpt-5.4",
-        source: "vscode",
-        cliVersion: "0.122.0",
-        lastMessagePreview: null,
-        transcriptPath: "/tmp/known.jsonl",
-      },
-    ]);
-
-    const result = await listVisibleCodexSessions(10);
+      { limit: 10 },
+    );
 
     expect(result.sessions.map((session) => session.sessionId)).toEqual(["known", "unknown"]);
     expect(result.groups).toEqual([

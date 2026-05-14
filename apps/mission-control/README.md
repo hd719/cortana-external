@@ -20,8 +20,8 @@ DATABASE_URL=postgresql://hd@localhost:5432/mission_control
 EOF
 # Update DATABASE_URL for your Postgres instance
 # e.g., createdb mission_control
-# Required for governance/task reads: CORTANA_DATABASE_URL
-# Required for approval notifications: TELEGRAM_BOT_TOKEN
+# Required for task reads: CORTANA_DATABASE_URL
+# Required for notification flows: TELEGRAM_BOT_TOKEN
 # Optional machine-ingress auth token for local producers/webhooks only:
 #   MISSION_CONTROL_API_TOKEN=replace-with-long-random-token
 # Optional source/runtime overrides:
@@ -95,17 +95,9 @@ That path rewrites the LaunchAgent to a direct `next start` entrypoint, clears s
 - `GET /api/agents` — agent roster
 - `GET /api/runs` — recent runs/jobs
 - `GET /api/events` — latest alerts/events
-- `GET /api/approvals` / `POST /api/approvals` — list and create approval requests
-- `PATCH /api/approvals/:id` — approve/reject/update approval state
-- `POST /api/approvals/:id/resume` — resume a paused/approved flow
 - `GET /api/council` / `POST /api/council` — list and create council sessions
 - `POST /api/council/jobs/deliberate` — council deliberation fanout job
-- `GET /api/feedback` / `POST /api/feedback` — feedback item list/create
-- `GET /api/feedback/:id` — fetch single feedback item and action history
-- `PATCH /api/feedback/:id` — update workflow and remediation fields (`status`, `owner`, `remediationStatus`, `remediationNotes`, `resolvedBy`)
 - `GET /api/task-board` — task board slices (ready, blocked, due, pillar rollups, recent outcomes)
-- `GET /api/autonomy-ops` — cached OpenClaw autonomy read model from `~/.openclaw/reports/autonomy-ops/latest.json`
-- `POST /api/autonomy-ops/refresh` — allowlisted local refresh of the autonomy artifact writer
 - `GET /api/human-required-actions` — open Cortana human-required queue items for read-only display
 - `GET /api/live` — SSE stream for near-live UI refresh ticks
 - `GET /api/codex/sessions` — list visible Codex sessions grouped by local workspace/project
@@ -124,12 +116,9 @@ That path rewrites the LaunchAgent to a direct `next start` entrypoint, clears s
 - `/` — Dashboard with stats, agent health widgets, runs table, and alerts feed
 - `/trading-ops` — latest-run truth, live tape, streamer health, watchlists, system health, deep dive, and Polymarket boards
 - `/task-board` — Task board cards (Ready now, Blocked, Due soon/Overdue, By pillar, and Recent execution log)
-- `/autonomy` — OpenClaw Autonomy Ops posture, stale sources, auto-fixed lanes, blockers, and human-required actions
 - `/agents` — Agent overview
 - `/sessions` — Codex session workspace with project-grouped thread rail, transcript view, inspector, and reply/start controls
-- `/approvals` — Approvals inbox with Mission Control review flow, Telegram deep links, and resume/execution controls
 - `/council` — Council deliberation sessions, member votes, and synthesis rationale
-- `/feedback` — Feedback inbox with remediation status, notes/actions, and resolution metrics
 - `/jobs` — Runs/jobs list
 
 ## Task board data model
@@ -156,7 +145,7 @@ That path rewrites the LaunchAgent to a direct `next start` entrypoint, clears s
 - OpenClaw lifecycle bridge supports two ingestion paths:
   1) Push webhook adapter in `lib/openclaw-bridge.ts` + `/api/openclaw/subagent-events`
   2) Pull sync adapter in `lib/openclaw-sync.ts` that reads `~/.openclaw/subagents/runs.json` (or `OPENCLAW_SUBAGENT_RUNS_PATH`) and upserts real sub-agent runs into Mission Control on data fetch.
-- Reliability/autonomy controls now implemented:
+- Reliability controls now implemented:
   - **Two-phase launch confirmation**: queued (phase 1) and running (phase 2). Running without prior queue evidence is marked `phase2_running_unconfirmed` and emits warning events.
   - **Stale UI guard + auto-reconcile**: long-running states not present in live run store are auto-marked `stale` and emit `subagent.reconciled_stale` events.
   - **Event-driven live sync**: PostgreSQL LISTEN/NOTIFY (`task_change`) streams `cortana_tasks` / `cortana_epics` inserts, updates, and deletes into Mission Control immediately.
@@ -229,29 +218,10 @@ Verification:
 - `curl http://127.0.0.1:3000/api/heartbeat-status`
 
 
-## Governance integration notes
-- Approval notifications use the Telegram Bot API (`TELEGRAM_BOT_TOKEN`) for inline approve/reject UX.
+## Council integration notes
 - Council deliberation policy is enforced as **OpenAI `gpt-4o` only** for both member voting and synthesis.
 - Council voting calls are made directly from Mission Control to OpenAI (not routed through the OpenClaw gateway).
 
 ## Notes
 - Migrations are stored in `prisma/migrations`. Update schema in `prisma/schema.prisma`, then run `pnpm db:migrate`.
 - Seed data lives in `prisma/seed.ts`; safe to re-run.
-
-
-### Feedback remediation PATCH API
-
-`PATCH /api/feedback/:id` body:
-
-```json
-{
-  "remediationStatus": "in_progress",
-  "remediationNotes": "Investigating root cause in parser pipeline",
-  "resolvedBy": "hamel"
-}
-```
-
-Rules:
-- `remediationStatus` is required and must be one of: `open`, `in_progress`, `resolved`, `wont_fix`
-- Returns `404` when the feedback item id does not exist
-- When set to `resolved`, `resolved_at` is stamped automatically
