@@ -74,7 +74,8 @@ describe("launch agent helpers", () => {
     });
 
     expect(profile.label).toBe("com.cortana.mission-control-dev");
-    expect(env.PORT).toBe("3002");
+    expect(env.HOST).toBe("0.0.0.0");
+    expect(env.PORT).toBe("3001");
     expect(env.MARKET_LAB_ENV).toBe("dev");
     expect(plist).toContain("<string>com.cortana.mission-control-dev</string>");
     expect(plist).toContain("<string>/tmp/mission-control-dev-stdout.log</string>");

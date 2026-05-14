@@ -59,7 +59,7 @@ V6 creates a hard separation between production data and testing data so Market 
 | Question | Decision |
 |----------|----------|
 | How does the UI decide prod vs dev? | It does not. The server process decides from `MARKET_LAB_ENV`. |
-| How does `localhost:3000` differ from `localhost:3002`? | `3000` is production Mission Control. `3002` is development Mission Control. |
+| How does `localhost:3000` differ from `localhost:3001`? | `3000` is production Mission Control. `3001` is development Mission Control. The same ports must be reachable through the Mac mini Tailscale IP. |
 | Should the operator pass ports manually? | No. Restart uses `--env prod` or `--env dev`; the script maps ports internally. |
 | Should there be a prod/dev switch inside the UI? | No by default. The UI shows the active environment but does not let the browser change it. |
 | How do CLI runs choose an environment? | CLI runs use `--env` or `MARKET_LAB_ENV`; manual CLI should print the resolved environment. |
@@ -69,7 +69,7 @@ V6 creates a hard separation between production data and testing data so Market 
 ## Expected UI Flow
 
 ```text
-Operator opens localhost:3000 or localhost:3002
+Operator opens localhost:3000, localhost:3001, Tailscale-IP:3000, or Tailscale-IP:3001
 -> browser calls Mission Control API
 -> server process reads MARKET_LAB_ENV
 -> stores resolve .cache/market_lab/<env>/
@@ -90,14 +90,15 @@ The script owns the mapping:
 | Restart Env | Launchd Label | Port | Market Lab Env |
 |-------------|---------------|------|----------------|
 | `prod` | `com.cortana.mission-control` | `3000` | `prod` |
-| `dev` | `com.cortana.mission-control-dev` | `3002` | `dev` |
+| `dev` | `com.cortana.mission-control-dev` | `3001` | `dev` |
 
 ## Success Criteria
 
 - A test run never appears in the production Run Tape.
 - A CI run cannot write into `.cache/market_lab/prod`.
 - `restart-mission-control.sh --env prod` restarts production on `3000`.
-- `restart-mission-control.sh --env dev` restarts development on `3002`.
+- `restart-mission-control.sh --env dev` restarts development on `3001`.
+- Production and development are reachable through the Mac mini Tailscale IP on `3000` and `3001`.
 - The production UI shows both prod and dev runtime health.
 - A browser request cannot silently override the server environment.
 - `settle-due` processes production runs only by default.

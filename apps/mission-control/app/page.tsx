@@ -10,8 +10,22 @@ import { RecentSessionsTile } from "@/components/recent-sessions-tile";
 import { RunPill } from "@/components/run-pill";
 import { StatusStrip } from "@/components/status-strip";
 import { VacationOpsBanner } from "@/components/vacation-ops-banner";
+import { cn } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
+
+function runtimeBadge() {
+  const env = (process.env.MARKET_LAB_ENV || "prod").trim().toLowerCase() === "dev" ? "dev" : "prod";
+  const port = process.env.PORT || (env === "dev" ? "3001" : "3000");
+  return {
+    label: env === "dev" ? "DEV" : "PROD",
+    port,
+    className:
+      env === "dev"
+        ? "border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-500/30 dark:bg-sky-500/10 dark:text-sky-300"
+        : "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300",
+  };
+}
 
 export default async function Home() {
   let data: Awaited<ReturnType<typeof getDashboardSummary>> | null = null;
@@ -54,6 +68,7 @@ export default async function Home() {
   const openAlerts = (data.metrics.alerts.bySeverity.warning || 0) + (data.metrics.alerts.bySeverity.critical || 0);
 
   const visibleRuns = data.runs.slice(0, 5);
+  const runtime = runtimeBadge();
 
   return (
     <div className="space-y-2">
@@ -62,7 +77,18 @@ export default async function Home() {
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="space-y-0.5">
             <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">Cortana Ops</p>
-            <h1 className="text-2xl font-bold tracking-tight md:text-3xl">Mission Control</h1>
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="text-2xl font-bold tracking-tight md:text-3xl">Mission Control</h1>
+              <span
+                className={cn(
+                  "inline-flex items-center rounded-md border px-2 py-0.5 font-mono text-[11px] font-bold uppercase tracking-widest",
+                  runtime.className,
+                )}
+                title={`Mission Control ${runtime.label.toLowerCase()} runtime on port ${runtime.port}`}
+              >
+                {runtime.label}
+              </span>
+            </div>
             <p className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
               <Link href="/services?tab=agents" className="hover:text-foreground hover:underline">
                 {totalAgents} agents · {activeAgents} active

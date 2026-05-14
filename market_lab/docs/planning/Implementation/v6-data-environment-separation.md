@@ -92,7 +92,7 @@ Tasks:
 
 - Add `--env prod|dev` to restart script.
 - Map `prod` to label `com.cortana.mission-control`, port `3000`, and `MARKET_LAB_ENV=prod`.
-- Map `dev` to label `com.cortana.mission-control-dev`, port `3002`, and `MARKET_LAB_ENV=dev`.
+- Map `dev` to label `com.cortana.mission-control-dev`, port `3001`, and `MARKET_LAB_ENV=dev`.
 - Make port cleanup profile-specific instead of hardcoded to `3000`.
 - Make health URL profile-specific.
 - Make plist/log paths profile-specific.
@@ -131,7 +131,7 @@ Manual smoke:
 - restart prod with `restart-mission-control.sh --env prod`
 - restart dev with `restart-mission-control.sh --env dev`
 - verify prod listens on `3000`
-- verify dev listens on `3002`
+- verify dev listens on `3001`
 - verify prod UI shows both environment healths
 - verify they land in separate roots
 - verify production UI hides test data

@@ -241,7 +241,7 @@ const sourceModeForEnvironment = (environment: MarketLabEnvironment) =>
   environment === "prod" ? "live" : environment === "ci" ? "fixture" : "mixed";
 
 const missionControlUrlForEnvironment = (environment: MarketLabEnvironment) => {
-  const port = environment === "dev" ? 3002 : 3000;
+  const port = environment === "dev" ? 3001 : 3000;
   return { port, url: `http://127.0.0.1:${port}` };
 };
 
