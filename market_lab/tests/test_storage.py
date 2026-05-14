@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from market_lab.models import ArtifactPaths, CodexStructuredReview, Interpretation, ReviewArtifact, RunStatus, TradingAgentsReview, TrustVerdict
-from market_lab.storage import MarketLabStore, parse_structured_codex_review
+from market_lab.storage import MarketLabStore, default_cache_dir, parse_structured_codex_review
 
 
 def test_store_creates_and_reloads_run(tmp_path):
@@ -19,6 +19,29 @@ def test_store_creates_and_reloads_run(tmp_path):
     assert loaded.status == "queued"
     assert Path(loaded.events_path).exists()
     assert Path(loaded.logs_path).exists()
+
+
+def test_default_cache_dir_is_environment_scoped(tmp_path, monkeypatch):
+    monkeypatch.setenv("MARKET_LAB_DATA_ROOT", str(tmp_path))
+    monkeypatch.setenv("MARKET_LAB_ENV", "dev")
+
+    store = MarketLabStore()
+    run = store.create_run("AAPL", run_id="mlab_env_AAPL")
+
+    assert default_cache_dir() == tmp_path / "dev"
+    assert store.cache_dir == tmp_path / "dev"
+    assert run.environment.environment == "dev"
+    assert run.environment.is_test_data is True
+    assert Path(run.run_dir).is_relative_to(tmp_path / "dev")
+
+
+def test_explicit_environment_controls_default_cache_dir(tmp_path, monkeypatch):
+    monkeypatch.setenv("MARKET_LAB_DATA_ROOT", str(tmp_path))
+    monkeypatch.delenv("MARKET_LAB_ENV", raising=False)
+
+    store = MarketLabStore(environment="test")
+
+    assert store.cache_dir == tmp_path / "test"
 
 
 def test_store_appends_events_and_logs(tmp_path):

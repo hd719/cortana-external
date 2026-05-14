@@ -5,6 +5,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from uuid import uuid4
 
+from .environment import artifact_environment
 from .models import ApprovalRecord, ExecutionIntent, ReviewArtifact
 from .storage import MarketLabStore, default_cache_dir
 
@@ -13,6 +14,7 @@ class ExecutionIntentService:
     def __init__(self, *, store: MarketLabStore | None = None, cache_dir: Path | str | None = None):
         self.store = store or MarketLabStore()
         self.cache_dir = Path(cache_dir).expanduser().resolve() if cache_dir else default_cache_dir() / "execution_intents"
+        self.environment = artifact_environment()
         self.cache_dir.mkdir(parents=True, exist_ok=True)
 
     def create_draft(
@@ -31,6 +33,7 @@ class ExecutionIntentService:
             raise ValueError("Review has no evidence snapshot path")
         now = datetime.now(UTC)
         intent = ExecutionIntent(
+            environment=self.environment,
             intent_id=f"mlab_intent_{now.strftime('%Y%m%dT%H%M%SZ')}_{uuid4().hex[:8]}",
             symbol=review.symbol,
             created_at=now,

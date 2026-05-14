@@ -9,28 +9,30 @@ Planning docs live in `market_lab/docs/planning`.
 Canonical commands:
 
 ```bash
-uv run --project market_lab python -m market_lab.cli run AAPL
-uv run --project market_lab python -m market_lab.cli run AAPL --json
-uv run --project market_lab python -m market_lab.cli list --json
-uv run --project market_lab python -m market_lab.cli show <run_id>
-uv run --project market_lab python -m market_lab.cli events <run_id>
-uv run --project market_lab python -m market_lab.cli settle <run_id>
-uv run --project market_lab python -m market_lab.cli settle-due
-uv run --project market_lab python -m market_lab.cli codex-packet <run_id> --json
-uv run --project market_lab python -m market_lab.cli attach-codex-review <run_id> <review_path> --json
+uv run --project market_lab python -m market_lab.cli run AAPL --env prod
+uv run --project market_lab python -m market_lab.cli run AAPL --env dev --json
+uv run --project market_lab python -m market_lab.cli list --env prod --json
+uv run --project market_lab python -m market_lab.cli show <run_id> --env prod
+uv run --project market_lab python -m market_lab.cli events <run_id> --env prod
+uv run --project market_lab python -m market_lab.cli settle <run_id> --env prod
+uv run --project market_lab python -m market_lab.cli settle-due --env prod
+uv run --project market_lab python -m market_lab.cli reset-env --env dev --confirm dev --json
+uv run --project market_lab python -m market_lab.cli codex-packet <run_id> --env prod --json
+uv run --project market_lab python -m market_lab.cli attach-codex-review <run_id> <review_path> --env prod --json
 ```
 
 Repo-level convenience command:
 
 ```bash
-pnpm market-lab -- run AAPL --json
-pnpm market-lab -- show <run_id> --json
-pnpm market-lab -- events <run_id> --json
+pnpm market-lab -- run AAPL --env dev --json
+pnpm market-lab -- show <run_id> --env dev --json
+pnpm market-lab -- events <run_id> --env dev --json
 ```
 
 Optional local aliases:
 
 ```bash
+export MARKET_LAB_ENV=dev
 alias mlab-run='uv run --project market_lab python -m market_lab.cli run'
 alias mlab-list='uv run --project market_lab python -m market_lab.cli list'
 alias mlab-show='uv run --project market_lab python -m market_lab.cli show'
@@ -45,20 +47,27 @@ Default cache:
 
 ```text
 .cache/market_lab/
-  market_lab.sqlite
-  runs/<run_id>/
-    review.json
-    events.jsonl
-    codex-review-packet.md
-    codex-review.md
-    logs.txt
+  prod/
+    market_lab.sqlite
+    runs/<run_id>/
+      review.json
+      events.jsonl
+      codex-review-packet.md
+      codex-review.md
+      logs.txt
+  dev/
+  test/
+  ci/
 ```
 
 ## Environment
 
-- `MARKET_LAB_CACHE_DIR`: override `.cache/market_lab`
+- `MARKET_LAB_ENV`: required for CLI, one of `prod`, `dev`, `test`, or `ci`
+- `MARKET_LAB_DATA_ROOT`: override the root before the env suffix is added
+- `MARKET_LAB_CACHE_DIR`: legacy alias for `MARKET_LAB_DATA_ROOT`
 - `MARKET_DATA_SERVICE_BASE_URL`: defaults to `http://127.0.0.1:3033`
 - `MARKET_LAB_SETTLEMENT_ALERTS_ENABLED=0`: disable OpenClaw monitor settlement alerts
+- `MARKET_LAB_ALLOW_ALERTS_IN_TEST=1`: allow non-prod settlement alerts during explicit QA
 - `MARKET_LAB_MONITOR_BOT_TOKEN`: override monitor Telegram bot token
 - `MARKET_LAB_MONITOR_CHAT_ID`: override monitor Telegram chat id
 - `OPENCLAW_CONFIG_PATH`: override `~/.openclaw/openclaw.json`
@@ -68,8 +77,8 @@ Default cache:
 Every run writes `codex-review-packet.md`. Mission Control's `Ask Codex` button sends that packet through the existing Codex sessions route for the `cortana-external` workspace.
 
 ```bash
-uv run --project market_lab python -m market_lab.cli codex-packet <run_id> --json
-uv run --project market_lab python -m market_lab.cli attach-codex-review <run_id> <review_path> --json
+uv run --project market_lab python -m market_lab.cli codex-packet <run_id> --env prod --json
+uv run --project market_lab python -m market_lab.cli attach-codex-review <run_id> <review_path> --env prod --json
 ```
 
 Codex writes `codex-review.md`, then runs the attach command so Mission Control can render the review summary without requiring OpenAI API keys.

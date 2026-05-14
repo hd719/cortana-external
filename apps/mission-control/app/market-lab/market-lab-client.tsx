@@ -109,6 +109,21 @@ type PortfolioContext = {
   message?: string | null;
 };
 
+type EnvironmentOverview = {
+  current: "prod" | "dev" | "test" | "ci";
+  sourceMode: "live" | "fixture" | "mock" | "mixed";
+  isTestData: boolean;
+  environments: Array<{
+    environment: "prod" | "dev" | "test" | "ci";
+    status: "healthy" | "unhealthy";
+    url: string;
+    port: number;
+    runCount: number;
+    latestRunAt: string | null;
+    message?: string;
+  }>;
+};
+
 type RunDetail = {
   run: RunSummary;
   review: {
@@ -384,6 +399,7 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
   const [codexStatus, setCodexStatus] = useState<string | null>(null);
   const [settlementStatus, setSettlementStatus] = useState<string | null>(null);
   const [portfolioStatus, setPortfolioStatus] = useState<PortfolioNotice | null>(null);
+  const [environmentOverview, setEnvironmentOverview] = useState<EnvironmentOverview | null>(null);
   const [tapeMode, setTapeMode] = useState<TapeMode>("recent");
   const [closedGroups, setClosedGroups] = useState<Set<string>>(new Set());
   const [pinnedStep, setPinnedStep] = useState<number | null>(null);
@@ -457,6 +473,11 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
     setLatestPortfolio(portfolio.status === "available" ? portfolio : null);
   };
 
+  const loadEnvironmentOverview = async () => {
+    const overview = await api<Partial<EnvironmentOverview>>("/api/market-lab/environments");
+    setEnvironmentOverview(Array.isArray(overview.environments) ? (overview as EnvironmentOverview) : null);
+  };
+
   const handleRefresh = async () => {
     setRefreshing(true);
     setError(null);
@@ -465,6 +486,7 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
     try {
       await loadRuns();
       await loadLatestPortfolio();
+      await loadEnvironmentOverview();
       if (selectedRunId) {
         await loadRunDetail(selectedRunId);
       }
@@ -488,6 +510,9 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
     loadRuns().catch((err: Error) => setError(err.message));
     loadLatestPortfolio().catch(() => {
       setLatestPortfolio(null);
+    });
+    loadEnvironmentOverview().catch(() => {
+      setEnvironmentOverview(null);
     });
   }, []);
 
@@ -763,7 +788,21 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
           <div className="flex items-center gap-3">
             <Beaker className="h-4 w-4 text-muted-foreground" />
             <div className="flex flex-col leading-tight">
-              <span className="text-[10px] uppercase tracking-widest text-muted-foreground">Market Lab</span>
+              <span className="flex flex-wrap items-center gap-2 text-[10px] uppercase tracking-widest text-muted-foreground">
+                Market Lab
+                {environmentOverview ? (
+                  <span
+                    className={cn(
+                      "rounded border px-1.5 py-px font-bold",
+                      environmentOverview.isTestData
+                        ? "border-amber-400/60 bg-amber-500/10 text-amber-700 dark:text-amber-300"
+                        : "border-emerald-400/60 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+                    )}
+                  >
+                    {environmentOverview.current}
+                  </span>
+                ) : null}
+              </span>
               <span className="text-sm font-bold uppercase tracking-wider">Forward-looking trust reviews</span>
             </div>
           </div>
@@ -805,6 +844,32 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
           </div>
         </div>
       </section>
+
+      {environmentOverview ? (
+        <section className="mt-3 grid gap-2 md:grid-cols-2">
+          {environmentOverview.environments.map((item) => (
+            <div key={item.environment} className="flex items-center justify-between gap-3 rounded-lg border border-border/70 bg-card/50 px-3 py-2 text-xs">
+              <div className="min-w-0">
+                <div className="font-semibold uppercase tracking-wider">{item.environment}</div>
+                <div className="truncate text-[10px] text-muted-foreground">
+                  {item.url} · {item.runCount} runs{item.latestRunAt ? ` · latest ${getAge(item.latestRunAt)} ago` : ""}
+                </div>
+              </div>
+              <span
+                className={cn(
+                  "rounded border px-1.5 py-px text-[10px] font-bold uppercase tracking-wider",
+                  item.status === "healthy"
+                    ? "border-emerald-400/60 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+                    : "border-red-400/60 bg-red-500/10 text-red-700 dark:text-red-300",
+                )}
+                title={item.message}
+              >
+                {item.status}
+              </span>
+            </div>
+          ))}
+        </section>
+      ) : null}
 
       {/* Debug artifacts — collapsed by default, close to the run controls */}
       <details className="group mt-3 rounded-lg border border-border/70 bg-card/60 px-4 py-3">

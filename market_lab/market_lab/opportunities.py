@@ -5,6 +5,7 @@ import os
 from datetime import UTC, datetime
 from pathlib import Path
 
+from .environment import artifact_environment
 from .checks import evaluate_optional_evidence, evaluate_price_facts
 from .evidence import build_evidence_snapshot
 from .market_data import MarketDataClient, MarketDataError
@@ -62,6 +63,7 @@ class OpportunityBoardService:
         self.store = store or MarketLabStore()
         self.market_data = market_data or MarketDataClient()
         self.cache_dir = Path(cache_dir).expanduser().resolve() if cache_dir else default_cache_dir() / "opportunities"
+        self.environment = artifact_environment()
         self.scoring_config = scoring_config or load_scoring_config()
 
     def generate(self, *, watchlist: str | None = None, symbols: list[str] | str | None = None) -> OpportunityBoardArtifact:
@@ -79,6 +81,7 @@ class OpportunityBoardService:
         candidates.sort(key=lambda item: item.score, reverse=True)
         ranked = [candidate.model_copy(update={"rank": index + 1}) for index, candidate in enumerate(candidates)]
         board = OpportunityBoardArtifact(
+            environment=self.environment,
             board_id=board_id,
             watchlist=source_name,
             generated_at=generated_at,
@@ -134,6 +137,7 @@ class OpportunityBoardService:
             checks=checks,
             optional_evidence=optional or self._missing_optional(),
         )
+        evidence = evidence.model_copy(update={"environment": self.environment})
         evidence_path = default_cache_dir() / "evidence" / symbol / f"{datetime.now(UTC).strftime('%Y%m%dT%H%M%SZ')}.json"
         evidence_path.parent.mkdir(parents=True, exist_ok=True)
         evidence_path.write_text(evidence.model_dump_json(indent=2), encoding="utf-8")

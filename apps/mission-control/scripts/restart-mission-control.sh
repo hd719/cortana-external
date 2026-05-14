@@ -2,19 +2,19 @@
 
 set -euo pipefail
 
-SERVICE_LABEL="com.cortana.mission-control"
-PLIST_PATH="${HOME}/Library/LaunchAgents/${SERVICE_LABEL}.plist"
-HEALTH_URL="${MISSION_CONTROL_HEALTH_URL:-http://127.0.0.1:3000/api/heartbeat-status}"
+RUNTIME_ENV="prod"
+HEALTH_URL_OVERRIDE=""
 BUILD=1
 
 usage() {
   cat <<'EOF'
-Usage: restart-mission-control.sh [--skip-build] [--health-url URL]
+Usage: restart-mission-control.sh [--env prod|dev] [--skip-build] [--health-url URL]
 
 Rebuilds the Mission Control app, restarts the launchd-managed service,
 and waits for the health endpoint to return successfully.
 
 Options:
+  --env prod|dev    Restart the production service on 3000 or dev service on 3002
   --skip-build       Restart without running pnpm build first
   --skip-smoke       Deprecated no-op; legacy Trading Ops smoke no longer runs during restart
   --health-url URL   Override the health check URL
@@ -34,7 +34,7 @@ mission_control_related_pids() {
     command="${line#* }"
     [[ -z "${pid}" || -z "${command}" ]] && continue
     cwd="$(/usr/sbin/lsof -a -p "${pid}" -d cwd -Fn 2>/dev/null | awk '/^n/ {print substr($0, 2); exit}')"
-    if [[ "${cwd}" == "${APP_DIR}" ]]; then
+    if [[ "${cwd}" == "${APP_DIR}" && "${command}" == *"--port ${PORT_VALUE}"* ]]; then
       printf '%s\n' "${pid}"
     fi
   done < <(
@@ -73,7 +73,7 @@ wait_for_port_clear() {
   local listener_pids=""
 
   for _ in $(seq 1 "${attempts}"); do
-    listener_pids="$(/usr/sbin/lsof -tiTCP:3000 -sTCP:LISTEN 2>/dev/null || true)"
+    listener_pids="$(/usr/sbin/lsof -tiTCP:"${PORT_VALUE}" -sTCP:LISTEN 2>/dev/null || true)"
     if [[ -z "${listener_pids}" ]]; then
       return 0
     fi
@@ -129,6 +129,14 @@ notify_failure() {
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --env)
+      if [[ $# -lt 2 ]]; then
+        echo "--env requires prod or dev" >&2
+        exit 1
+      fi
+      RUNTIME_ENV="$2"
+      shift 2
+      ;;
     --skip-build)
       BUILD=0
       shift
@@ -142,7 +150,7 @@ while [[ $# -gt 0 ]]; do
         echo "--health-url requires a value" >&2
         exit 1
       fi
-      HEALTH_URL="$2"
+      HEALTH_URL_OVERRIDE="$2"
       shift 2
       ;;
     -h|--help)
@@ -173,6 +181,29 @@ REPO_ROOT="$(cd "${APP_DIR}/../.." && pwd)"
 DEV_ROOT="$(cd "${REPO_ROOT}/.." && pwd)"
 CORTANA_REPO="${CORTANA_SOURCE_REPO:-${DEV_ROOT}/cortana}"
 
+case "${RUNTIME_ENV}" in
+  prod)
+    SERVICE_LABEL="com.cortana.mission-control"
+    PORT_VALUE="3000"
+    MARKET_LAB_ENV_VALUE="prod"
+    ;;
+  dev)
+    SERVICE_LABEL="com.cortana.mission-control-dev"
+    PORT_VALUE="3002"
+    MARKET_LAB_ENV_VALUE="dev"
+    ;;
+  *)
+    echo "--env must be prod or dev" >&2
+    exit 1
+    ;;
+esac
+
+PLIST_PATH="${HOME}/Library/LaunchAgents/${SERVICE_LABEL}.plist"
+HEALTH_URL="${HEALTH_URL_OVERRIDE:-${MISSION_CONTROL_HEALTH_URL:-http://127.0.0.1:${PORT_VALUE}/api/heartbeat-status}}"
+export PORT="${PORT_VALUE}"
+export MARKET_LAB_ENV="${MARKET_LAB_ENV_VALUE}"
+export MISSION_CONTROL_RUNTIME_ENV="${RUNTIME_ENV}"
+
 if [[ ! -f "${PLIST_PATH}" ]]; then
   log "LaunchAgent plist missing at ${PLIST_PATH}; it will be recreated."
 fi
@@ -193,7 +224,7 @@ fi
 log "Installing direct Mission Control LaunchAgent"
 installed_plist="$(
   cd "${APP_DIR}"
-  pnpm exec tsx scripts/install-launch-agent.ts
+  pnpm exec tsx scripts/install-launch-agent.ts --env "${RUNTIME_ENV}"
 )"
 PLIST_PATH="${installed_plist}"
 
@@ -201,7 +232,7 @@ log "Stopping existing Mission Control processes"
 launchctl bootout "gui/$(id -u)" "${PLIST_PATH}" 2>/dev/null || true
 launchctl remove "${SERVICE_LABEL}" 2>/dev/null || true
 
-listener_pids="$(/usr/sbin/lsof -tiTCP:3000 -sTCP:LISTEN 2>/dev/null || true)"
+listener_pids="$(/usr/sbin/lsof -tiTCP:"${PORT_VALUE}" -sTCP:LISTEN 2>/dev/null || true)"
 if [[ -n "${listener_pids}" ]]; then
   while IFS= read -r pid; do
     [[ -n "${pid}" ]] && kill "${pid}" 2>/dev/null || true
@@ -224,7 +255,7 @@ if ! wait_for_port_clear 10 || ! wait_for_pids_clear 5; then
     kill_pid_list KILL "${RELATED_PIDS[@]}"
   fi
   wait_for_port_clear 5 || {
-    echo "Mission Control restart aborted because port 3000 never cleared." >&2
+    echo "Mission Control restart aborted because port ${PORT_VALUE} never cleared." >&2
     exit 1
   }
   wait_for_pids_clear 5 || {

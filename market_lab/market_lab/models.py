@@ -45,6 +45,13 @@ class Model(BaseModel):
     model_config = ConfigDict(extra="forbid", use_enum_values=True)
 
 
+class ArtifactEnvironment(Model):
+    environment: Literal["prod", "dev", "test", "ci"] = "prod"
+    source_mode: Literal["live", "fixture", "mock", "mixed"] = "live"
+    is_test_data: bool = False
+    created_by: str | None = None
+
+
 class PriceFacts(Model):
     symbol: str
     price: float
@@ -161,6 +168,7 @@ class SentimentSourceResult(Model):
 
 
 class SentimentSnapshot(Model):
+    environment: ArtifactEnvironment = Field(default_factory=ArtifactEnvironment)
     status: Literal["available", "partial", "missing", "error"]
     sources: list[SentimentSourceResult] = Field(default_factory=list)
     missing_sources: list[str] = Field(default_factory=list)
@@ -168,6 +176,7 @@ class SentimentSnapshot(Model):
 
 
 class EvidenceSnapshot(Model):
+    environment: ArtifactEnvironment = Field(default_factory=ArtifactEnvironment)
     symbol: str
     generated_at: datetime
     price_summary: dict[str, Any]
@@ -190,6 +199,7 @@ class EvidenceSnapshot(Model):
 
 
 class OutcomeMemorySummary(Model):
+    environment: ArtifactEnvironment = Field(default_factory=ArtifactEnvironment)
     symbol: str
     lookback_runs: int
     evidence_ready_count: int
@@ -251,6 +261,7 @@ class OpportunityCandidate(Model):
 
 class OpportunityBoardArtifact(Model):
     schema_version: str = "market-lab-opportunity-board/v1"
+    environment: ArtifactEnvironment = Field(default_factory=ArtifactEnvironment)
     board_id: str
     watchlist: str
     generated_at: datetime
@@ -293,6 +304,7 @@ class PortfolioAccount(Model):
 
 
 class PortfolioContext(Model):
+    environment: ArtifactEnvironment = Field(default_factory=ArtifactEnvironment)
     status: Literal["available", "unavailable", "reauth_required", "error"]
     source: str
     generated_at: datetime
@@ -312,6 +324,7 @@ class ApprovalRecord(Model):
 
 
 class ExecutionIntent(Model):
+    environment: ArtifactEnvironment = Field(default_factory=ArtifactEnvironment)
     intent_id: str
     symbol: str
     created_at: datetime
@@ -332,6 +345,7 @@ class ExecutionIntent(Model):
 
 
 class BrokerValidationResult(Model):
+    environment: ArtifactEnvironment = Field(default_factory=ArtifactEnvironment)
     intent_id: str
     checked_at: datetime
     status: Literal["valid", "blocked", "needs_refresh"]
@@ -344,6 +358,7 @@ class BrokerValidationResult(Model):
 
 
 class BrokerOrderPreview(Model):
+    environment: ArtifactEnvironment = Field(default_factory=ArtifactEnvironment)
     intent_id: str
     preview_id: str
     created_at: datetime
@@ -390,6 +405,7 @@ class ArtifactPaths(Model):
 
 class ReviewArtifact(Model):
     schema_version: str = "market-lab-review/v0"
+    environment: ArtifactEnvironment = Field(default_factory=ArtifactEnvironment)
     run_id: str
     symbol: str
     requested_at: datetime
@@ -420,6 +436,7 @@ class ReviewArtifact(Model):
 
 
 class TimelineEvent(Model):
+    environment: ArtifactEnvironment = Field(default_factory=ArtifactEnvironment)
     run_id: str
     timestamp: datetime
     event: str
@@ -428,6 +445,7 @@ class TimelineEvent(Model):
 
 
 class RunRecord(Model):
+    environment: ArtifactEnvironment = Field(default_factory=ArtifactEnvironment)
     run_id: str
     symbol: str
     requested_at: datetime

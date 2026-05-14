@@ -7,6 +7,7 @@ from typing import Any
 
 from .market_data import MarketDataClient
 from .models import PortfolioContext
+from .environment import artifact_environment
 from .schwab_portfolio import SchwabPortfolioClient
 from .storage import default_cache_dir
 
@@ -20,6 +21,7 @@ class PortfolioContextService:
         market_data: MarketDataClient | None = None,
     ):
         self.cache_dir = Path(cache_dir).expanduser().resolve() if cache_dir else default_cache_dir() / "portfolio"
+        self.environment = artifact_environment()
         self.schwab = schwab or SchwabPortfolioClient()
         self.market_data = market_data or MarketDataClient()
 
@@ -30,18 +32,21 @@ class PortfolioContextService:
     def latest(self) -> PortfolioContext:
         if not self.latest_path.exists():
             return PortfolioContext(
+                environment=self.environment,
                 status="unavailable",
                 source="schwab",
                 generated_at=datetime.now(UTC),
                 message="No cached Schwab portfolio snapshot yet.",
             )
         try:
-            return PortfolioContext.model_validate(json.loads(self.latest_path.read_text(encoding="utf-8")))
+            return PortfolioContext.model_validate(json.loads(self.latest_path.read_text(encoding="utf-8"))).model_copy(
+                update={"environment": self.environment}
+            )
         except Exception as exc:
-            return PortfolioContext(status="error", source="schwab", generated_at=datetime.now(UTC), message=str(exc))
+            return PortfolioContext(environment=self.environment, status="error", source="schwab", generated_at=datetime.now(UTC), message=str(exc))
 
     def refresh(self) -> PortfolioContext:
-        context = self.schwab.fetch_context()
+        context = self.schwab.fetch_context().model_copy(update={"environment": self.environment})
         cached = self.latest()
         if context.status != "available" and cached.status == "available":
             reason = context.message or f"Schwab refresh returned {context.status}."

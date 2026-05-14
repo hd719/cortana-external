@@ -8,6 +8,11 @@
   <array>
     <string>/Users/hd/Developer/cortana-external/market_lab/scripts/settle-due.sh</string>
   </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>MARKET_LAB_ENV</key>
+    <string>prod</string>
+  </dict>
   <key>StartCalendarInterval</key>
   <dict>
     <key>Hour</key>
@@ -16,9 +21,9 @@
     <integer>5</integer>
   </dict>
   <key>StandardOutPath</key>
-  <string>/Users/hd/Developer/cortana-external/.cache/market_lab/logs/settle-due.launchd.log</string>
+  <string>/Users/hd/Developer/cortana-external/.cache/market_lab/prod/logs/settle-due.launchd.log</string>
   <key>StandardErrorPath</key>
-  <string>/Users/hd/Developer/cortana-external/.cache/market_lab/logs/settle-due.launchd.err.log</string>
+  <string>/Users/hd/Developer/cortana-external/.cache/market_lab/prod/logs/settle-due.launchd.err.log</string>
   <key>WorkingDirectory</key>
   <string>/Users/hd/Developer/cortana-external</string>
 </dict>

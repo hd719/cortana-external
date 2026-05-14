@@ -129,12 +129,17 @@ class ReviewRunner:
             optional_evidence=optional_evidence,
             sentiment_snapshot=sentiment_snapshot,
         )
+        evidence_snapshot = evidence_snapshot.model_copy(update={"environment": self.store.artifact_environment})
         outcome_memory = build_outcome_memory_summary(
             symbol=run.symbol,
             prior_runs=prior_runs,
             prior_settlements=prior_settlements,
         )
+        outcome_memory = outcome_memory.model_copy(update={"environment": self.store.artifact_environment})
+        if sentiment_snapshot is not None:
+            sentiment_snapshot = sentiment_snapshot.model_copy(update={"environment": self.store.artifact_environment})
         portfolio_context = self.portfolio_context.context_for_symbol(run.symbol)
+        portfolio_context = portfolio_context.model_copy(update={"environment": self.store.artifact_environment})
         evidence_path = run_dir / "evidence-snapshot.json"
         outcome_memory_path = run_dir / "outcome-memory.json"
         portfolio_context_path = run_dir / "portfolio-context.json"
@@ -155,6 +160,7 @@ class ReviewRunner:
             spy_entry_price=spy_facts.price if spy_facts else None,
         )
         artifact = ReviewArtifact(
+            environment=self.store.artifact_environment,
             run_id=run.run_id,
             symbol=run.symbol,
             requested_at=requested_at,
