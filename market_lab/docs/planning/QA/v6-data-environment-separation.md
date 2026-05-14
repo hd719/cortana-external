@@ -27,9 +27,9 @@ Prove that production Market Lab data cannot be polluted by test, dev, or CI run
 | UI | Non-prod environment enabled | Environment badge is visible. |
 | UI | Production Mission Control | Shows prod and dev environment health. |
 | Launchd | Restart prod | `3000` is healthy with `MARKET_LAB_ENV=prod`. |
-| Launchd | Restart dev | `3002` is healthy with `MARKET_LAB_ENV=dev`. |
+| Launchd | Restart dev | `3001` is healthy with `MARKET_LAB_ENV=dev`. |
 | Launchd | Restart dev | Prod process on `3000` is not killed. |
-| Launchd | Restart prod | Dev process on `3002` is not killed. |
+| Launchd | Restart prod | Dev process on `3001` is not killed. |
 | Reset | Reset test env | Test data is removed without touching prod. |
 | Reset | Reset prod env without confirmation | Command is rejected. |
 
@@ -42,7 +42,7 @@ MARKET_LAB_ENV=test uv run --project market_lab python -m market_lab.cli settle-
 ./apps/mission-control/scripts/restart-mission-control.sh --env prod --skip-build
 ./apps/mission-control/scripts/restart-mission-control.sh --env dev --skip-build
 curl -fsS http://127.0.0.1:3000/api/heartbeat-status
-curl -fsS http://127.0.0.1:3002/api/heartbeat-status
+curl -fsS http://127.0.0.1:3001/api/heartbeat-status
 curl -fsS http://127.0.0.1:3000/api/market-lab/environments
 cd apps/mission-control && pnpm build
 ```
@@ -67,7 +67,7 @@ cd apps/mission-control && pnpm build
 6. Open `http://127.0.0.1:3000/trading-ops`.
 7. Confirm production shows `prod` as current.
 8. Confirm production shows both prod and dev health.
-9. Open `http://127.0.0.1:3002/trading-ops`.
+9. Open `http://127.0.0.1:3001/trading-ops`.
 10. Confirm development shows `dev` as current.
 11. Confirm only the production run appears in production Run Tape.
 12. Confirm the test/dev run appears only in the matching non-prod view.

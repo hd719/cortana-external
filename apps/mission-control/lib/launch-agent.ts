@@ -13,6 +13,7 @@ export type MissionControlRuntimeEnv = "prod" | "dev";
 export type MissionControlRuntimeProfile = {
   env: MissionControlRuntimeEnv;
   label: string;
+  host: string;
   port: string;
   marketLabEnv: MissionControlRuntimeEnv;
   stdoutPath: string;
@@ -90,16 +91,18 @@ export function getMissionControlRuntimeProfile(env: string | undefined = "prod"
     return {
       env: "dev",
       label: "com.cortana.mission-control-dev",
-      port: "3002",
+      host: DEFAULT_MISSION_CONTROL_HOST,
+      port: "3001",
       marketLabEnv: "dev",
       stdoutPath: "/tmp/mission-control-dev-stdout.log",
       stderrPath: "/tmp/mission-control-dev-stderr.log",
-      healthUrl: "http://127.0.0.1:3002/api/heartbeat-status",
+      healthUrl: "http://127.0.0.1:3001/api/heartbeat-status",
     };
   }
   return {
     env: "prod",
     label: MISSION_CONTROL_LAUNCH_AGENT_LABEL,
+    host: DEFAULT_MISSION_CONTROL_HOST,
     port: DEFAULT_MISSION_CONTROL_PORT,
     marketLabEnv: "prod",
     stdoutPath: DEFAULT_MISSION_CONTROL_STDOUT,
@@ -116,7 +119,7 @@ export function getMissionControlLaunchAgentEnvironment(
   const merged = loadMissionControlScriptEnv(appDir, { ...env });
   const environmentVariables: Record<string, string> = {
     DATABASE_URL: merged.DATABASE_URL?.trim() ?? "",
-    HOST: merged.HOST?.trim() || DEFAULT_MISSION_CONTROL_HOST,
+    HOST: merged.HOST?.trim() || profile.host,
     MARKET_LAB_ENV: merged.MARKET_LAB_ENV?.trim() || profile.marketLabEnv,
     NODE_ENV: merged.NODE_ENV?.trim() || "production",
     PATH: merged.MISSION_CONTROL_PATH?.trim() || DEFAULT_MISSION_CONTROL_PATH,

@@ -49,9 +49,10 @@ The operator should not pass a port manually. The restart script maps the enviro
 | Env | Label | Port | Plist | Health URL |
 |-----|-------|------|-------|------------|
 | `prod` | `com.cortana.mission-control` | `3000` | `~/Library/LaunchAgents/com.cortana.mission-control.plist` | `http://127.0.0.1:3000/api/heartbeat-status` |
-| `dev` | `com.cortana.mission-control-dev` | `3002` | `~/Library/LaunchAgents/com.cortana.mission-control-dev.plist` | `http://127.0.0.1:3002/api/heartbeat-status` |
+| `dev` | `com.cortana.mission-control-dev` | `3001` | `~/Library/LaunchAgents/com.cortana.mission-control-dev.plist` | `http://127.0.0.1:3001/api/heartbeat-status` |
 
 The current `start-mission-control.sh` already honors `PORT`; V6 should ensure the LaunchAgent actually passes the correct `PORT` and `MARKET_LAB_ENV`.
+Both runtime profiles bind to `0.0.0.0` so `http://<mac-mini-tailscale-ip>:3000` and `http://<mac-mini-tailscale-ip>:3001` are reachable from trusted Tailscale clients.
 
 ### LaunchAgent Changes
 
@@ -158,7 +159,7 @@ Every Market Lab API response should include:
 
 API routes should reject writes where requested environment conflicts with the server environment unless explicitly configured for test mode.
 
-The browser should not decide the environment. A run request from `localhost:3000` writes to the server's configured environment, and a run request from `localhost:3002` writes to that server's configured environment.
+The browser should not decide the environment. A run request from `localhost:3000` writes to the server's configured environment, and a run request from `localhost:3001` writes to that server's configured environment.
 
 Implementation note: API routes call the CLI through `apps/mission-control/lib/market-lab.ts`, which passes the server-resolved environment to the process.
 
@@ -185,8 +186,8 @@ Response shape:
     {
       "environment": "dev",
       "status": "healthy",
-      "url": "http://127.0.0.1:3002",
-      "port": 3002,
+      "url": "http://127.0.0.1:3001",
+      "port": 3001,
       "runCount": 7,
       "latestRunAt": "2026-05-14T11:50:00Z"
     }

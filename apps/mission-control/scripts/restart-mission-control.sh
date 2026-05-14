@@ -14,7 +14,7 @@ Rebuilds the Mission Control app, restarts the launchd-managed service,
 and waits for the health endpoint to return successfully.
 
 Options:
-  --env prod|dev    Restart the production service on 3000 or dev service on 3002
+  --env prod|dev    Restart the production service on 3000 or dev service on 3001
   --skip-build       Restart without running pnpm build first
   --skip-smoke       Deprecated no-op; legacy Trading Ops smoke no longer runs during restart
   --health-url URL   Override the health check URL
@@ -189,7 +189,7 @@ case "${RUNTIME_ENV}" in
     ;;
   dev)
     SERVICE_LABEL="com.cortana.mission-control-dev"
-    PORT_VALUE="3002"
+    PORT_VALUE="3001"
     MARKET_LAB_ENV_VALUE="dev"
     ;;
   *)
