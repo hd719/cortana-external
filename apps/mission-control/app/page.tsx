@@ -82,14 +82,12 @@ export default async function Home() {
   const runningRuns = data.runs.filter((r: (typeof data.runs)[number]) => (r.externalStatus || r.status).toString().toLowerCase() === "running").length;
   const queuedRuns = data.runs.filter((r: (typeof data.runs)[number]) => (r.externalStatus || r.status).toString().toLowerCase() === "queued").length;
   const failedRuns = data.metrics.runs.byStatus.failed || 0;
-  const latestTrackedRun = data.runs[0] ?? null;
-  const latestTrackedRunLabel = latestTrackedRun
-    ? latestTrackedRun.startedAt.toLocaleDateString(undefined, { month: "short", day: "numeric" })
-    : null;
   const openAlerts = (data.metrics.alerts.bySeverity.warning || 0) + (data.metrics.alerts.bySeverity.critical || 0);
 
+  const visibleRuns = data.runs.slice(0, 5);
+
   return (
-    <div className="space-y-3">
+    <div className="space-y-2">
       {/* Header + quick actions */}
       <Animate delay={0.04}>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -147,8 +145,8 @@ export default async function Home() {
           <div className="order-2 lg:order-1">
             <KpiRail />
           </div>
-          <Card className="order-1 flex min-w-0 flex-col gap-3 overflow-hidden py-4 lg:order-2">
-            <CardHeader className="gap-1 px-5">
+          <Card className="order-1 flex min-w-0 flex-col gap-2 overflow-hidden py-3 lg:order-2">
+            <CardHeader className="gap-1 px-4">
               <div className="flex items-center justify-between">
                 <CardTitle className="text-sm font-semibold uppercase tracking-wide">Activity Feed</CardTitle>
                 <Link href="/services" className="text-xs text-muted-foreground hover:text-foreground hover:underline">
@@ -156,7 +154,7 @@ export default async function Home() {
                 </Link>
               </div>
             </CardHeader>
-            <CardContent className="flex min-w-0 flex-1 flex-col px-5">
+            <CardContent className="flex min-w-0 flex-1 flex-col px-4">
               <ActivityFeed />
             </CardContent>
           </Card>
@@ -166,30 +164,25 @@ export default async function Home() {
       {/* Bottom row: Recent Runs + Recent Sessions */}
       <Animate delay={0.24}>
         <div className="grid gap-3 lg:grid-cols-2">
-          <Card className="gap-3 py-4">
-            <CardHeader className="gap-1 px-5">
+          <Card className="gap-2 py-3">
+            <CardHeader className="gap-1 px-4">
               <div className="flex items-center justify-between gap-3">
-                <div>
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                   <CardTitle className="text-sm font-semibold uppercase tracking-wide">Recent Subagent Runs</CardTitle>
-                  <p className="text-xs text-muted-foreground">
-                    {latestTrackedRunLabel
-                      ? `Tracked OpenClaw subagent jobs, latest ${latestTrackedRunLabel}`
-                      : "Tracked OpenClaw subagent jobs"}
-                  </p>
+                  <div className="flex gap-1.5">
+                    <RunPill label="Running" count={runningRuns} tone="emerald" />
+                    <RunPill label="Queued" count={queuedRuns} tone="amber" />
+                    <RunPill label="Failed" count={failedRuns} tone="red" />
+                  </div>
                 </div>
                 <Link href="/jobs" className="text-xs text-muted-foreground hover:text-foreground hover:underline">View all</Link>
               </div>
             </CardHeader>
-            <CardContent className="px-5">
-              <div className="mb-3 flex gap-2">
-                <RunPill label="Running" count={runningRuns} tone="emerald" />
-                <RunPill label="Queued" count={queuedRuns} tone="amber" />
-                <RunPill label="Failed" count={failedRuns} tone="red" />
-              </div>
+            <CardContent className="px-4">
 
               {/* Mobile cards */}
               <div className="space-y-2 md:hidden">
-                {data.runs.map((run: (typeof data.runs)[number]) => {
+                {visibleRuns.map((run: (typeof data.runs)[number]) => {
                   const effectiveStatus = (run.externalStatus || run.status).toString().toLowerCase();
                   const role = getAgentRole(run.assignmentLabel, run.agent?.name);
                   return (
@@ -222,24 +215,24 @@ export default async function Home() {
                     </tr>
                   </thead>
                   <tbody>
-                    {data.runs.map((run: (typeof data.runs)[number]) => {
+                    {visibleRuns.map((run: (typeof data.runs)[number]) => {
                       const role = getAgentRole(run.assignmentLabel, run.agent?.name);
                       return (
                         <tr key={run.id} className="border-b border-border/20 last:border-0">
-                          <td className="py-2.5 pr-3">
+                          <td className="py-1.5 pr-3">
                             <p className="font-medium">{run.jobType}</p>
                             <p className="line-clamp-1 max-w-[280px] text-xs text-muted-foreground">{run.summary || "No summary"}</p>
                           </td>
-                          <td className="py-2.5 pr-3">
+                          <td className="py-1.5 pr-3">
                             <div className="flex items-center gap-1.5">
                               <Badge className={role.className}>{role.label}</Badge>
                               <span className="truncate text-xs text-muted-foreground">{getTaskSlug(run.assignmentLabel, run.agent?.name)}</span>
                             </div>
                           </td>
-                          <td className="py-2.5 pr-3">
+                          <td className="py-1.5 pr-3">
                             <StatusBadge value={run.externalStatus || run.status} variant="run" />
                           </td>
-                          <td className="py-2.5 text-xs text-muted-foreground">{run.startedAt.toLocaleString()}</td>
+                          <td className="py-1.5 text-xs text-muted-foreground">{run.startedAt.toLocaleString()}</td>
                         </tr>
                       );
                     })}

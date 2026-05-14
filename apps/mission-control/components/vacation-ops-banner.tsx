@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { ChevronDown, ChevronRight, Palmtree, ShieldAlert } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useVacationOps } from "@/hooks/dashboard/use-vacation-ops";
@@ -64,11 +64,7 @@ export function VacationOpsBanner() {
   const [expanded, setExpanded] = useState(false);
 
   const activeIncidents = data?.counts.activeIncidents ?? 0;
-  const autoExpand = activeIncidents > 0;
-
-  useEffect(() => {
-    if (autoExpand) setExpanded(true);
-  }, [autoExpand]);
+  const firstActiveIncident = (data?.recentIncidents ?? []).find((incident) => !incident.resolvedAt);
 
   if (expanded) {
     return (
@@ -113,14 +109,25 @@ export function VacationOpsBanner() {
         {readinessLabel(readiness)}
       </span>
       {activeIncidents > 0 ? (
-        <span className="inline-flex items-center gap-1 text-red-600 dark:text-red-400">
-          <ShieldAlert className="h-3 w-3" />
-          <span className="font-semibold">{activeIncidents} incident{activeIncidents === 1 ? "" : "s"}</span>
+        <span className="inline-flex min-w-0 items-center gap-1 text-red-600 dark:text-red-400">
+          <ShieldAlert className="h-3 w-3 shrink-0" />
+          <span className="shrink-0 font-semibold">
+            {activeIncidents} incident{activeIncidents === 1 ? "" : "s"}
+          </span>
+          {firstActiveIncident ? (
+            <span className="truncate text-muted-foreground">
+              · {firstActiveIncident.systemLabel}
+              {firstActiveIncident.symptom ? `: ${firstActiveIncident.symptom}` : ""}
+            </span>
+          ) : null}
         </span>
-      ) : null}
-      <span className="text-muted-foreground">readiness {readinessAge}</span>
+      ) : (
+        <span className="text-muted-foreground">readiness {readinessAge}</span>
+      )}
       <span className="hidden text-muted-foreground sm:inline">· cadence {cadenceText}</span>
-      {windowLabel ? <span className="hidden text-muted-foreground md:inline">· {windowLabel}</span> : null}
+      {windowLabel && activeIncidents === 0 ? (
+        <span className="hidden text-muted-foreground md:inline">· {windowLabel}</span>
+      ) : null}
       <Link
         href="/services?tab=vacation"
         onClick={(e) => e.stopPropagation()}

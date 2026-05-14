@@ -60,7 +60,7 @@ describe("VacationOpsBanner", () => {
     expect(screen.queryByText("Away-mode readiness")).toBeNull();
   });
 
-  it("auto-expands when active incidents are present", async () => {
+  it("surfaces the first active incident inline when incidents > 0 (no auto-expand)", async () => {
     vi.spyOn(global, "fetch").mockResolvedValue(
       jsonResponse({
         status: "ok",
@@ -73,14 +73,38 @@ describe("VacationOpsBanner", () => {
             pausedJobs: 0,
             selfHeals: 0,
           },
+          recentIncidents: [
+            {
+              id: 1,
+              vacationWindowId: 1,
+              runId: null,
+              latestCheckResultId: null,
+              latestActionId: null,
+              systemKey: "schwab",
+              systemLabel: "Schwab",
+              tier: 1,
+              status: "active",
+              humanRequired: true,
+              firstObservedAt: new Date().toISOString(),
+              lastObservedAt: new Date().toISOString(),
+              resolvedAt: null,
+              resolutionReason: null,
+              symptom: "auth token expired",
+              detail: {},
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+            },
+          ],
         }),
       }),
     );
 
     render(<VacationOpsBanner />);
 
-    // The auto-expand fires once incidents > 0, which mounts VacationOpsCard.
-    await waitFor(() => expect(screen.getByText("Away-mode readiness")).toBeInTheDocument());
+    expect(await screen.findByText(/2 incidents/)).toBeInTheDocument();
+    expect(screen.getByText(/Schwab.*auth token expired/)).toBeInTheDocument();
+    // Banner stays collapsed — the full VacationOpsCard should NOT auto-render.
+    expect(screen.queryByText("Away-mode readiness")).toBeNull();
   });
 
   it("toggles expansion on click", async () => {
