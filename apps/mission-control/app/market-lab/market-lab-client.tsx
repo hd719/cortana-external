@@ -264,6 +264,20 @@ const sourceLabel = (source?: string) =>
     reddit: "Reddit",
   })[String(source ?? "")] ?? String(source ?? "source");
 
+// Brand-ish colors so feed rows and filter chips are easy to scan at a glance.
+const sourceColorClass = (source?: string) => {
+  switch (String(source ?? "")) {
+    case "yahoo_finance_news":
+      return "text-purple-600 dark:text-purple-400";
+    case "stocktwits":
+      return "text-blue-600 dark:text-blue-400";
+    case "reddit":
+      return "text-orange-600 dark:text-orange-400";
+    default:
+      return "text-muted-foreground/80";
+  }
+};
+
 const splitSourceSummary = (summary?: string | null, limit = 5) =>
   String(summary ?? "")
     .split(";")
@@ -1208,11 +1222,14 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
                         className={cn(
                           "shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider transition-colors",
                           feedSrc === opt.key
-                            ? "border-foreground/40 bg-foreground/10 text-foreground"
-                            : "border-border/60 bg-muted/30 text-muted-foreground hover:bg-muted/50",
+                            ? "border-foreground/40 bg-foreground/10"
+                            : "border-border/60 bg-muted/30 hover:bg-muted/50",
                         )}
                       >
-                        {opt.label} <span className="font-normal opacity-70">{opt.count}</span>
+                        <span className={opt.key === "all" ? (feedSrc === opt.key ? "text-foreground" : "text-muted-foreground") : sourceColorClass(opt.key)}>
+                          {opt.label}
+                        </span>
+                        <span className="ml-1 font-normal text-muted-foreground/70">{opt.count}</span>
                       </button>
                     ))}
                     <span className="mx-1 hidden h-3.5 w-px shrink-0 self-center bg-border/60 sm:inline-block" />
@@ -1266,7 +1283,7 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
                           title={entry.sentiment ?? "unlabeled"}
                         />
                         <div className="min-w-0 font-mono text-[12px] leading-5">
-                          <span className="mr-1.5 align-middle text-[9px] uppercase tracking-wider text-muted-foreground/80">
+                          <span className={cn("mr-1.5 align-middle text-[9px] font-semibold uppercase tracking-wider", sourceColorClass(entry.source))}>
                             {sourceLabel(entry.source)}
                           </span>
                           <span className="text-foreground">{entry.item}</span>
