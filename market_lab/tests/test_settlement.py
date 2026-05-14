@@ -107,7 +107,7 @@ def _artifact(run_id: str, run_dir: Path) -> ReviewArtifact:
 
 
 def test_settle_run_alerts_only_newly_settled_windows(tmp_path):
-    store = MarketLabStore(tmp_path)
+    store = MarketLabStore(tmp_path, environment="prod")
     run = store.create_run("AAPL", run_id="mlab_test_AAPL")
     store.write_review(_artifact(run.run_id, Path(run.run_dir)))
     notifier = FakeNotifier()
@@ -120,6 +120,19 @@ def test_settle_run_alerts_only_newly_settled_windows(tmp_path):
     _, settlement = notifier.sent[0]
     assert settlement.window == "1d"
     assert settlement.alpha_vs_spy_pct == 5
+
+
+def test_settle_run_blocks_nonprod_alerts_by_default(tmp_path, monkeypatch):
+    monkeypatch.setenv("MARKET_LAB_ENV", "test")
+    store = MarketLabStore(tmp_path, environment="test")
+    run = store.create_run("AAPL", run_id="mlab_test_AAPL")
+    store.write_review(_artifact(run.run_id, Path(run.run_dir)))
+    notifier = FakeNotifier()
+    service = SettlementService(store=store, market_data=FakeMarketData(), notifier=notifier)
+
+    service.settle_run(run.run_id, now=datetime.now(UTC))
+
+    assert notifier.sent == []
 
 
 def test_settle_run_accepts_and_preserves_structured_codex_review(tmp_path):

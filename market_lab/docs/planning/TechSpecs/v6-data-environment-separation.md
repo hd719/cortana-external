@@ -1,6 +1,6 @@
 # Technical Specification - Market Lab V6 Data Environment Separation
 
-**Document Status:** Proposed
+**Document Status:** Implemented
 **PRD:** [v6-data-environment-separation.md](../PRDs/v6-data-environment-separation.md)
 
 ## Development Overview
@@ -23,6 +23,8 @@ MARKET_LAB_ALLOW_LIVE_DATA_IN_TEST=false
 MARKET_LAB_ALLOW_CODEX_IN_TEST=false
 MARKET_LAB_ALLOW_ALERTS_IN_TEST=false
 ```
+
+Implemented entry point: `market_lab/market_lab/environment.py`.
 
 Recommended defaults:
 
@@ -110,6 +112,8 @@ class ArtifactEnvironment(Model):
     created_by: str | None = None
 ```
 
+Implemented as `ArtifactEnvironment` in `market_lab/market_lab/models.py`.
+
 Attach this to:
 
 - review artifacts
@@ -155,6 +159,8 @@ Every Market Lab API response should include:
 API routes should reject writes where requested environment conflicts with the server environment unless explicitly configured for test mode.
 
 The browser should not decide the environment. A run request from `localhost:3000` writes to the server's configured environment, and a run request from `localhost:3002` writes to that server's configured environment.
+
+Implementation note: API routes call the CLI through `apps/mission-control/lib/market-lab.ts`, which passes the server-resolved environment to the process.
 
 Add:
 

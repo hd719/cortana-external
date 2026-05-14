@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from typing import Any
 
-from .codex_review import build_codex_packet, codex_prompt_for_packet
 from .broker_adapter import BrokerAdapter
+from .codex_review import build_codex_packet, codex_prompt_for_packet
+from .environment import artifact_environment, current_environment, reset_environment_cache
 from .execution_intents import ExecutionIntentService
 from .models import ReviewArtifact
 from .opportunities import OpportunityBoardService
@@ -17,6 +19,14 @@ from .token_budget import build_token_budget
 
 
 def emit(payload: Any, *, as_json: bool = False) -> None:
+    if isinstance(payload, dict) and "environment" not in payload:
+        meta = artifact_environment()
+        payload = {
+            "environment": meta.environment,
+            "source_mode": meta.source_mode,
+            "is_test_data": meta.is_test_data,
+            **payload,
+        }
     if as_json:
         print(json.dumps(payload, indent=2, default=str))
         return
@@ -75,6 +85,12 @@ def settle_command(args: argparse.Namespace) -> None:
 def settle_due_command(args: argparse.Namespace) -> None:
     run_ids = SettlementService().settle_due()
     emit({"settled_run_ids": run_ids}, as_json=args.json)
+
+
+def reset_env_command(args: argparse.Namespace) -> None:
+    store = MarketLabStore()
+    reset_environment_cache(store.cache_dir, environment=store.environment, confirm=args.confirm)
+    emit({"reset": True, "cache_dir": str(store.cache_dir)}, as_json=args.json)
 
 
 def codex_packet_command(args: argparse.Namespace) -> None:
@@ -171,101 +187,112 @@ def intent_preview_command(args: argparse.Namespace) -> None:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="market-lab", description="Run Market Lab trust reviews.")
     sub = parser.add_subparsers(dest="command", required=True)
+    common = argparse.ArgumentParser(add_help=False)
+    common.add_argument("--env", choices=["prod", "dev", "test", "ci"], default=None, help="Market Lab data environment.")
 
-    run = sub.add_parser("run", help="Run a one-symbol review.")
+    run = sub.add_parser("run", parents=[common], help="Run a one-symbol review.")
     run.add_argument("symbol")
     run.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
     run.set_defaults(func=run_command)
 
-    list_runs = sub.add_parser("list", help="List recent runs.")
+    list_runs = sub.add_parser("list", parents=[common], help="List recent runs.")
     list_runs.add_argument("--limit", type=int, default=50)
     list_runs.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
     list_runs.set_defaults(func=list_command)
 
-    show = sub.add_parser("show", help="Show a run and review artifact.")
+    show = sub.add_parser("show", parents=[common], help="Show a run and review artifact.")
     show.add_argument("run_id")
     show.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
     show.set_defaults(func=show_command)
 
-    events = sub.add_parser("events", help="Show a run event stream.")
+    events = sub.add_parser("events", parents=[common], help="Show a run event stream.")
     events.add_argument("run_id")
     events.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
     events.set_defaults(func=events_command)
 
-    settle = sub.add_parser("settle", help="Settle due windows for a run.")
+    settle = sub.add_parser("settle", parents=[common], help="Settle due windows for a run.")
     settle.add_argument("run_id")
     settle.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
     settle.set_defaults(func=settle_command)
 
-    settle_due = sub.add_parser("settle-due", help="Settle all due windows.")
+    settle_due = sub.add_parser("settle-due", parents=[common], help="Settle all due windows.")
     settle_due.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
     settle_due.set_defaults(func=settle_due_command)
 
-    codex_packet = sub.add_parser("codex-packet", help="Show the Codex review prompt for a run.")
+    codex_packet = sub.add_parser("codex-packet", parents=[common], help="Show the Codex review prompt for a run.")
     codex_packet.add_argument("run_id")
     codex_packet.add_argument("--mode", choices=["quick", "deep"], default="quick")
     codex_packet.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
     codex_packet.set_defaults(func=codex_packet_command)
 
-    attach_codex = sub.add_parser("attach-codex-review", help="Attach a Codex markdown review to a run.")
+    attach_codex = sub.add_parser("attach-codex-review", parents=[common], help="Attach a Codex markdown review to a run.")
     attach_codex.add_argument("run_id")
     attach_codex.add_argument("review_path")
     attach_codex.add_argument("--session-id")
     attach_codex.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
     attach_codex.set_defaults(func=attach_codex_review_command)
 
-    opportunities = sub.add_parser("opportunities", help="Generate a deterministic opportunity board.")
+    opportunities = sub.add_parser("opportunities", parents=[common], help="Generate a deterministic opportunity board.")
     opportunities.add_argument("--watchlist", default=None)
     opportunities.add_argument("--symbols", default=None, help="Comma-separated ad hoc symbols.")
     opportunities.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
     opportunities.set_defaults(func=opportunities_command)
 
-    opportunity_show = sub.add_parser("opportunity-show", help="Show a generated opportunity board.")
+    opportunity_show = sub.add_parser("opportunity-show", parents=[common], help="Show a generated opportunity board.")
     opportunity_show.add_argument("board_id")
     opportunity_show.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
     opportunity_show.set_defaults(func=opportunity_show_command)
 
-    portfolio = sub.add_parser("portfolio", help="Show or refresh the read-only portfolio context.")
+    portfolio = sub.add_parser("portfolio", parents=[common], help="Show or refresh the read-only portfolio context.")
     portfolio.add_argument("--refresh", action="store_true")
     portfolio.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
     portfolio.set_defaults(func=portfolio_command)
 
-    intent_create = sub.add_parser("intent-create", help="Create a draft execution intent from a review.")
+    intent_create = sub.add_parser("intent-create", parents=[common], help="Create a draft execution intent from a review.")
     intent_create.add_argument("run_id")
     intent_create.add_argument("--action", choices=["buy", "sell", "hold"], default="hold")
     intent_create.add_argument("--notional", type=float)
     intent_create.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
     intent_create.set_defaults(func=intent_create_command)
 
-    intent_approve = sub.add_parser("intent-approve", help="Approve a draft execution intent.")
+    intent_approve = sub.add_parser("intent-approve", parents=[common], help="Approve a draft execution intent.")
     intent_approve.add_argument("intent_id")
     intent_approve.add_argument("--operator", default="operator")
     intent_approve.add_argument("--note")
     intent_approve.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
     intent_approve.set_defaults(func=intent_approve_command)
 
-    intent_reject = sub.add_parser("intent-reject", help="Reject an execution intent.")
+    intent_reject = sub.add_parser("intent-reject", parents=[common], help="Reject an execution intent.")
     intent_reject.add_argument("intent_id")
     intent_reject.add_argument("--operator", default="operator")
     intent_reject.add_argument("--note")
     intent_reject.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
     intent_reject.set_defaults(func=intent_reject_command)
 
-    intent_validate = sub.add_parser("intent-validate", help="Validate an approved intent without placing orders.")
+    intent_validate = sub.add_parser("intent-validate", parents=[common], help="Validate an approved intent without placing orders.")
     intent_validate.add_argument("intent_id")
     intent_validate.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
     intent_validate.set_defaults(func=intent_validate_command)
 
-    intent_preview = sub.add_parser("intent-preview", help="Preview an approved intent without placing orders.")
+    intent_preview = sub.add_parser("intent-preview", parents=[common], help="Preview an approved intent without placing orders.")
     intent_preview.add_argument("intent_id")
     intent_preview.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
     intent_preview.set_defaults(func=intent_preview_command)
+    reset_env = sub.add_parser("reset-env", parents=[common], help="Reset one Market Lab environment cache.")
+    reset_env.add_argument("--confirm", required=True)
+    reset_env.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
+    reset_env.set_defaults(func=reset_env_command)
     return parser
 
 
 def main(argv: list[str] | None = None) -> None:
     parser = build_parser()
     args = parser.parse_args(argv)
+    if args.env:
+        os.environ["MARKET_LAB_ENV"] = args.env
+    elif not os.getenv("MARKET_LAB_ENV"):
+        raise SystemExit("Set MARKET_LAB_ENV or pass --env prod|dev|test|ci.")
+    current_environment(default=None)
     args.func(args)
 
 

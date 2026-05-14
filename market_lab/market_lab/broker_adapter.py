@@ -5,6 +5,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from uuid import uuid4
 
+from .environment import artifact_environment
 from .market_data import MarketDataClient, MarketDataError
 from .models import BrokerOrderPreview, BrokerValidationResult, ExecutionIntent
 
@@ -19,6 +20,7 @@ class BrokerAdapter:
         max_slippage_pct: float = 0.25,
     ):
         self.market_data = market_data or MarketDataClient()
+        self.environment = artifact_environment()
         self.max_price_age_seconds = max_price_age_seconds
         self.preview_ttl_seconds = preview_ttl_seconds
         self.max_slippage_pct = max_slippage_pct
@@ -61,6 +63,7 @@ class BrokerAdapter:
 
         status = "valid" if not reasons else ("needs_refresh" if any("refresh" in item or "missing" in item or "moved" in item for item in reasons) else "blocked")
         return BrokerValidationResult(
+            environment=self.environment,
             intent_id=intent.intent_id,
             checked_at=now,
             status=status,  # type: ignore[arg-type]
@@ -82,6 +85,7 @@ class BrokerAdapter:
         quantity = (notional / quote.price) if notional and quote.price > 0 else None
         now = datetime.now(UTC)
         return BrokerOrderPreview(
+            environment=self.environment,
             intent_id=intent.intent_id,
             preview_id=f"mlab_preview_{now.strftime('%Y%m%dT%H%M%SZ')}_{uuid4().hex[:8]}",
             created_at=now,

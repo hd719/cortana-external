@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from datetime import UTC, datetime, timedelta
 
 from .market_data import MarketDataClient
@@ -129,8 +130,9 @@ class SettlementService:
             )
         updated = artifact.model_copy(update={"settlements": settled})
         self.store.write_review(updated)
-        for result in newly_settled:
-            self.notifier.send_settlement_alert(updated, result)
+        if self._alerts_allowed(updated):
+            for result in newly_settled:
+                self.notifier.send_settlement_alert(updated, result)
         return updated
 
     def settle_due(self) -> list[str]:
@@ -142,3 +144,9 @@ class SettlementService:
             self.settle_run(run_id)
             settled_run_ids.append(run_id)
         return settled_run_ids
+
+    @staticmethod
+    def _alerts_allowed(artifact: ReviewArtifact) -> bool:
+        if artifact.environment.environment == "prod" and not artifact.environment.is_test_data:
+            return True
+        return os.getenv("MARKET_LAB_ALLOW_ALERTS_IN_TEST", "0").strip().lower() in {"1", "true", "yes"}

@@ -2,7 +2,8 @@
 set -euo pipefail
 
 REPO_ROOT="${MARKET_LAB_REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
-LOG_DIR="${MARKET_LAB_LOG_DIR:-$REPO_ROOT/.cache/market_lab/logs}"
+MARKET_LAB_ENV="${MARKET_LAB_ENV:-prod}"
+LOG_DIR="${MARKET_LAB_LOG_DIR:-$REPO_ROOT/.cache/market_lab/$MARKET_LAB_ENV/logs}"
 
 mkdir -p "$LOG_DIR"
 exec >> "$LOG_DIR/settle-due.log" 2>&1
@@ -19,6 +20,6 @@ fi
 
 cd "$REPO_ROOT"
 
-echo "[$(date -Iseconds)] Market Lab settle-due starting."
-uv run --project market_lab python -m market_lab.cli settle-due --json
+echo "[$(date -Iseconds)] Market Lab settle-due starting in ${MARKET_LAB_ENV}."
+uv run --project market_lab python -m market_lab.cli settle-due --env "$MARKET_LAB_ENV" --json
 echo "[$(date -Iseconds)] Market Lab settle-due finished."

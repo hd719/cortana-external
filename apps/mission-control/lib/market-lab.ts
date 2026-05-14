@@ -7,6 +7,26 @@ import { promisify } from "node:util";
 const execFileAsync = promisify(execFile);
 
 const SYMBOL_RE = /^[A-Z][A-Z0-9.-]{0,14}$/;
+export const MARKET_LAB_ENVIRONMENTS = ["prod", "dev", "test", "ci"] as const;
+
+export type MarketLabEnvironment = (typeof MARKET_LAB_ENVIRONMENTS)[number];
+
+export type MarketLabEnvironmentHealth = {
+  environment: MarketLabEnvironment;
+  status: "healthy" | "unhealthy";
+  url: string;
+  port: number;
+  runCount: number;
+  latestRunAt: string | null;
+  message?: string;
+};
+
+export type MarketLabEnvironmentOverview = {
+  current: MarketLabEnvironment;
+  sourceMode: "live" | "fixture" | "mock" | "mixed";
+  isTestData: boolean;
+  environments: MarketLabEnvironmentHealth[];
+};
 
 export type MarketLabCommand =
   | "list"
@@ -27,6 +47,7 @@ export type MarketLabCommand =
   | "intent-preview";
 
 export type MarketLabRunSummary = {
+  environment?: { environment?: MarketLabEnvironment; source_mode?: string; is_test_data?: boolean };
   run_id: string;
   symbol: string;
   requested_at: string;
@@ -67,6 +88,7 @@ export type MarketLabCodexStructuredReview = {
 };
 
 export type MarketLabReview = {
+  environment?: { environment?: MarketLabEnvironment; source_mode?: string; is_test_data?: boolean };
   run_id: string;
   symbol: string;
   status: string;
@@ -135,6 +157,7 @@ export type MarketLabOpportunityCandidate = {
 
 export type MarketLabOpportunityBoard = {
   schema_version: string;
+  environment?: { environment?: MarketLabEnvironment; source_mode?: string; is_test_data?: boolean };
   board_id: string;
   watchlist: string;
   generated_at: string;
@@ -144,6 +167,7 @@ export type MarketLabOpportunityBoard = {
 };
 
 export type MarketLabPortfolioContext = {
+  environment?: { environment?: MarketLabEnvironment; source_mode?: string; is_test_data?: boolean };
   status: "available" | "unavailable" | "reauth_required" | "error";
   source: string;
   generated_at: string;
@@ -207,9 +231,33 @@ export const resolveRepoRoot = () => {
 
 export const resolveMarketLabProject = () => path.join(resolveRepoRoot(), "market_lab");
 
-export const buildMarketLabCommand = (command: MarketLabCommand, args: string[] = []) => ({
+export const resolveMarketLabEnvironment = (): MarketLabEnvironment => {
+  const raw = (process.env.MARKET_LAB_ENV || "prod").trim().toLowerCase();
+  if ((MARKET_LAB_ENVIRONMENTS as readonly string[]).includes(raw)) return raw as MarketLabEnvironment;
+  return "prod";
+};
+
+const sourceModeForEnvironment = (environment: MarketLabEnvironment) =>
+  environment === "prod" ? "live" : environment === "ci" ? "fixture" : "mixed";
+
+const missionControlUrlForEnvironment = (environment: MarketLabEnvironment) => {
+  const port = environment === "dev" ? 3002 : 3000;
+  return { port, url: `http://127.0.0.1:${port}` };
+};
+
+const resolveMarketLabDataRoot = () => {
+  if (process.env.MARKET_LAB_DATA_ROOT) return path.resolve(process.env.MARKET_LAB_DATA_ROOT);
+  if (process.env.MARKET_LAB_CACHE_DIR) return path.resolve(process.env.MARKET_LAB_CACHE_DIR);
+  return path.resolve(resolveRepoRoot(), ".cache", "market_lab");
+};
+
+export const buildMarketLabCommand = (
+  command: MarketLabCommand,
+  args: string[] = [],
+  environment: MarketLabEnvironment = resolveMarketLabEnvironment(),
+) => ({
   file: process.env.UV_BIN || "uv",
-  args: ["run", "--project", resolveMarketLabProject(), "python", "-m", "market_lab.cli", command, ...args, "--json"],
+  args: ["run", "--project", resolveMarketLabProject(), "python", "-m", "market_lab.cli", command, ...args, "--env", environment, "--json"],
 });
 
 const parseJson = (raw: string) => {
@@ -226,14 +274,19 @@ const errorDetails = (error: ExecError) => {
   return [stderr, stdout].filter(Boolean).join("\n").trim();
 };
 
-export const runMarketLabCli = async <T>(command: MarketLabCommand, args: string[] = []) => {
-  const built = buildMarketLabCommand(command, args);
+export const runMarketLabCli = async <T>(
+  command: MarketLabCommand,
+  args: string[] = [],
+  options: { environment?: MarketLabEnvironment } = {},
+) => {
+  const environment = options.environment ?? resolveMarketLabEnvironment();
+  const built = buildMarketLabCommand(command, args, environment);
   try {
     const result = await execFileAsync(built.file, built.args, {
       cwd: resolveRepoRoot(),
       timeout: Number(process.env.MARKET_LAB_CLI_TIMEOUT_MS ?? 240_000),
       maxBuffer: 1024 * 1024 * 8,
-      env: { ...process.env },
+      env: { ...process.env, MARKET_LAB_ENV: environment },
     });
     return parseJson(result.stdout) as T;
   } catch (error) {
@@ -289,6 +342,58 @@ export const getMarketLabPortfolio = () =>
 export const refreshMarketLabPortfolio = () =>
   runMarketLabCli<MarketLabPortfolioContext>("portfolio", ["--refresh"]);
 
+export const getMarketLabEnvironmentOverview = async (): Promise<MarketLabEnvironmentOverview> => {
+  const current = resolveMarketLabEnvironment();
+  const environments = await Promise.all(
+    (["prod", "dev"] as const).map(async (environment) => {
+      const { port, url } = missionControlUrlForEnvironment(environment);
+      let runCount = 0;
+      let latestRunAt: string | null = null;
+      let message = "";
+      try {
+        const list = await runMarketLabCli<{ runs: MarketLabRunSummary[] }>("list", ["--limit", "100"], { environment });
+        runCount = list.runs.length;
+        latestRunAt = list.runs[0]?.requested_at ?? null;
+      } catch (error) {
+        message = error instanceof Error ? error.message : "Failed to read runs";
+      }
+
+      try {
+        const response = await fetch(`${url}/api/heartbeat-status`, {
+          cache: "no-store",
+          signal: AbortSignal.timeout(1_000),
+        });
+        return {
+          environment,
+          status: response.ok ? ("healthy" as const) : ("unhealthy" as const),
+          url,
+          port,
+          runCount,
+          latestRunAt,
+          message: response.ok ? message || undefined : `HTTP ${response.status}`,
+        };
+      } catch (error) {
+        return {
+          environment,
+          status: "unhealthy" as const,
+          url,
+          port,
+          runCount,
+          latestRunAt,
+          message: message || (error instanceof Error ? error.message : "Health check failed"),
+        };
+      }
+    }),
+  );
+  const sourceMode = sourceModeForEnvironment(current);
+  return {
+    current,
+    sourceMode,
+    isTestData: current !== "prod",
+    environments,
+  };
+};
+
 export type MarketLabArtifactKind =
   | "review"
   | "events"
@@ -333,7 +438,7 @@ export const readMarketLabArtifact = async (runId: string, kind: MarketLabArtifa
   }
 
   const resolved = path.resolve(artifactPath);
-  const allowedRoot = path.resolve(resolveRepoRoot(), ".cache", "market_lab");
+  const allowedRoot = resolveMarketLabDataRoot();
   if (!resolved.startsWith(`${allowedRoot}${path.sep}`)) {
     throw new Error("Artifact path is outside the Market Lab cache");
   }

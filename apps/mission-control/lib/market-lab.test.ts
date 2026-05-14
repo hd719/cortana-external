@@ -15,6 +15,8 @@ describe("market-lab library", () => {
     expect(command.args).toContain("--project");
     expect(command.args).toContain("market_lab.cli");
     expect(command.args).toContain("AAPL");
+    expect(command.args).toContain("--env");
+    expect(command.args).toContain("prod");
     expect(command.args.at(-1)).toBe("--json");
   });
 

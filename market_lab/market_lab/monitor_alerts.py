@@ -81,6 +81,9 @@ class OpenClawMonitorTelegramNotifier:
     def send_settlement_alert(self, artifact: ReviewArtifact, settlement: SettlementWindow) -> None:
         if not self.enabled:
             return
+        allow_nonprod = os.getenv("MARKET_LAB_ALLOW_ALERTS_IN_TEST", "0").strip().lower() in {"1", "true", "yes"}
+        if not allow_nonprod and (artifact.environment.environment != "prod" or artifact.environment.is_test_data):
+            return
         token, chat_id = self._routing()
         if not token or not chat_id:
             return

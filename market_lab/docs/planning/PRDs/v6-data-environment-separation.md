@@ -1,6 +1,6 @@
 # Market Lab V6 Data Environment Separation PRD
 
-**Document Status:** Proposed
+**Document Status:** Implemented
 **Owner:** Trading systems
 **Last Updated:** 2026-05-14
 **Depends On:** Market Lab V2-V5
@@ -104,3 +104,10 @@ The script owns the mapping:
 - Monitor alerts are not sent for test/dev/CI runs by default.
 - Mission Control clearly shows when it is reading non-production data.
 - Production reset cannot happen without an explicit destructive confirmation.
+
+## Implementation Notes
+
+- Market Lab writes new data under `.cache/market_lab/<env>/`.
+- `MARKET_LAB_ENV` or `--env` is required for CLI commands.
+- Mission Control APIs inherit the server process environment; the browser cannot switch environments.
+- Production and development launchd profiles are separate labels and ports.

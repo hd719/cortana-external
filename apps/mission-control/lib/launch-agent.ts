@@ -8,8 +8,21 @@ export const DEFAULT_MISSION_CONTROL_PORT = "3000";
 export const DEFAULT_MISSION_CONTROL_STDOUT = "/tmp/mission-control-stdout.log";
 export const DEFAULT_MISSION_CONTROL_STDERR = "/tmp/mission-control-stderr.log";
 
+export type MissionControlRuntimeEnv = "prod" | "dev";
+
+export type MissionControlRuntimeProfile = {
+  env: MissionControlRuntimeEnv;
+  label: string;
+  port: string;
+  marketLabEnv: MissionControlRuntimeEnv;
+  stdoutPath: string;
+  stderrPath: string;
+  healthUrl: string;
+};
+
 export type MissionControlLaunchAgentConfig = {
   appDir: string;
+  label?: string;
   programArguments: string[];
   environmentVariables: Record<string, string>;
   stdoutPath?: string;
@@ -27,6 +40,7 @@ function xmlEscape(value: string): string {
 
 export function buildMissionControlLaunchAgentPlist({
   appDir,
+  label = MISSION_CONTROL_LAUNCH_AGENT_LABEL,
   programArguments,
   environmentVariables,
   stdoutPath = DEFAULT_MISSION_CONTROL_STDOUT,
@@ -53,7 +67,7 @@ ${envEntries}
 \t<key>KeepAlive</key>
 \t<true/>
 \t<key>Label</key>
-\t<string>${MISSION_CONTROL_LAUNCH_AGENT_LABEL}</string>
+\t<string>${xmlEscape(label)}</string>
 \t<key>ProgramArguments</key>
 \t<array>
 ${args}
@@ -71,17 +85,42 @@ ${args}
 `;
 }
 
+export function getMissionControlRuntimeProfile(env: string | undefined = "prod"): MissionControlRuntimeProfile {
+  if (env === "dev") {
+    return {
+      env: "dev",
+      label: "com.cortana.mission-control-dev",
+      port: "3002",
+      marketLabEnv: "dev",
+      stdoutPath: "/tmp/mission-control-dev-stdout.log",
+      stderrPath: "/tmp/mission-control-dev-stderr.log",
+      healthUrl: "http://127.0.0.1:3002/api/heartbeat-status",
+    };
+  }
+  return {
+    env: "prod",
+    label: MISSION_CONTROL_LAUNCH_AGENT_LABEL,
+    port: DEFAULT_MISSION_CONTROL_PORT,
+    marketLabEnv: "prod",
+    stdoutPath: DEFAULT_MISSION_CONTROL_STDOUT,
+    stderrPath: DEFAULT_MISSION_CONTROL_STDERR,
+    healthUrl: "http://127.0.0.1:3000/api/heartbeat-status",
+  };
+}
+
 export function getMissionControlLaunchAgentEnvironment(
   appDir: string,
   env: NodeJS.ProcessEnv = process.env,
+  profile: MissionControlRuntimeProfile = getMissionControlRuntimeProfile(env.MISSION_CONTROL_RUNTIME_ENV || env.MARKET_LAB_ENV || "prod"),
 ): Record<string, string> {
   const merged = loadMissionControlScriptEnv(appDir, { ...env });
   const environmentVariables: Record<string, string> = {
     DATABASE_URL: merged.DATABASE_URL?.trim() ?? "",
     HOST: merged.HOST?.trim() || DEFAULT_MISSION_CONTROL_HOST,
+    MARKET_LAB_ENV: merged.MARKET_LAB_ENV?.trim() || profile.marketLabEnv,
     NODE_ENV: merged.NODE_ENV?.trim() || "production",
     PATH: merged.MISSION_CONTROL_PATH?.trim() || DEFAULT_MISSION_CONTROL_PATH,
-    PORT: merged.PORT?.trim() || DEFAULT_MISSION_CONTROL_PORT,
+    PORT: merged.PORT?.trim() || profile.port,
   };
 
   for (const key of ["CORTANA_SOURCE_REPO", "DOCS_PATH", "RESEARCH_PATH", "KNOWLEDGE_PATH", "HEARTBEAT_STATE_PATH"]) {

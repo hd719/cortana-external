@@ -1,6 +1,6 @@
 # Implementation Plan - Market Lab V6 Data Environment Separation
 
-**Document Status:** Proposed
+**Document Status:** Implemented
 **PRD:** [v6-data-environment-separation.md](../PRDs/v6-data-environment-separation.md)
 **Tech Spec:** [v6-data-environment-separation.md](../TechSpecs/v6-data-environment-separation.md)
 
@@ -22,7 +22,7 @@
 
 Files:
 
-- `market_lab/market_lab/config.py`
+- `market_lab/market_lab/environment.py`
 - `market_lab/market_lab/models.py`
 
 Tasks:
@@ -36,25 +36,23 @@ Tasks:
 
 Files:
 
-- `market_lab/market_lab/store.py`
-- `market_lab/market_lab/repository.py`
+- `market_lab/market_lab/storage.py`
 
 Tasks:
 
 - Resolve data paths under `.cache/market_lab/<env>/`.
 - Use separate SQLite files per environment.
-- Add compatibility read for legacy root paths.
-- Ensure new writes never target the legacy root.
+- Ensure new writes target `.cache/market_lab/<env>/`.
 
 ### Phase 3 - Artifact Metadata
 
 Files:
 
 - `market_lab/market_lab/models.py`
-- `market_lab/market_lab/review.py`
+- `market_lab/market_lab/runner.py`
 - `market_lab/market_lab/settlement.py`
 - `market_lab/market_lab/opportunities.py`
-- `market_lab/market_lab/portfolio.py`
+- `market_lab/market_lab/portfolio_context.py`
 - `market_lab/market_lab/execution_intents.py`
 
 Tasks:
@@ -104,17 +102,17 @@ Tasks:
 
 Files:
 
-- `apps/mission-control/app/services/tabs/trading-ops-tab.tsx`
+- `apps/mission-control/app/market-lab/market-lab-client.tsx`
 - `apps/mission-control/lib/market-lab.ts`
 - `apps/mission-control/app/api/market-lab/environments/route.ts`
-- scheduler or cron definitions that invoke Market Lab
+- `market_lab/scripts/settle-due.sh`
 
 Tasks:
 
 - Show non-prod environment badge.
 - Show prod and dev environment health in production Mission Control.
 - Hide non-prod runs from production views.
-- Pass `--env prod` in scheduled production jobs.
+- Pass the resolved environment through scheduled settlement jobs.
 - Block monitor alerts for non-prod runs unless explicitly enabled.
 
 ### Phase 7 - QA

@@ -1,6 +1,6 @@
 # QA Plan - Market Lab V6 Data Environment Separation
 
-**Document Status:** Proposed
+**Document Status:** Implemented
 **PRD:** [v6-data-environment-separation.md](../PRDs/v6-data-environment-separation.md)
 **Tech Spec:** [v6-data-environment-separation.md](../TechSpecs/v6-data-environment-separation.md)
 **Implementation Plan:** [v6-data-environment-separation.md](../Implementation/v6-data-environment-separation.md)
@@ -46,6 +46,16 @@ curl -fsS http://127.0.0.1:3002/api/heartbeat-status
 curl -fsS http://127.0.0.1:3000/api/market-lab/environments
 cd apps/mission-control && pnpm build
 ```
+
+## Verified In PR
+
+- `MARKET_LAB_ENV=ci uv run --project market_lab pytest market_lab/tests`
+- `cd apps/mission-control && pnpm test -- app/market-lab/market-lab-client.test.tsx lib/market-lab.test.ts lib/launch-agent.test.ts`
+- `cd apps/mission-control && pnpm build`
+- `bash -n apps/mission-control/scripts/restart-mission-control.sh`
+- `bash -n market_lab/scripts/settle-due.sh`
+- `plutil -lint market_lab/launchd/com.cortana.market-lab-settle-due.plist`
+- CLI env smoke checks for `list`, missing env rejection, and `reset-env`.
 
 ## Manual Smoke
 

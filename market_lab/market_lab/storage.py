@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import os
 import re
 import sqlite3
 from datetime import UTC, datetime
@@ -9,7 +8,8 @@ from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import Any
 
-from .models import CodexReview, CodexStructuredReview, ReviewArtifact, RunRecord, RunStatus, TimelineEvent, TrustVerdict, model_to_json
+from .environment import artifact_environment, current_environment, market_lab_data_root, normalize_environment
+from .models import ArtifactEnvironment, CodexReview, CodexStructuredReview, ReviewArtifact, RunRecord, RunStatus, TimelineEvent, TrustVerdict, model_to_json
 
 _CODEX_VERDICT_RE = re.compile(r"^\s*Verdict\s*:\s*(trusted|blocked|uncertain)\b", re.IGNORECASE | re.MULTILINE)
 _CODEX_STRUCTURED_RE = re.compile(
@@ -34,11 +34,9 @@ def repo_root() -> Path:
     return Path(__file__).resolve().parents[2]
 
 
-def default_cache_dir() -> Path:
-    configured = os.getenv("MARKET_LAB_CACHE_DIR")
-    if configured:
-        return Path(configured).expanduser().resolve()
-    return repo_root() / ".cache" / "market_lab"
+def default_cache_dir(environment: str | None = None) -> Path:
+    resolved = current_environment() if environment is None else normalize_environment(environment)
+    return market_lab_data_root(repo_root()) / str(resolved)
 
 
 def make_run_id(symbol: str, now: datetime | None = None) -> str:
@@ -62,8 +60,10 @@ def parse_structured_codex_review(text: str) -> CodexStructuredReview | None:
 
 
 class MarketLabStore:
-    def __init__(self, cache_dir: Path | str | None = None):
-        self.cache_dir = Path(cache_dir).expanduser().resolve() if cache_dir else default_cache_dir()
+    def __init__(self, cache_dir: Path | str | None = None, *, environment: str | None = None):
+        self.environment = current_environment() if environment is None else normalize_environment(environment)
+        self.artifact_environment = artifact_environment(self.environment)
+        self.cache_dir = Path(cache_dir).expanduser().resolve() if cache_dir else default_cache_dir(self.environment)
         self.runs_dir = self.cache_dir / "runs"
         self.db_path = self.cache_dir / "market_lab.sqlite"
         self.cache_dir.mkdir(parents=True, exist_ok=True)
@@ -81,6 +81,9 @@ class MarketLabStore:
                 """
                 CREATE TABLE IF NOT EXISTS market_lab_runs (
                   run_id TEXT PRIMARY KEY,
+                  environment TEXT NOT NULL DEFAULT 'prod',
+                  source_mode TEXT NOT NULL DEFAULT 'live',
+                  is_test_data INTEGER NOT NULL DEFAULT 0,
                   symbol TEXT NOT NULL,
                   requested_at TEXT NOT NULL,
                   status TEXT NOT NULL,
@@ -101,9 +104,11 @@ class MarketLabStore:
                   ON market_lab_runs(status, updated_at DESC);
                 CREATE INDEX IF NOT EXISTS idx_market_lab_runs_verdict_requested_at
                   ON market_lab_runs(trust_verdict, requested_at DESC);
-
                 CREATE TABLE IF NOT EXISTS market_lab_settlements (
                   id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  environment TEXT NOT NULL DEFAULT 'prod',
+                  source_mode TEXT NOT NULL DEFAULT 'live',
+                  is_test_data INTEGER NOT NULL DEFAULT 0,
                   run_id TEXT NOT NULL,
                   window TEXT NOT NULL,
                   status TEXT NOT NULL,
@@ -126,6 +131,21 @@ class MarketLabStore:
                   ON market_lab_settlements(run_id, window);
                 """
             )
+            self._ensure_column(conn, "market_lab_runs", "environment", "TEXT NOT NULL DEFAULT 'prod'")
+            self._ensure_column(conn, "market_lab_runs", "source_mode", "TEXT NOT NULL DEFAULT 'live'")
+            self._ensure_column(conn, "market_lab_runs", "is_test_data", "INTEGER NOT NULL DEFAULT 0")
+            self._ensure_column(conn, "market_lab_settlements", "environment", "TEXT NOT NULL DEFAULT 'prod'")
+            self._ensure_column(conn, "market_lab_settlements", "source_mode", "TEXT NOT NULL DEFAULT 'live'")
+            self._ensure_column(conn, "market_lab_settlements", "is_test_data", "INTEGER NOT NULL DEFAULT 0")
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_market_lab_runs_environment_requested_at ON market_lab_runs(environment, requested_at DESC)"
+            )
+
+    @staticmethod
+    def _ensure_column(conn: sqlite3.Connection, table: str, column: str, ddl: str) -> None:
+        existing = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()}
+        if column not in existing:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")
 
     def create_run(self, symbol: str, *, run_id: str | None = None, requested_at: datetime | None = None) -> RunRecord:
         requested = requested_at or utc_now()
@@ -143,12 +163,15 @@ class MarketLabStore:
             conn.execute(
                 """
                 INSERT INTO market_lab_runs (
-                  run_id, symbol, requested_at, status, verdict_reasons_json,
+                  run_id, environment, source_mode, is_test_data, symbol, requested_at, status, verdict_reasons_json,
                   run_dir, events_path, logs_path, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     run_id,
+                    self.artifact_environment.environment,
+                    self.artifact_environment.source_mode,
+                    int(self.artifact_environment.is_test_data),
                     normalized,
                     requested.isoformat(),
                     RunStatus.QUEUED.value,
@@ -216,6 +239,7 @@ class MarketLabStore:
     def append_event(self, run_id: str, event: str, message: str, *, details: dict[str, Any] | None = None) -> TimelineEvent:
         run = self.get_run(run_id)
         item = TimelineEvent(
+            environment=self.artifact_environment,
             run_id=run_id,
             timestamp=utc_now(),
             event=event,
@@ -259,6 +283,7 @@ class MarketLabStore:
         return path
 
     def write_review(self, artifact: ReviewArtifact) -> Path:
+        artifact = artifact.model_copy(update={"environment": self.artifact_environment})
         run = self.get_run(artifact.run_id)
         review_path = Path(run.run_dir) / "review.json"
         self.write_json_atomic(review_path, artifact)
@@ -330,7 +355,14 @@ class MarketLabStore:
         return artifact
 
     def upsert_settlement(self, run_id: str, window: str, values: dict[str, Any]) -> None:
-        payload = {"run_id": run_id, "window": window, **values}
+        payload = {
+            "environment": self.artifact_environment.environment,
+            "source_mode": self.artifact_environment.source_mode,
+            "is_test_data": int(self.artifact_environment.is_test_data),
+            "run_id": run_id,
+            "window": window,
+            **values,
+        }
         columns = list(payload.keys())
         placeholders = ", ".join("?" for _ in columns)
         updates = ", ".join(f"{col}=excluded.{col}" for col in columns if col not in {"run_id", "window"})
@@ -363,6 +395,11 @@ class MarketLabStore:
 
     def _row_to_run(self, row: sqlite3.Row) -> RunRecord:
         return RunRecord(
+            environment=ArtifactEnvironment(
+                environment=row["environment"],
+                source_mode=row["source_mode"],
+                is_test_data=bool(row["is_test_data"]),
+            ),
             run_id=row["run_id"],
             symbol=row["symbol"],
             requested_at=parse_dt(row["requested_at"]),
