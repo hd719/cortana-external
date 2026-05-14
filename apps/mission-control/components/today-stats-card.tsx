@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Bot, CheckCircle2, ShieldCheck, Activity, BrainCircuit } from "lucide-react";
+import { Bot, CheckCircle2, ShieldCheck, Activity } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -14,7 +14,6 @@ type TodayStatsResponse = {
     tasksCompletedToday: number;
     selfHealsToday: number;
     activeRunsNow: number;
-    decisionsLoggedToday: number;
   };
 };
 
@@ -73,13 +72,6 @@ export function TodayStatsCard({ className }: { className?: string } = {}) {
         value: metrics?.activeRunsNow ?? 0,
         icon: Activity,
         emphasizeOnNonZero: true,
-      },
-      {
-        key: "decisions",
-        label: "Decisions logged",
-        value: metrics?.decisionsLoggedToday ?? 0,
-        icon: BrainCircuit,
-        emphasizeOnNonZero: false,
       },
     ];
   }, [data]);

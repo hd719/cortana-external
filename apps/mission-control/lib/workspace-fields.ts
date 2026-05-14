@@ -66,7 +66,7 @@ export const WORKSPACE_FIELDS: WorkspaceFieldDefinition[] = [
   { key: "AGENT_MODELS_PATH", label: "Agent models path", help: "Maps agent ids to preferred OpenClaw model labels.", fileId: "missionControl", sectionId: "openclaw-bridge", input: "text", placeholder: "/Users/hd/Developer/cortana/config/agent-models.json" },
   { key: "HEARTBEAT_STATE_PATH", label: "Heartbeat state path", help: "Location of the OpenClaw heartbeat state file Mission Control watches.", fileId: "missionControl", sectionId: "openclaw-bridge", input: "text", placeholder: "/Users/hd/.openclaw/memory/heartbeat-state.json" },
   { key: "OPENCLAW_EVENT_TOKEN", label: "OpenClaw event token", help: "Bearer token for sub-agent lifecycle ingestion into Mission Control.", fileId: "missionControl", sectionId: "openclaw-bridge", input: "secret", placeholder: "Optional bearer token" },
-  { key: "TELEGRAM_BOT_TOKEN", label: "Telegram bot token", help: "Needed for approval and notification flows inside Mission Control.", fileId: "missionControl", sectionId: "openclaw-bridge", input: "secret", placeholder: "Bot token" },
+  { key: "TELEGRAM_BOT_TOKEN", label: "Telegram bot token", help: "Needed for notification flows inside Mission Control.", fileId: "missionControl", sectionId: "openclaw-bridge", input: "secret", placeholder: "Bot token" },
 
   // ── Service Runtime ──
   { key: "PORT", label: "External service port", help: "HTTP port for the local Hono external-service runtime.", fileId: "external", sectionId: "service-runtime", input: "text", defaultValue: "3033", placeholder: "3033" },

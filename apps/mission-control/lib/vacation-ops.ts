@@ -71,8 +71,6 @@ type RawCheckRow = {
   freshness_at: Date | string | null;
   remediation_attempted: boolean;
   remediation_succeeded: boolean;
-  autonomy_incident_id: number | null;
-  incident_key: string | null;
   detail: JsonObject | null;
 };
 
@@ -100,8 +98,6 @@ type RawActionRow = {
   id: number;
   vacation_window_id: number;
   run_id: number | null;
-  autonomy_incident_id: number | null;
-  incident_key: string | null;
   system_key: string;
   step_order: number;
   action_kind: string;
@@ -179,8 +175,6 @@ export type VacationCheck = {
   freshnessSource: string | null;
   remediationAttempted: boolean;
   remediationSucceeded: boolean;
-  autonomyIncidentId: number | null;
-  incidentKey: string | null;
   detail: JsonObject;
 };
 
@@ -209,8 +203,6 @@ export type VacationAction = {
   id: number;
   vacationWindowId: number;
   runId: number | null;
-  autonomyIncidentId: number | null;
-  incidentKey: string | null;
   systemKey: string;
   systemLabel: string;
   stepOrder: number;
@@ -476,8 +468,6 @@ function mapCheck(row: RawCheckRow, config: VacationConfig): VacationCheck {
     freshnessSource: config.systems[row.system_key]?.freshnessSource ?? null,
     remediationAttempted: Boolean(row.remediation_attempted),
     remediationSucceeded: Boolean(row.remediation_succeeded),
-    autonomyIncidentId: row.autonomy_incident_id,
-    incidentKey: row.incident_key,
     detail: sanitizeVacationDetail(row.system_key, asObject(row.detail)),
   };
 }
@@ -510,8 +500,6 @@ function mapAction(row: RawActionRow): VacationAction {
     id: row.id,
     vacationWindowId: row.vacation_window_id,
     runId: row.run_id,
-    autonomyIncidentId: row.autonomy_incident_id,
-    incidentKey: row.incident_key,
     systemKey: row.system_key,
     systemLabel: formatVacationSystemLabel(row.system_key),
     stepOrder: row.step_order,

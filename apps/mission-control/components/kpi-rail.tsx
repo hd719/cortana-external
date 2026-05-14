@@ -116,7 +116,6 @@ export function KpiRail() {
         <Stat label="Tasks done" value={todayLoaded ? todayMetrics?.tasksCompletedToday ?? 0 : "—"} highlight={(todayMetrics?.tasksCompletedToday ?? 0) > 0} />
         <Stat label="Self-heals" value={todayLoaded ? todayMetrics?.selfHealsToday ?? 0 : "—"} highlight={(todayMetrics?.selfHealsToday ?? 0) > 0} />
         <Stat label="Active runs" value={todayLoaded ? todayMetrics?.activeRunsNow ?? 0 : "—"} highlight={(todayMetrics?.activeRunsNow ?? 0) > 0} />
-        <Stat label="Decisions" value={todayLoaded ? todayMetrics?.decisionsLoggedToday ?? 0 : "—"} />
       </Section>
 
       <Section title="Mjolnir" href="/mjolnir">
