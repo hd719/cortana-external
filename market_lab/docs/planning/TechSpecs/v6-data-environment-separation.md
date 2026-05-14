@@ -29,9 +29,52 @@ Recommended defaults:
 | Runtime | Default |
 |---------|---------|
 | Mission Control on Mac mini | `prod` |
-| Local CLI without env | `dev` or explicit prompt/log warning |
+| Local CLI without env | reject with a hint to pass `--env` or set `MARKET_LAB_ENV` |
 | Automated tests | `ci` |
 | Manual QA | `test` |
+
+## Mission Control Launchd Profiles
+
+Mission Control should support environment profiles through the existing restart path:
+
+```bash
+./apps/mission-control/scripts/restart-mission-control.sh --env prod
+./apps/mission-control/scripts/restart-mission-control.sh --env dev
+```
+
+The operator should not pass a port manually. The restart script maps the environment to the launchd label, port, plist, logs, health URL, and `MARKET_LAB_ENV`.
+
+| Env | Label | Port | Plist | Health URL |
+|-----|-------|------|-------|------------|
+| `prod` | `com.cortana.mission-control` | `3000` | `~/Library/LaunchAgents/com.cortana.mission-control.plist` | `http://127.0.0.1:3000/api/heartbeat-status` |
+| `dev` | `com.cortana.mission-control-dev` | `3002` | `~/Library/LaunchAgents/com.cortana.mission-control-dev.plist` | `http://127.0.0.1:3002/api/heartbeat-status` |
+
+The current `start-mission-control.sh` already honors `PORT`; V6 should ensure the LaunchAgent actually passes the correct `PORT` and `MARKET_LAB_ENV`.
+
+### LaunchAgent Changes
+
+Update the launch-agent helpers to make label and profile explicit:
+
+```ts
+type MissionControlRuntimeProfile = {
+  env: "prod" | "dev";
+  label: string;
+  port: string;
+  marketLabEnv: "prod" | "dev";
+  stdoutPath: string;
+  stderrPath: string;
+  healthUrl: string;
+};
+```
+
+Required changes:
+
+- `install-launch-agent.ts` accepts `--env prod|dev`.
+- `buildMissionControlLaunchAgentPlist` accepts `label`, `stdoutPath`, and `stderrPath`.
+- `getMissionControlLaunchAgentEnvironment` includes `MARKET_LAB_ENV`.
+- `restart-mission-control.sh` accepts `--env prod|dev`.
+- port cleanup uses the selected profile port, not hardcoded `3000`.
+- health check uses the selected profile health URL.
 
 ## Store Layout
 
@@ -83,6 +126,7 @@ Attach this to:
 Add:
 
 ```bash
+uv run --project market_lab python -m market_lab.cli run AAPL --env prod --json
 uv run --project market_lab python -m market_lab.cli run AAPL --env test --json
 uv run --project market_lab python -m market_lab.cli settle-due --env prod --json
 uv run --project market_lab python -m market_lab.cli reset-env --env test --confirm test
@@ -91,6 +135,7 @@ uv run --project market_lab python -m market_lab.cli reset-env --env test --conf
 Rules:
 
 - Print active environment in JSON and non-JSON output.
+- Prefer explicit `--env` for manual CLI runs.
 - Reject `ci` live-data calls.
 - Block alerts outside `prod` unless `MARKET_LAB_ALLOW_ALERTS_IN_TEST=true`.
 - Require a destructive confirmation for `prod` reset.
@@ -109,14 +154,49 @@ Every Market Lab API response should include:
 
 API routes should reject writes where requested environment conflicts with the server environment unless explicitly configured for test mode.
 
+The browser should not decide the environment. A run request from `localhost:3000` writes to the server's configured environment, and a run request from `localhost:3002` writes to that server's configured environment.
+
+Add:
+
+```text
+GET /api/market-lab/environments
+```
+
+Response shape:
+
+```json
+{
+  "current": "prod",
+  "environments": [
+    {
+      "environment": "prod",
+      "status": "healthy",
+      "url": "http://127.0.0.1:3000",
+      "port": 3000,
+      "runCount": 42,
+      "latestRunAt": "2026-05-14T12:00:00Z"
+    },
+    {
+      "environment": "dev",
+      "status": "healthy",
+      "url": "http://127.0.0.1:3002",
+      "port": 3002,
+      "runCount": 7,
+      "latestRunAt": "2026-05-14T11:50:00Z"
+    }
+  ]
+}
+```
+
 ## Mission Control
 
 Mission Control should:
 
 - default to production data
-- show a visible environment badge when not production
+- show a visible environment badge for every runtime
+- show prod and dev environment health in production Mission Control
 - exclude test/dev/CI runs from production Run Tape
-- offer a local developer-only environment switch only when enabled
+- avoid a browser-side environment switch by default
 - never send monitor alerts from non-production views by default
 
 ## Scheduler And Alerts
@@ -138,5 +218,7 @@ alerts_enabled == true
 | Hidden test data affects learning | Separate SQLite files and env metadata. |
 | CI writes to prod cache | Tests force `MARKET_LAB_ENV=ci` and temporary roots. |
 | UI confusion | Production-only default plus visible non-prod badge. |
+| Two launchd agents conflict | Env-specific labels, ports, plist paths, and log paths. |
+| Browser changes env accidentally | Server-owned env; no default UI switch. |
 | Accidental prod deletion | Explicit destructive confirmation. |
 | Legacy paths drift | One compatibility loader with warnings, then env-root writes only. |
