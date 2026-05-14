@@ -22,7 +22,6 @@ describe("KpiRail", () => {
             tasksCompletedToday: 0,
             selfHealsToday: 0,
             activeRunsNow: 0,
-            decisionsLoggedToday: 0,
           },
         });
       }
@@ -68,7 +67,6 @@ describe("KpiRail", () => {
             tasksCompletedToday: 0,
             selfHealsToday: 1,
             activeRunsNow: 0,
-            decisionsLoggedToday: 0,
           },
         });
       }

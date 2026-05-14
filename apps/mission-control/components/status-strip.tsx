@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { cn } from "@/lib/utils";
-import { useAutonomy } from "@/hooks/dashboard/use-autonomy";
 import { useDbStatus } from "@/hooks/dashboard/use-db-status";
 import { useHeartbeat, type HeartbeatStatus } from "@/hooks/dashboard/use-heartbeat";
 import { useThinking } from "@/hooks/dashboard/use-thinking";
@@ -55,7 +54,6 @@ export function StatusStrip() {
   const heartbeat = useHeartbeat();
   const thinking = useThinking();
   const db = useDbStatus();
-  const autonomy = useAutonomy();
 
   const hbStatus = heartbeat.data?.status ?? "unknown";
   const hbAge = heartbeatAge(heartbeat.data?.ageMs ?? null);
@@ -89,19 +87,6 @@ export function StatusStrip() {
       ? "loading…"
       : `Postgres ${pg ? "✓" : "✕"} · Vector ${lance ? "✓" : "✕"}`;
 
-  const autonomyScore = autonomy.data?.source === "fallback" ? null : autonomy.data?.score ?? null;
-  const autonomyTrend = autonomy.data?.trend?.direction ?? "flat";
-  const trendArrow = autonomyTrend === "up" ? "↑" : autonomyTrend === "down" ? "↓" : "→";
-  const trendToneClass =
-    autonomyTrend === "up"
-      ? "text-emerald-500"
-      : autonomyTrend === "down"
-        ? "text-rose-500"
-        : "text-muted-foreground";
-  const autonomyDelta = autonomy.data?.trend?.delta ?? 0;
-  const autonomyDeltaLabel =
-    autonomyDelta === 0 ? "0" : `${autonomyDelta > 0 ? "+" : ""}${autonomyDelta.toFixed(1)}`;
-
   return (
     <CollapsibleCard
       summary={
@@ -116,9 +101,6 @@ export function StatusStrip() {
           <span className={cn("inline-block h-2 w-2 shrink-0 rounded-full", dbDotClass)} />
           <span className="shrink-0 font-medium">PG</span>
           <span className="shrink-0 font-medium">Vector</span>
-          <span className="shrink-0 text-muted-foreground/40">·</span>
-          <span className="shrink-0 font-semibold tabular-nums">{autonomyScore ?? "—"}</span>
-          <span className={cn("shrink-0 font-semibold", trendToneClass)}>{trendArrow}</span>
         </div>
       }
     >
@@ -151,16 +133,6 @@ export function StatusStrip() {
             </span>
           }
           valueClass={dbStatus === "down" || dbStatus === "partial" ? "text-amber-600 dark:text-amber-400" : undefined}
-        />
-        <DetailRow
-          label="Autonomy"
-          value={
-            <span>
-              <span className="font-mono tabular-nums">{autonomyScore ?? "—"}</span>
-              <span className={cn("ml-1 font-semibold", trendToneClass)}>{trendArrow}</span>
-              <span className="ml-1 text-muted-foreground">{autonomyDeltaLabel}</span>
-            </span>
-          }
         />
         <Link
           href="/services"
