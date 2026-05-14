@@ -1811,9 +1811,9 @@ function InsightList({
     <div className={cn("rounded-md border px-2.5 py-2", toneStyles.container, toneStyles.rail)}>
       <div className={cn("text-[10px] font-bold uppercase tracking-widest", toneStyles.title)}>{title}</div>
       {items.length === 0 ? (
-        <p className="mt-1 font-sans text-xs text-muted-foreground">{empty}</p>
+        <p className="mt-1 font-mono text-xs text-muted-foreground">{empty}</p>
       ) : (
-        <ul className="mt-1 space-y-0.5 font-sans text-xs">
+        <ul className="mt-1 space-y-0.5 font-mono text-xs">
           {items.map((item) => (
             <li key={item} className="flex gap-1.5 leading-5">
               <span className={cn("shrink-0 text-[10px]", toneStyles.title)}>{toneStyles.bullet}</span>
