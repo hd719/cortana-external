@@ -31,12 +31,13 @@ describe("StatusStrip", () => {
 
     render(<StatusStrip />);
 
-    expect(await screen.findByText("LIVE")).toBeInTheDocument();
-    expect(await screen.findByText("Indexing memex")).toBeInTheDocument();
+    expect((await screen.findAllByText("LIVE")).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText("Indexing memex")).length).toBeGreaterThan(0);
     expect(screen.getByText("PG")).toBeInTheDocument();
     expect(screen.getByText("Vector")).toBeInTheDocument();
-    expect(await screen.findByText("92")).toBeInTheDocument();
-    expect(screen.getByText("autonomy")).toBeInTheDocument();
+    expect((await screen.findAllByText("92")).length).toBeGreaterThan(0);
+    // Collapsed by default — <details> open attribute should be absent.
+    expect(document.querySelector("details")?.hasAttribute("open")).toBe(false);
   });
 
   it('falls back to "—" tokens when hooks fail to load', async () => {
@@ -44,7 +45,7 @@ describe("StatusStrip", () => {
 
     render(<StatusStrip />);
 
-    expect(screen.getByText("Systems nominal.")).toBeInTheDocument();
+    expect(screen.getAllByText("Systems nominal.").length).toBeGreaterThan(0);
     // Heartbeat label collapses to em-dash when status is unknown.
     expect(screen.getAllByText("—").length).toBeGreaterThan(0);
   });

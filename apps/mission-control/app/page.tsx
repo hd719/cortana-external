@@ -101,10 +101,8 @@ export default async function Home() {
       {/* Status strip + 3 collapsed tiles share one row at lg+; stack on mobile.
           items-start so an expanded tile grows independently without dragging the others. */}
       <Animate delay={0.1}>
-        <div className="grid items-start gap-3 lg:grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)]">
-          <div className="lg:min-w-[300px]">
-            <StatusStrip />
-          </div>
+        <div className="grid items-start gap-3 lg:grid-cols-4">
+          <StatusStrip />
           <VacationOpsBanner />
 
           <CollapsibleCard
