@@ -6,7 +6,6 @@ import {
   lifecycleStatusFromStoreRun,
   normalizeLifecycleStatus,
   runStatusFromLifecycle,
-  taskStatusFromLifecycle,
 } from "@/lib/openclaw-lifecycle";
 
 describe("lib/openclaw-lifecycle", () => {
@@ -18,12 +17,10 @@ describe("lib/openclaw-lifecycle", () => {
     expect(normalizeLifecycleStatus("mystery")).toBeNull();
   });
 
-  it("maps lifecycle states to run and task states", () => {
+  it("maps lifecycle states to run states", () => {
     expect(runStatusFromLifecycle("done")).toBe("completed");
     expect(runStatusFromLifecycle("timeout")).toBe("failed");
     expect(runStatusFromLifecycle("killed")).toBe("cancelled");
-    expect(taskStatusFromLifecycle("running")).toBe("in_progress");
-    expect(taskStatusFromLifecycle("queued")).toBeNull();
   });
 
   it("derives launch phases from lifecycle transitions", () => {

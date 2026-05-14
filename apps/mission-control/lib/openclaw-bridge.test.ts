@@ -11,7 +11,6 @@ vi.mock("@/lib/prisma", () => ({
       findUniqueOrThrow: vi.fn(),
     },
     event: { create: vi.fn() },
-    cortanaTask: { updateMany: vi.fn() },
   },
 }));
 

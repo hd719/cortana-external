@@ -7,7 +7,7 @@ export type TodayStatsPayload = {
   generatedAt: string;
   metrics: {
     subagentsSpawnedToday: number;
-    tasksCompletedToday: number;
+    runsCompletedToday: number;
     selfHealsToday: number;
     activeRunsNow: number;
   };

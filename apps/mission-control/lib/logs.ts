@@ -1,5 +1,5 @@
 import prisma from "@/lib/prisma";
-import { getTaskPrisma } from "@/lib/task-prisma";
+import { getCortanaPrisma } from "@/lib/cortana-prisma";
 
 export type LogFilters = {
   rangeHours?: number;
@@ -56,8 +56,8 @@ export async function getLogEntries(filters: LogFilters = {}): Promise<{
   source: "cortana" | "app";
   warning?: string;
 }> {
-  const taskPrisma = getTaskPrisma();
-  const preferred = taskPrisma ?? prisma;
+  const cortanaPrisma = getCortanaPrisma();
+  const preferred = cortanaPrisma ?? prisma;
 
   const limit = Math.max(1, Math.min(filters.limit ?? 120, 500));
   const rangeHours = Math.max(1, Math.min(filters.rangeHours ?? 24, 24 * 30));
@@ -107,13 +107,13 @@ export async function getLogEntries(filters: LogFilters = {}): Promise<{
     client.$queryRawUnsafe<LogRow[]>(sql);
 
   let rows: LogRow[] = [];
-  let sourceLabel: "cortana" | "app" = taskPrisma ? "cortana" : "app";
+  let sourceLabel: "cortana" | "app" = cortanaPrisma ? "cortana" : "app";
   let warning: string | undefined;
 
   try {
     rows = await runQuery(preferred);
   } catch (error) {
-    if (!taskPrisma) throw error;
+    if (!cortanaPrisma) throw error;
     sourceLabel = "app";
     warning = "Log stream unavailable in cortana DB; fell back to app DB.";
     rows = await runQuery(prisma);

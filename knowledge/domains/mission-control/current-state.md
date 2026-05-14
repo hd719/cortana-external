@@ -1,13 +1,22 @@
 # Mission Control Current State
 
-Mission Control is the local operator UI for agents, runs, approvals, docs, and Trading Ops truth.
+Mission Control is the local operator UI for agents, runs, sessions, docs, services, Mjolnir, Council, human-required actions, and Trading Ops truth.
 
 ## Current Operator Surfaces
 
 - `/` for dashboard, jobs, and agent health
 - `/trading-ops` for latest-run truth, live tape, watchlists, system health, and Polymarket
-- `/approvals`, `/council`, `/feedback`, and `/task-board` for control-plane operations
+- `/council` and human-required action surfaces for control-plane operations
 - `/mjolnir` for the fitness/recovery surface
+
+Retired surfaces:
+- `/task-board`
+- `/approvals`
+- `/feedback`
+- `/decisions`
+- `/autonomy`
+
+Durable operational follow-up now belongs in GitHub Issues, not local Mission Control task or governance rows.
 
 ## Trading Ops Truth Model
 

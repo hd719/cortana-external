@@ -11,7 +11,7 @@ type TodayStatsResponse = {
   generatedAt: string;
   metrics: {
     subagentsSpawnedToday: number;
-    tasksCompletedToday: number;
+    runsCompletedToday: number;
     selfHealsToday: number;
     activeRunsNow: number;
   };
@@ -53,9 +53,9 @@ export function TodayStatsCard({ className }: { className?: string } = {}) {
         emphasizeOnNonZero: true,
       },
       {
-        key: "tasks",
-        label: "Tasks completed",
-        value: metrics?.tasksCompletedToday ?? 0,
+        key: "runsCompleted",
+        label: "Runs completed",
+        value: metrics?.runsCompletedToday ?? 0,
         icon: CheckCircle2,
         emphasizeOnNonZero: true,
       },

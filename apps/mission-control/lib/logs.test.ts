@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { getTaskPrisma } from "@/lib/task-prisma";
+import { getCortanaPrisma } from "@/lib/cortana-prisma";
 import prisma from "@/lib/prisma";
 import { getLogEntries } from "@/lib/logs";
 
-vi.mock("@/lib/task-prisma", () => ({
-  getTaskPrisma: vi.fn(),
+vi.mock("@/lib/cortana-prisma", () => ({
+  getCortanaPrisma: vi.fn(),
 }));
 
 vi.mock("@/lib/prisma", () => ({
@@ -16,7 +16,7 @@ vi.mock("@/lib/prisma", () => ({
 describe("lib/logs", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(getTaskPrisma).mockReturnValue(null);
+    vi.mocked(getCortanaPrisma).mockReturnValue(null);
   });
 
   it("returns log entries with filters", async () => {

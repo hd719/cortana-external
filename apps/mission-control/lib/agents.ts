@@ -1,6 +1,5 @@
 import prisma from "@/lib/prisma";
 import { unstable_noStore as noStore } from "next/cache";
-import { getTaskPrisma } from "@/lib/task-prisma";
 import { deriveEvidenceGrade, deriveLaunchPhase, extractProviderPath } from "@/lib/run-intelligence";
 import { AgentOperationalStats, AgentRecentRun, computeHealthScore, deriveHealthBand } from "@/lib/agent-health";
 import { getAgentModelDisplay, getAgentProfiles } from "@/lib/agent-models";
@@ -12,13 +11,11 @@ export const getAgents = async (options?: { refreshRuns?: boolean }) => {
     await refreshOpenClawState();
   }
 
-  const taskPrisma = getTaskPrisma();
-
   /* Read the agent roster from config/agent-profiles.json (source of truth)
-     and enrich with DB runtime data (runs, tasks, health). */
+     and enrich with DB runtime data (runs and health). */
   const profiles = getAgentProfiles();
 
-  const [dbAgents, runs, tasks] = await Promise.all([
+  const [dbAgents, runs] = await Promise.all([
     prisma.agent.findMany({
       orderBy: [{ status: "asc" }, { name: "asc" }],
     }),
@@ -26,12 +23,6 @@ export const getAgents = async (options?: { refreshRuns?: boolean }) => {
       where: { agentId: { not: null } },
       select: { agentId: true, status: true, updatedAt: true },
       take: 2000,
-      orderBy: [{ updatedAt: "desc" }],
-    }),
-    (taskPrisma ?? prisma).cortanaTask.findMany({
-      where: { assignedTo: { not: null } },
-      select: { assignedTo: true, status: true },
-      take: 4000,
       orderBy: [{ updatedAt: "desc" }],
     }),
   ]);
@@ -66,8 +57,6 @@ export const getAgents = async (options?: { refreshRuns?: boolean }) => {
         completedRuns: 0,
         failedRuns: 0,
         cancelledRuns: 0,
-        completedTasks: 0,
-        failedTasks: 0,
       });
     }
     return statsByAgent.get(agentId)!;
@@ -111,53 +100,11 @@ export const getAgents = async (options?: { refreshRuns?: boolean }) => {
     recentRunsByAgent.set(run.agentId, recentRuns);
   }
 
-  const agentIdsByIdentity = new Map<string, string[]>();
-  for (const agent of agents) {
-    const keys = [agent.id, agent.name, agent.role].map(normalizeIdentity).filter(Boolean);
-    for (const key of keys) {
-      const existing = agentIdsByIdentity.get(key) || [];
-      if (!existing.includes(agent.id)) existing.push(agent.id);
-      agentIdsByIdentity.set(key, existing);
-    }
-  }
-
-  const MAX_TERMINAL_TASKS_PER_AGENT = 80;
-  const terminalTasksCountByAgent = new Map<string, number>();
-
-  for (const task of tasks) {
-    const assigneeKey = normalizeIdentity(task.assignedTo);
-    if (!assigneeKey) continue;
-
-    const matches = agentIdsByIdentity.get(assigneeKey) || [];
-    if (matches.length === 0) continue;
-
-    const normalizedTaskStatus = task.status.toLowerCase();
-    const isCompletedTask = ["done", "completed"].includes(normalizedTaskStatus);
-    const isFailedTask = ["failed", "cancelled", "canceled", "timeout", "killed"].includes(
-      normalizedTaskStatus
-    );
-
-    if (!isCompletedTask && !isFailedTask) continue;
-
-    for (const agentId of matches) {
-      const counted = terminalTasksCountByAgent.get(agentId) || 0;
-      if (counted >= MAX_TERMINAL_TASKS_PER_AGENT) continue;
-
-      terminalTasksCountByAgent.set(agentId, counted + 1);
-
-      const stats = ensureStats(agentId);
-      if (isCompletedTask) stats.completedTasks += 1;
-      else if (isFailedTask) stats.failedTasks += 1;
-    }
-  }
-
   return agents.map((agent) => {
     const stats = statsByAgent.get(agent.id) || {
       completedRuns: 0,
       failedRuns: 0,
       cancelledRuns: 0,
-      completedTasks: 0,
-      failedTasks: 0,
     };
 
     const healthScore = computeHealthScore(stats, recentRunsByAgent.get(agent.id));

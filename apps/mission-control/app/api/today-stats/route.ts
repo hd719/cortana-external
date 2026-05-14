@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { getTaskPrisma } from "@/lib/task-prisma";
+import { getCortanaPrisma } from "@/lib/cortana-prisma";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -11,8 +11,8 @@ const parseCount = (value: bigint | number | null | undefined) =>
   Number(typeof value === "bigint" ? value : value ?? 0);
 
 export async function GET() {
-  const taskPrisma = getTaskPrisma();
-  const taskClient = taskPrisma ?? prisma;
+  const cortanaPrisma = getCortanaPrisma();
+  const cortanaClient = cortanaPrisma ?? prisma;
 
   const today = new Date();
   const start = new Date(today);
@@ -32,15 +32,17 @@ export async function GET() {
     return parseCount(rows[0]?.count);
   };
 
-  const fetchTaskCount = async (db: typeof prisma) => {
-    const rows = await db.$queryRawUnsafe<CountRow[]>(
-      `SELECT COUNT(*)::bigint AS count
-       FROM cortana_tasks
-       WHERE completed_at >= $1 AND completed_at < $2`,
-      start,
-      end
-    );
-    return parseCount(rows[0]?.count);
+  const fetchCompletedRunCount = async () => {
+    const count = await prisma.run.count({
+      where: {
+        OR: [{ status: "completed" }, { externalStatus: "completed" }],
+        completedAt: {
+          gte: start,
+          lt: end,
+        },
+      },
+    });
+    return count;
   };
 
   const activeRunsNow = await prisma.run.count({
@@ -52,14 +54,14 @@ export async function GET() {
     },
   });
 
-  let source: "cortana" | "app" = taskPrisma ? "cortana" : "app";
+  let source: "cortana" | "app" = cortanaPrisma ? "cortana" : "app";
 
   try {
-    const [subagentsSpawnedToday, tasksCompletedToday, selfHealsToday] =
+    const [subagentsSpawnedToday, runsCompletedToday, selfHealsToday] =
       await Promise.all([
-        fetchEventCount(taskClient, "event_type ILIKE 'subagent%'"),
-        fetchTaskCount(taskClient),
-        fetchEventCount(taskClient, "event_type = 'auto_heal'"),
+        fetchEventCount(cortanaClient, "event_type ILIKE 'subagent%'"),
+        fetchCompletedRunCount(),
+        fetchEventCount(cortanaClient, "event_type = 'auto_heal'"),
       ]);
 
     return NextResponse.json(
@@ -68,7 +70,7 @@ export async function GET() {
         generatedAt: new Date().toISOString(),
         metrics: {
           subagentsSpawnedToday,
-          tasksCompletedToday,
+          runsCompletedToday,
           selfHealsToday,
           activeRunsNow,
         },
@@ -80,16 +82,16 @@ export async function GET() {
       }
     );
   } catch (error) {
-    if (!taskPrisma) {
+    if (!cortanaPrisma) {
       throw error;
     }
 
     source = "app";
 
-    const [subagentsSpawnedToday, tasksCompletedToday, selfHealsToday] =
+    const [subagentsSpawnedToday, runsCompletedToday, selfHealsToday] =
       await Promise.all([
         fetchEventCount(prisma, "event_type ILIKE 'subagent%'"),
-        fetchTaskCount(prisma),
+        fetchCompletedRunCount(),
         fetchEventCount(prisma, "event_type = 'auto_heal'"),
       ]);
 
@@ -99,7 +101,7 @@ export async function GET() {
         generatedAt: new Date().toISOString(),
         metrics: {
           subagentsSpawnedToday,
-          tasksCompletedToday,
+          runsCompletedToday,
           selfHealsToday,
           activeRunsNow,
         },

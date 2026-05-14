@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getHeartbeatStatePath } from "@/lib/runtime-paths";
-import { getTaskPrisma } from "@/lib/task-prisma";
+import { getCortanaPrisma } from "@/lib/cortana-prisma";
 
 type HeartbeatStatus = "healthy" | "stale" | "missed" | "unknown";
 
@@ -13,11 +13,6 @@ type HeartbeatFile = {
 
 type RunningSubagentRow = {
   session_id: string | null;
-};
-
-type TaskSummaryRow = {
-  in_progress_count: bigint | number;
-  completed_recent_count: bigint | number;
 };
 
 export function normalizeTimestamp(raw: unknown): number | null {
@@ -48,18 +43,13 @@ function heartbeatStatus(ageMs: number | null): HeartbeatStatus {
   return "missed";
 }
 
-function toNumber(value: bigint | number | null | undefined): number {
-  if (typeof value === "bigint") return Number(value);
-  return typeof value === "number" ? value : 0;
-}
-
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 export async function GET() {
-  const taskPrisma = getTaskPrisma() ?? prisma;
+  const cortanaPrisma = getCortanaPrisma() ?? prisma;
 
-  const [heartbeat, runningSubagents, taskSummary] = await Promise.all([
+  const [heartbeat, runningSubagents, completedRecently] = await Promise.all([
     (async () => {
       try {
         const raw = await readFile(getHeartbeatStatePath(), "utf8");
@@ -81,7 +71,7 @@ export async function GET() {
         };
       }
     })(),
-    taskPrisma.$queryRaw<RunningSubagentRow[]>`
+    cortanaPrisma.$queryRaw<RunningSubagentRow[]>`
       SELECT DISTINCT
         COALESCE(
           metadata->>'sessionId',
@@ -95,38 +85,21 @@ export async function GET() {
         AND timestamp >= NOW() - INTERVAL '45 minutes'
       LIMIT 12
     `,
-    taskPrisma.$queryRaw<TaskSummaryRow[]>`
-      SELECT
-        COUNT(*) FILTER (
-          WHERE status IN ('in_progress', 'running')
-            AND updated_at >= NOW() - INTERVAL '2 hours'
-        ) AS in_progress_count,
-        COUNT(*) FILTER (
-          WHERE status IN ('done', 'completed')
-            AND completed_at >= NOW() - INTERVAL '6 hours'
-        ) AS completed_recent_count
-      FROM cortana_tasks
-    `,
+    prisma.run.count({
+      where: {
+        OR: [{ status: "completed" }, { externalStatus: "completed" }],
+        completedAt: { gte: new Date(Date.now() - 6 * 60 * 60 * 1000) },
+      },
+    }),
   ]);
 
   const activeSubagents = runningSubagents.filter((row: RunningSubagentRow) => row.session_id).length;
-  const summary = taskSummary[0] ?? {
-    in_progress_count: 0,
-    completed_recent_count: 0,
-  };
-
-  const inProgressTasks = toNumber(summary.in_progress_count);
-  const completedRecently = toNumber(summary.completed_recent_count);
 
   const items: string[] = [];
 
-  if (inProgressTasks > 0) {
-    items.push(`Analyzing ${inProgressTasks} active task${inProgressTasks === 1 ? "" : "s"}...`);
-  }
-
   if (completedRecently > 0) {
     items.push(
-      `Reflecting on ${completedRecently} completed task${completedRecently === 1 ? "" : "s"}...`
+      `Reflecting on ${completedRecently} completed run${completedRecently === 1 ? "" : "s"}...`
     );
   }
 
@@ -156,7 +129,6 @@ export async function GET() {
       items,
       metrics: {
         activeSubagents,
-        inProgressTasks,
         completedRecently,
       },
       heartbeat,

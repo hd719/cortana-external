@@ -12,8 +12,8 @@ vi.mock("@/lib/prisma", () => ({
   },
 }));
 
-vi.mock("@/lib/task-prisma", () => ({
-  getTaskPrisma: vi.fn(() => null),
+vi.mock("@/lib/cortana-prisma", () => ({
+  getCortanaPrisma: vi.fn(() => null),
 }));
 
 const execSyncMock = vi.fn();

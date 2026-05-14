@@ -32,7 +32,7 @@ If you need the current live shape, read in this order:
 ## 1) What this repo contains
 
 - TypeScript Hono service (`@cortana/external-service`) exposing **Whoop + Tonal + Schwab market-data + streamer-backed quotes + Polymarket + Alpaca** APIs (loopback on port `3033`)
-- Mission Control dashboard app (`apps/mission-control`, live Trading Ops truth surfaces + task/agent telemetry)
+- Mission Control dashboard app (`apps/mission-control`, live Trading Ops truth surfaces plus agent, run, cron, and service telemetry)
 - CANSLIM backtester/advisor (`backtester/`)
 - Read-only Polymarket market-intel + quick-check overlay path for the backtester
 - Watchdog reliability service (`watchdog/`, launchd)
@@ -223,7 +223,7 @@ pnpm --filter @cortana/external-service typecheck
 ## B) Mission Control (`apps/mission-control`)
 
 ### What it does
-Next.js dashboard for agent/runs/events/task-board visibility and lifecycle telemetry.
+Next.js dashboard for agent/runs/events visibility and lifecycle telemetry.
 
 ### Stack
 - Next.js 16 + React 19 + TypeScript
@@ -310,8 +310,6 @@ Expected: JSON with `ok: true` and current heartbeat status.
 - Dashboard (`/`): system metrics + recent activity
 - Trading Ops (`/trading-ops`): latest-run truth, live tape, streamer/runtime health, watchlists, and Polymarket overlay
 - Council (`/council`): deliberation sessions, weighted votes, and decision rationale timeline
-- Approvals (`/approvals`): risk-tiered approval inbox with Telegram deep links into Mission Control plus resume/execution controls
-- Feedback (`/feedback`): correction/remediation dashboard with action tracking and recurrence visibility
 - Mjolnir (`/mjolnir`): recovery dashboard with Whoop recovery/sleep/strain, workout cards, 14-day trend bars, threshold alerts + alert history
 
 Trading Ops operator facts:
@@ -343,18 +341,17 @@ Resilience behavior:
 - If one member call fails, that failure is logged to the message trail and other members continue.
 - Final synthesis runs only once all members have recorded a vote.
 
-### Approval + feedback governance tables
-Mission Control governance state is persisted in dedicated tables:
+### Governance and durable follow-up
+Mission Control keeps only the current control-plane surfaces:
 
 - Council: `mc_council_sessions`, `mc_council_members`, `mc_council_messages`
-- Approvals: `mc_approval_requests`, `mc_approval_events`
-- Feedback: `mc_feedback_items`, `mc_feedback_actions`
+- Human-required actions: read-only runtime queue display
+- Durable operational follow-up: GitHub Issues in either `cortana-external` or `cortana`, depending on ownership
 
-These tables back `/council`, `/approvals`, and `/feedback` and support remediation history plus audit trails.
+The old Task Board, approvals inbox, feedback inbox, decision trace, and autonomy read-model pages were removed. Persistent runtime problems should become high-signal GitHub Issues instead of local Mission Control rows.
 
 - Agents (`/agents`)
 - Jobs/runs (`/jobs`)
-- Task board (`/task-board`) with paginated completed-task view
 - Cron Health dashboard via `/api/cron-health` (live OpenClaw-first state, smart fire status, sorted by last fire time)
 - Live infra status badges (Postgres + Vector DB) on dashboard cards
 - Live updates via SSE (`/api/live`)
@@ -564,11 +561,9 @@ launchctl list | grep -E "cortana.watchdog|cortana.fitness-service"
 - **TypeScript unit tests** for external service routes/health logic
 - **Earnings endpoint**: `GET /alpaca/earnings` with Alpaca news-only signal path
 - **Tonal self-heal**: auth token auto-reset/re-auth on `401/403`
-- **Task board pagination** for completed tasks
 - **Live status badges** for Postgres + Vector DB on dashboard
-- **Run reconciliation** upgrades: normalized lifecycle statuses and stale-run auto-close
+- **Run reconciliation** upgrades: normalized lifecycle statuses and stale-run handling
 - **UI polish**: mobile agents table fixes, decision timeline overflow fix, cleaner agent directory cards, theme-aware cron health styling
-- Post-merge task auto-close workflow (`.github/workflows/post-merge-task-autoclose.yml`)
 - Watchdog heartbeat classifier improvements and richer health checks
 - Continued CANSLIM alerting integration with scheduled OpenClaw jobs
 - Stock discovery helper tooling (`tools/stock-discovery/trend_sweep.sh`)

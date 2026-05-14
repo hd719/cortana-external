@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { getTaskPrisma } from "@/lib/task-prisma";
+import { getCortanaPrisma } from "@/lib/cortana-prisma";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -29,8 +29,8 @@ const normalizeSeverity = (severity?: string | null, eventType?: string) => {
 
 export async function GET() {
   try {
-    const taskPrisma = getTaskPrisma();
-    const client = taskPrisma ?? prisma;
+    const cortanaPrisma = getCortanaPrisma();
+    const client = cortanaPrisma ?? prisma;
 
     const fetchRows = async (db: typeof prisma) =>
       db.$queryRawUnsafe<ActivityFeedRow[]>(`
@@ -41,12 +41,12 @@ export async function GET() {
       `);
 
     let rows: ActivityFeedRow[] = [];
-    let source: "cortana" | "app" = taskPrisma ? "cortana" : "app";
+    let source: "cortana" | "app" = cortanaPrisma ? "cortana" : "app";
 
     try {
       rows = await fetchRows(client);
     } catch (error) {
-      if (!taskPrisma) throw error;
+      if (!cortanaPrisma) throw error;
       source = "app";
       rows = await fetchRows(prisma);
     }

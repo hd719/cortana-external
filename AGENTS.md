@@ -13,6 +13,7 @@ Use it when:
 
 This repo is the runtime body.
 If `cortana` is doctrine, routing, prompts, and command-brain policy, `cortana-external` is the live execution/runtime surface.
+Durable operational follow-up now belongs in GitHub Issues, not Mission Control Task Board rows. Do not reintroduce `/task-board`, `/api/task-board`, or local task mirror tables.
 
 ## 1. Primary Reality
 
@@ -63,7 +64,7 @@ If source and runtime disagree, inspect runtime first before claiming anything i
 Many tasks in `cortana-external` are really split-brain tasks.
 
 Use this ownership map:
-- Mission Control, external-service, backtester, watchdog, launchd scripts, operator-facing runtime surfaces: `cortana-external`
+- Mission Control, external-service, watchdog, launchd scripts, operator-facing runtime surfaces, and runtime GitHub issue follow-up: `cortana-external`
 - doctrine, routing, prompts, tracked config, identity, memory policy, command-layer docs: `cortana`
 - deployed/live runtime state, cron truth, queues, logs, gateway bindings, generated memory/wiki: `~/.openclaw`
 
