@@ -1346,25 +1346,31 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
             </div>
 
             <Panel icon={ShieldQuestion} eyebrow="Portfolio" title="Schwab portfolio" dense>
-              <div className="mb-2 flex justify-end">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={refreshPortfolio}
-                  disabled={loading}
-                  className="h-7 gap-1.5 px-2.5 font-mono text-[11px] uppercase tracking-wider"
-                >
-                  <RefreshCw className="h-3 w-3" />
-                  Refresh Schwab
-                </Button>
-              </div>
               {portfolioContext ? (
                 <div className="space-y-2">
                   <div className="flex items-center justify-between gap-2">
-                    <span className="text-xs font-semibold">{portfolioContext.status}</span>
-                    <span className="text-[10px] uppercase tracking-widest text-muted-foreground">
-                      {portfolioContext.source}{usingPortfolioFallback ? " · latest cache" : ""}
+                    <span
+                      className={cn(
+                        "rounded-md border px-2 py-0.5 text-[11px] font-bold uppercase tracking-wider",
+                        portfolioContext.status?.toLowerCase() === "available"
+                          ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                          : "border-amber-400/60 bg-amber-500/10 text-amber-600 dark:text-amber-400",
+                      )}
+                    >
+                      {String(portfolioContext.status ?? "").toUpperCase() || "UNKNOWN"}
+                      {usingPortfolioFallback ? " · CACHE" : ""}
                     </span>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={refreshPortfolio}
+                      disabled={loading}
+                      title="Refresh Schwab"
+                      aria-label="Refresh Schwab"
+                      className="h-7 w-7"
+                    >
+                      <RefreshCw className="h-3.5 w-3.5" />
+                    </Button>
                   </div>
                   <div className="grid gap-2 sm:grid-cols-2">
                     <Metric label={selectedSymbol} value={selectedPosition ? "owned" : "not owned"} />
@@ -1380,7 +1386,20 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
                   {portfolioContext.message ? <p className="font-sans text-xs text-muted-foreground">{portfolioContext.message}</p> : null}
                 </div>
               ) : (
-                <p className="text-xs text-muted-foreground">No portfolio context attached.</p>
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-xs text-muted-foreground">No portfolio context attached.</p>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={refreshPortfolio}
+                    disabled={loading}
+                    title="Refresh Schwab"
+                    aria-label="Refresh Schwab"
+                    className="h-7 w-7"
+                  >
+                    <RefreshCw className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
               )}
             </Panel>
           </section>
