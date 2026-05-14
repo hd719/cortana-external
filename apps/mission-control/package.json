@@ -8,8 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "db:generate": "prisma generate",
-    "db:migrate": "prisma migrate dev",
-    "db:deploy": "prisma migrate deploy",
+    "db:migrate": "tsx scripts/prisma-migrate.ts dev",
+    "db:deploy": "tsx scripts/prisma-migrate.ts deploy",
     "db:seed": "tsx prisma/seed.ts",
     "test": "NODE_ENV=test vitest run",
     "test:watch": "vitest"
