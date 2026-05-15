@@ -1011,7 +1011,7 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
         <p className="text-xs text-muted-foreground">No events loaded.</p>
       ) : (
         <div className="space-y-2">
-          <ol className="-mx-1 flex snap-x snap-mandatory gap-1.5 overflow-x-auto px-1 py-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <ol className="-mx-1 flex max-w-full snap-x snap-mandatory gap-1.5 overflow-x-auto px-1 py-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {events.map((event, index) => {
               const isActive = index === events.length - 1;
               const isPinned = pinnedStep === index;
@@ -1055,10 +1055,12 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
             })}
           </ol>
           {shownEvent ? (
-            <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 rounded-md border border-border/60 bg-muted/20 px-2.5 py-1.5 text-[11px]">
-              <span className="font-semibold capitalize">{formatEventTitle(shownEvent.event)}</span>
+            <div className="flex min-w-0 max-w-full flex-wrap items-baseline gap-x-2 gap-y-0.5 rounded-md border border-border/60 bg-muted/20 px-2.5 py-1.5 text-[11px]">
+              <span className="shrink-0 font-semibold capitalize">{formatEventTitle(shownEvent.event)}</span>
               {shownEvent.message ? (
-                <span className="text-muted-foreground">{String(shownEvent.message)}</span>
+                <span className="min-w-0 max-w-full flex-[1_1_12rem] break-words text-muted-foreground [overflow-wrap:anywhere]">
+                  {String(shownEvent.message)}
+                </span>
               ) : null}
               {shownEvent.timestamp ? (
                 <span className="w-full text-[10px] uppercase tracking-widest text-muted-foreground/80 sm:ml-auto sm:w-auto">

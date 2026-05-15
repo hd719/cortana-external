@@ -165,6 +165,30 @@ describe("MarketLabClient", () => {
     expect(screen.getByText("/tmp/codex-review-packet.md")).toBeInTheDocument();
   });
 
+  it("wraps long timeline event messages", async () => {
+    const longMessage =
+      "Codex review attached from /Users/hd/Developer/cortana-external/.cache/market_lab/prod/runs/mlab_20260515T204412Z_DIS/codex-review.md";
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+      if (String(url).includes("/events")) {
+        return Response.json({
+          status: "ok",
+          data: [{ event: "codex_review_attached", message: longMessage, timestamp: "2026-05-11T00:02:00Z" }],
+        });
+      }
+      if (String(url).includes("/api/market-lab/runs/") && !init?.method) {
+        return Response.json({ status: "ok", data: detail });
+      }
+      return Response.json({ status: "ok", data: { runs: [run] } });
+    }));
+
+    render(<MarketLabClient />);
+
+    const eventMessage = await screen.findByText(longMessage);
+    expect(eventMessage).toHaveClass("min-w-0");
+    expect(eventMessage).toHaveClass("break-words");
+    expect(eventMessage.className).toContain("[overflow-wrap:anywhere]");
+  });
+
   it("starts a run for the entered symbol", async () => {
     render(<MarketLabClient />);
     fireEvent.change(screen.getByLabelText("Symbol"), { target: { value: "msft" } });
