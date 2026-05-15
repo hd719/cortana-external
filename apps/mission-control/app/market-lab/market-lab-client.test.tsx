@@ -152,6 +152,7 @@ describe("MarketLabClient", () => {
     // Evidence: bullish/bearish row is hidden when both arrays empty (fixture has no points).
     expect(screen.queryByText("No bullish points.")).toBeNull();
     expect(screen.queryByText("No bearish points.")).toBeNull();
+    expect(screen.getByText("Codex review ready")).toBeInTheDocument();
     expect(screen.getByText("Codex says keep this blocked.")).toBeInTheDocument();
     expect(screen.getByText("Price action")).toBeInTheDocument();
     expect(screen.getByText("Price evidence is stale, so the review is blocked before analyst debate.")).toBeInTheDocument();
@@ -253,6 +254,7 @@ describe("MarketLabClient", () => {
     render(<MarketLabClient />);
 
     expect(await screen.findByText("Evidence gates passed. Codex second opinion has not been attached yet.")).toBeInTheDocument();
+    expect(await screen.findByText("Codex review not attached")).toBeInTheDocument();
     expect(screen.getByText("AVAILABLE · LATEST CACHE")).toBeInTheDocument();
     expect(screen.getByText("owned")).toBeInTheDocument();
     expect(screen.getByText("Using latest Schwab cache because this run saved an unavailable portfolio snapshot.")).toBeInTheDocument();

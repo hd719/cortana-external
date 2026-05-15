@@ -4,6 +4,7 @@ import path from "node:path";
 
 import {
   getCodexMirroredSessionDetail,
+  listCodexMirroredSessions,
   reconcileCodexMirrorSession,
   syncCodexMirrorThreadFromSession,
 } from "@/lib/codex-mirror";
@@ -470,6 +471,26 @@ function mergeSessionSummary(
   };
 }
 
+function mergeSessionSummaries(
+  fileBackedSessions: CodexSessionSummary[],
+  mirroredSessions: CodexSessionSummary[],
+) {
+  const byId = new Map<string, CodexSessionSummary>();
+
+  for (const session of fileBackedSessions) {
+    byId.set(session.sessionId, session);
+  }
+
+  for (const session of mirroredSessions) {
+    const merged = mergeSessionSummary(byId.get(session.sessionId), session);
+    if (merged) {
+      byId.set(session.sessionId, merged);
+    }
+  }
+
+  return [...byId.values()].sort((left, right) => (right.updatedAt ?? 0) - (left.updatedAt ?? 0));
+}
+
 function mergeSessionEvents(
   baseEvents: FileCodexSessionEvent[],
   overlayEvents: CodexSessionEvent[],
@@ -526,10 +547,12 @@ export async function listVisibleCodexSessions(limit = 20): Promise<VisibleCodex
     safeLimit,
     Math.min(DEFAULT_DISCOVERY_LIMIT, safeLimit * DEFAULT_VISIBLE_GROUP_SESSION_LIMIT),
   );
-  const [sessions, sidebarState] = await Promise.all([
+  const [fileBackedSessions, mirroredSessions, sidebarState] = await Promise.all([
     listCodexSessions({ limit: discoveryLimit }),
+    listCodexMirroredSessions(discoveryLimit),
     readCodexDesktopSidebarState(),
   ]);
+  const sessions = mergeSessionSummaries(fileBackedSessions, mirroredSessions);
 
   const visible = buildVisibleCodexSessionGroups(sessions, [], sidebarState, {
     limit: safeLimit,

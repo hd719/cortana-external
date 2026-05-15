@@ -397,6 +397,7 @@ describe("listVisibleCodexSessions", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     codexMirrorMocks.syncCodexMirrorThreadFromSession.mockResolvedValue(undefined);
+    codexMirrorMocks.listCodexMirroredSessions.mockResolvedValue([]);
     codexSessionMocks.listCodexSessions.mockResolvedValue([]);
     codexSessionMocks.listCodexSessionIndexSummariesById.mockResolvedValue([]);
   });
@@ -420,7 +421,7 @@ describe("listVisibleCodexSessions", () => {
     const result = await listVisibleCodexSessions(10);
 
     expect(codexSessionMocks.listCodexSessions).toHaveBeenCalledWith({ limit: 50 });
-    expect(codexMirrorMocks.listCodexMirroredSessions).not.toHaveBeenCalled();
+    expect(codexMirrorMocks.listCodexMirroredSessions).toHaveBeenCalledWith(50);
     expect(result.sessions).toEqual([
       {
         sessionId: "abc",
@@ -436,6 +437,34 @@ describe("listVisibleCodexSessions", () => {
     ]);
     expect(result.totalVisibleSessions).toBe(1);
     expect(codexMirrorMocks.syncCodexMirrorThreadFromSession).not.toHaveBeenCalled();
+  });
+
+  it("shows active mirrored sessions before the transcript index catches up", async () => {
+    const repoRoot = path.join(os.homedir(), "Developer", "cortana-external");
+    codexMirrorMocks.listCodexMirroredSessions.mockResolvedValueOnce([
+      {
+        sessionId: "active-stream",
+        threadName: "You are reviewing a Market Lab trading artifact",
+        updatedAt: 400,
+        cwd: repoRoot,
+        model: "gpt-5.5",
+        source: "exec",
+        cliVersion: "0.126.0",
+        lastMessagePreview: "Codex is reading the packet.",
+        transcriptPath: null,
+      },
+    ]);
+
+    const result = await listVisibleCodexSessions(10);
+
+    expect(result.sessions).toEqual([
+      expect.objectContaining({
+        sessionId: "active-stream",
+        cwd: repoRoot,
+        source: "exec",
+      }),
+    ]);
+    expect(result.totalVisibleSessions).toBe(1);
   });
 
   it("keeps older valid sessions when they are present in .codex discovery", async () => {

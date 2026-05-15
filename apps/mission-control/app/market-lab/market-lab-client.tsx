@@ -531,6 +531,13 @@ type PortfolioNotice = {
   tone: "success" | "warning";
 };
 
+type CodexReviewNoticeState = {
+  tone: "running" | "ready" | "missing";
+  title: string;
+  message: string;
+  sessionId?: string | null;
+};
+
 export function MarketLabClient({ embedded = false }: MarketLabClientProps = {}) {
   const [symbol, setSymbol] = useState("AAPL");
   const [runs, setRuns] = useState<RunSummary[]>([]);
@@ -864,6 +871,37 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
   const spySource = review?.spy_facts?.source;
   const codexState = structuredCodex?.verdict ?? review?.codex_review?.verdict ?? review?.codex_review?.status ?? "not requested";
   const codexOutputAttached = hasCodexReviewOutput(review);
+  const codexReviewNotice = useMemo<CodexReviewNoticeState | null>(() => {
+    const sessionId = codexStatusSessionId ?? review?.codex_review?.session_id ?? null;
+    if (codexStatus) {
+      const statusLooksReady = codexOutputAttached || codexStatus.toLowerCase().includes("attached");
+      return {
+        tone: statusLooksReady ? "ready" : "running",
+        title: statusLooksReady ? "Codex review ready" : "Codex is reviewing",
+        message: codexStatus,
+        sessionId,
+      };
+    }
+
+    if (codexOutputAttached) {
+      return {
+        tone: "ready",
+        title: "Codex review ready",
+        message: "Second opinion is attached below.",
+        sessionId,
+      };
+    }
+
+    if (review) {
+      return {
+        tone: "missing",
+        title: "Codex review not attached",
+        message: "Ask Codex to attach the second opinion before treating this run as fully reviewed.",
+      };
+    }
+
+    return null;
+  }, [codexOutputAttached, codexStatus, codexStatusSessionId, review]);
   const heroSummary =
     verdict === "trusted"
       ? codexOutputAttached
@@ -1083,6 +1121,8 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
         </section>
       ) : null}
 
+      {codexReviewNotice ? <CodexReviewNotice notice={codexReviewNotice} /> : null}
+
       {/* Debug artifacts — collapsed by default, close to the run controls */}
       <details className="group mt-3 rounded-lg border border-border/70 bg-card/60 px-4 py-3">
         <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
@@ -1114,20 +1154,6 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
 
       {error ? (
         <div className="mt-3 rounded-md border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-200">{error}</div>
-      ) : null}
-      {codexStatus ? (
-        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-md border border-sky-300 bg-sky-50 px-3 py-2 text-xs text-sky-700 dark:border-sky-900/50 dark:bg-sky-950/30 dark:text-sky-200">
-          <span>{codexStatus}</span>
-          {codexStatusSessionId ? (
-            <a
-              href={`/sessions?sessionId=${encodeURIComponent(codexStatusSessionId)}`}
-              className="inline-flex items-center gap-1 font-semibold underline-offset-2 hover:underline"
-            >
-              Open session
-              <ArrowUpRight className="h-3 w-3" />
-            </a>
-          ) : null}
-        </div>
       ) : null}
       {settlementStatus ? (
         <div className="mt-3 rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/30 dark:text-emerald-200">{settlementStatus}</div>
@@ -1751,6 +1777,39 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
         </div>
       </section>
 
+    </div>
+  );
+}
+
+function CodexReviewNotice({ notice }: { notice: CodexReviewNoticeState }) {
+  const toneClass =
+    notice.tone === "ready"
+      ? "border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-900/50 dark:bg-emerald-950/30 dark:text-emerald-200"
+      : notice.tone === "missing"
+        ? "border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200"
+        : "border-sky-300 bg-sky-50 text-sky-800 dark:border-sky-900/50 dark:bg-sky-950/30 dark:text-sky-200";
+  const Icon = notice.tone === "ready" ? CheckCircle2 : notice.tone === "missing" ? ShieldAlert : MessageSquareText;
+
+  return (
+    <div className={cn("mt-3 rounded-lg border px-3 py-2.5 text-xs", toneClass)}>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-2">
+          <Icon className="h-4 w-4 shrink-0" />
+          <div className="min-w-0">
+            <div className="font-semibold uppercase tracking-wider">{notice.title}</div>
+            <div className="mt-0.5 truncate font-sans text-[12px] opacity-85">{notice.message}</div>
+          </div>
+        </div>
+        {notice.sessionId ? (
+          <a
+            href={`/sessions?sessionId=${encodeURIComponent(notice.sessionId)}`}
+            className="inline-flex shrink-0 items-center gap-1 font-semibold underline-offset-2 hover:underline"
+          >
+            Open session
+            <ArrowUpRight className="h-3 w-3" />
+          </a>
+        ) : null}
+      </div>
     </div>
   );
 }
