@@ -161,6 +161,11 @@ describe("MarketLabClient", () => {
     expect(screen.getByText("Codex says keep this blocked.")).toBeInTheDocument();
     expect(screen.getByText("Price action")).toBeInTheDocument();
     expect(screen.getByText("Price evidence is stale, so the review is blocked before analyst debate.")).toBeInTheDocument();
+    expect(screen.getAllByText("fresh_price").length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole("button", { name: /collapse codex review/i }));
+    expect(screen.queryByText("Price action")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /expand codex review/i }));
+    expect(screen.getByText("Price action")).toBeInTheDocument();
     expect(screen.getByText("/tmp/review.json")).toBeInTheDocument();
     expect(screen.getByText("/tmp/codex-review-packet.md")).toBeInTheDocument();
   });

@@ -6,6 +6,8 @@ import {
   ArrowUpRight,
   Beaker,
   CheckCircle2,
+  ChevronDown,
+  ChevronUp,
   FileJson2,
   MessageSquareText,
   Play,
@@ -561,6 +563,7 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
   const [feedSrc, setFeedSrc] = useState<string>("all");
   const [feedSent, setFeedSent] = useState<"all" | "bull" | "bear" | "unlabeled">("all");
   const [codexExpanded, setCodexExpanded] = useState(false);
+  const [codexReviewExpanded, setCodexReviewExpanded] = useState(true);
   const [tapeOpen, setTapeOpen] = useState(false);
   const [expandedCheck, setExpandedCheck] = useState<string | null>(null);
   const codexRequestInFlightRef = useRef<string | null>(null);
@@ -1773,7 +1776,37 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
             </Panel>
           </section>
 
-          <Panel icon={MessageSquareText} eyebrow="Second opinion" title="Codex review" dense>
+          <Panel
+            icon={MessageSquareText}
+            eyebrow="Second opinion"
+            title="Codex review"
+            dense
+            action={
+              structuredCodex ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCodexReviewExpanded((value) => !value)}
+                  aria-expanded={codexReviewExpanded}
+                  aria-label={codexReviewExpanded ? "Collapse Codex review" : "Expand Codex review"}
+                  className="h-7 gap-1 px-2 text-[10px] uppercase tracking-wider"
+                >
+                  {codexReviewExpanded ? (
+                    <>
+                      Collapse
+                      <ChevronUp className="h-3 w-3" />
+                    </>
+                  ) : (
+                    <>
+                      Expand
+                      <ChevronDown className="h-3 w-3" />
+                    </>
+                  )}
+                </Button>
+              ) : null
+            }
+          >
             <div className="space-y-1.5">
               <div className="flex min-w-0 items-center justify-between gap-2">
                 <span className="shrink-0 text-[10px] uppercase tracking-widest text-muted-foreground">Status</span>
@@ -1798,15 +1831,17 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
                   </p>
                 </div>
               ) : null}
-              {structuredCodex ? (
+              {structuredCodex && codexReviewExpanded ? (
                 <div className="space-y-2 pt-2">
-                  <div className="rounded-md border border-border/60 bg-muted/20 px-2.5 py-2">
+                  <div className="min-w-0 rounded-md border border-border/60 bg-muted/20 px-2.5 py-2">
                     <div className="text-[10px] uppercase tracking-widest text-muted-foreground">Context quality</div>
-                    <p className="mt-1 font-sans text-xs leading-5 text-muted-foreground">{structuredCodex.context_quality}</p>
+                    <p className="mt-1 min-w-0 break-words font-sans text-xs leading-5 text-muted-foreground [overflow-wrap:anywhere]">
+                      {structuredCodex.context_quality}
+                    </p>
                     {structuredCodex.missing_context.length ? (
                       <div className="mt-2 flex flex-wrap gap-1">
                         {structuredCodex.missing_context.map((item) => (
-                          <span key={item} className="rounded border border-border/60 px-1.5 py-px text-[9px] uppercase tracking-wider text-muted-foreground">
+                          <span key={item} className="max-w-full break-words rounded border border-border/60 px-1.5 py-px text-[9px] uppercase tracking-wider text-muted-foreground [overflow-wrap:anywhere]">
                             {item}
                           </span>
                         ))}
@@ -1975,6 +2010,7 @@ function Panel({
   children,
   dense,
   className,
+  action,
 }: {
   icon: LucideIcon;
   eyebrow: string;
@@ -1982,15 +2018,19 @@ function Panel({
   children: React.ReactNode;
   dense?: boolean;
   className?: string;
+  action?: React.ReactNode;
 }) {
   return (
     <section className={cn("overflow-hidden rounded-lg border border-border/70 bg-card/60", className)}>
-      <header className="flex items-center gap-2 border-b border-border/50 px-3 py-2">
-        <Icon className="h-3.5 w-3.5 text-muted-foreground" />
-        <div className="leading-tight">
-          <div className="text-[10px] uppercase tracking-widest text-muted-foreground">{eyebrow}</div>
-          <div className="text-sm font-semibold">{title}</div>
+      <header className="flex min-w-0 items-center justify-between gap-2 border-b border-border/50 px-3 py-2">
+        <div className="flex min-w-0 items-center gap-2">
+          <Icon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+          <div className="min-w-0 leading-tight">
+            <div className="truncate text-[10px] uppercase tracking-widest text-muted-foreground">{eyebrow}</div>
+            <div className="truncate text-sm font-semibold">{title}</div>
+          </div>
         </div>
+        {action ? <div className="shrink-0">{action}</div> : null}
       </header>
       <div className={cn("px-3", dense ? "py-2" : "py-3")}>{children}</div>
     </section>
@@ -2160,17 +2200,24 @@ function SymbolHistory({
 
 function CodexRoleRow({ role }: { role: CodexRoleReview }) {
   return (
-    <div className="rounded-md border border-border/60 bg-background/40 px-2.5 py-1.5">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className="text-xs font-semibold">{roleLabel(role.role)}</span>
-        <span className="rounded border border-border/60 px-1.5 py-px text-[9px] uppercase tracking-wider text-muted-foreground">
+    <div className="min-w-0 rounded-md border border-border/60 bg-background/40 px-2.5 py-1.5">
+      <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
+        <span className="min-w-0 break-words text-xs font-semibold [overflow-wrap:anywhere]">{roleLabel(role.role)}</span>
+        <span className="shrink-0 rounded border border-border/60 px-1.5 py-px text-[9px] uppercase tracking-wider text-muted-foreground">
           {role.stance} · {asPercent(role.confidence)}
         </span>
       </div>
-      <p className="mt-1 font-sans text-xs leading-5 text-muted-foreground">{role.summary}</p>
+      <p className="mt-1 min-w-0 break-words font-sans text-xs leading-5 text-muted-foreground [overflow-wrap:anywhere]">
+        {role.summary}
+      </p>
       {role.missing_evidence.length ? (
-        <div className="mt-1 truncate text-[10px] text-muted-foreground/80">
-          missing: {role.missing_evidence.join(", ")}
+        <div className="mt-2 flex min-w-0 flex-wrap items-center gap-1">
+          <span className="text-[10px] lowercase text-muted-foreground/80">missing</span>
+          {role.missing_evidence.map((item) => (
+            <span key={item} className="max-w-full break-words rounded border border-border/60 px-1.5 py-px text-[9px] uppercase tracking-wider text-muted-foreground [overflow-wrap:anywhere]">
+              {item}
+            </span>
+          ))}
         </div>
       ) : null}
     </div>
