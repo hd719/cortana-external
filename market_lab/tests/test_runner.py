@@ -50,6 +50,29 @@ class FakeSentimentSources:
         )
 
 
+class FakeBearishSentimentSources:
+    def fetch(self, symbol: str) -> SentimentSnapshot:
+        return SentimentSnapshot(
+            status="available",
+            sources=[
+                SentimentSourceResult(
+                    source="stocktwits",
+                    status="available",
+                    fetched_at=datetime.now(UTC),
+                    sample_count=4,
+                    fetch_method="fixture",
+                    samples=[
+                        "Bearish: safety concerns keep weighing on the setup",
+                        "Bearish: valuation looks stretched",
+                        "Bearish: delivery risk is rising",
+                        "Bullish: momentum could rebound",
+                    ],
+                )
+            ],
+            notes=["fixture sentiment"],
+        )
+
+
 def test_runner_writes_artifact_and_events(tmp_path):
     store = MarketLabStore(tmp_path)
     artifact = ReviewRunner(store=store, market_data=FakeMarketData()).run("AAPL")
@@ -79,3 +102,16 @@ def test_runner_fetches_sentiment_and_records_timeline_steps(tmp_path):
     events = [event["event"] for event in store.read_events(artifact.run_id)]
     assert "sentiment_started" in events
     assert "sentiment_checked" in events
+
+
+def test_runner_downgrades_strong_bearish_sentiment_until_codex_review(tmp_path):
+    store = MarketLabStore(tmp_path)
+    artifact = ReviewRunner(
+        store=store,
+        market_data=FakeMarketDataMissingSentiment(),
+        sentiment_sources=FakeBearishSentimentSources(),
+    ).run("TSLA")
+
+    assert artifact.trust_verdict == TrustVerdict.UNCERTAIN
+    assert artifact.verdict_reasons == ["bearish_sentiment_needs_codex_review"]
+    assert any(check.code == "bearish_sentiment_needs_codex_review" for check in artifact.checks)

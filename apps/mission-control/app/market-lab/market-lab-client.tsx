@@ -228,6 +228,16 @@ const severityChip = (severity?: string, code?: string) => {
   return { label: (severity ?? "info").toUpperCase(), cls: "border-emerald-400/60 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" };
 };
 
+const isPortfolioAvailable = (context?: PortfolioContext | null) => context?.status?.toLowerCase() === "available";
+
+const hasCodexReviewOutput = (review?: RunDetail["review"]) =>
+  Boolean(
+    review?.codex_review?.structured ||
+      review?.codex_review?.summary ||
+      review?.codex_review?.output_path ||
+      review?.codex_review?.status === "attached",
+  );
+
 const asMoney = (value?: number) =>
   typeof value === "number" ? `$${value.toFixed(2)}` : "—";
 
@@ -659,10 +669,18 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
   const priceBasis = review?.price_facts?.price_basis;
   const spySource = review?.spy_facts?.source;
   const codexState = structuredCodex?.verdict ?? review?.codex_review?.verdict ?? review?.codex_review?.status ?? "not requested";
+  const codexOutputAttached = hasCodexReviewOutput(review);
+  const heroSummary =
+    verdict === "trusted"
+      ? codexOutputAttached
+        ? "Evidence gates passed. Codex second opinion is attached below."
+        : "Evidence gates passed. Codex second opinion has not been attached yet."
+      : review?.interpretation?.summary ?? "Select or run a review to see the trust decision.";
   const tokenBudget = review?.token_budget;
   const outcomeMemory = review?.outcome_memory;
-  const portfolioContext = review?.portfolio_context ?? latestPortfolio;
-  const usingPortfolioFallback = !review?.portfolio_context && Boolean(latestPortfolio);
+  const runPortfolioContext = review?.portfolio_context ?? null;
+  const usingPortfolioFallback = isPortfolioAvailable(latestPortfolio) && !isPortfolioAvailable(runPortfolioContext);
+  const portfolioContext = usingPortfolioFallback ? latestPortfolio : runPortfolioContext ?? latestPortfolio;
   const selectedPosition = portfolioContext?.positions?.find((position) => position.symbol === selectedSymbol) ?? null;
   const currentVsRun = percentMove(selectedPosition?.current_price, review?.price_facts?.price);
   const currentVsAverage = percentMove(selectedPosition?.current_price, selectedPosition?.average_price);
@@ -1078,7 +1096,7 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
                     <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", m.dot)} />
                     <span className="font-semibold">{run.symbol}</span>
                     <span className={cn("rounded px-1 py-px text-[9px] font-bold uppercase tracking-wider", m.chip)}>
-                      {run.trust_verdict ?? run.status}
+                      {run.trust_verdict ? m.label : run.status}
                     </span>
                     <span className="text-[10px] text-muted-foreground/80">{getAge(run.requested_at)}</span>
                   </button>
@@ -1117,7 +1135,7 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
                   onSelect={setSelectedRunId}
                 />
                 <p className="mt-2 max-w-2xl font-sans text-sm leading-6 text-foreground/80">
-                  {review?.interpretation?.summary ?? "Select or run a review to see the trust decision."}
+                  {heroSummary}
                 </p>
                 <div className="mt-3 flex flex-wrap items-center gap-2">
                   <Button
@@ -1423,7 +1441,7 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
                       )}
                     >
                       {String(portfolioContext.status ?? "").toUpperCase() || "UNKNOWN"}
-                      {usingPortfolioFallback ? " · CACHE" : ""}
+                      {usingPortfolioFallback ? " · LATEST CACHE" : ""}
                     </span>
                     <Button
                       variant="outline"
@@ -1448,7 +1466,13 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
                   {[...(portfolioContext.exposure_notes ?? []), ...(portfolioContext.overlap_notes ?? [])].slice(0, 3).map((note) => (
                     <p key={note} className="font-sans text-xs text-muted-foreground">{note}</p>
                   ))}
-                  {portfolioContext.message ? <p className="font-sans text-xs text-muted-foreground">{portfolioContext.message}</p> : null}
+                  {usingPortfolioFallback ? (
+                    <p className="font-sans text-xs text-muted-foreground">
+                      Using latest Schwab cache because this run saved an unavailable portfolio snapshot.
+                    </p>
+                  ) : portfolioContext.message ? (
+                    <p className="font-sans text-xs text-muted-foreground">{portfolioContext.message}</p>
+                  ) : null}
                 </div>
               ) : (
                 <div className="flex items-center justify-between gap-2">
@@ -1737,7 +1761,7 @@ function RunTapeRow({
         <span className="text-xs font-semibold">{run.symbol}</span>
       ) : (
         <span className={cn("rounded px-1 py-px text-[9px] font-bold uppercase tracking-wider", runMeta.chip)}>
-          {run.trust_verdict ?? run.status}
+          {run.trust_verdict ? runMeta.label : run.status}
         </span>
       )}
       <span className="ml-auto shrink-0 text-[10px] text-muted-foreground">{getAge(run.requested_at)}</span>

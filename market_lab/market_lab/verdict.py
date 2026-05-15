@@ -26,6 +26,10 @@ def decide_trust_verdict(
     if optional_errors:
         return TrustVerdict.UNCERTAIN, [f"{name}_error" for name in optional_errors]
 
+    caution_codes = {check.code for check in checks if check.severity == CheckSeverity.WARNING}
+    if "bearish_sentiment_needs_codex_review" in caution_codes:
+        return TrustVerdict.UNCERTAIN, ["bearish_sentiment_needs_codex_review"]
+
     if has_blockers(checks):
         return TrustVerdict.BLOCKED, ["blocked"]
     return TrustVerdict.TRUSTED, ["all_required_evidence_passed"]

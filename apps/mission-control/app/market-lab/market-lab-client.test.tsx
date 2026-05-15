@@ -125,7 +125,7 @@ describe("MarketLabClient", () => {
 
     await screen.findByText("Blocked because price data is stale.");
 
-    expect(screen.getAllByText("blocked").length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/blocked/i).length).toBeGreaterThan(0);
     // Timeline: active step pill carries aria-current="step" and the step's message renders in the caption beneath the strip.
     expect(document.querySelector('[aria-current="step"]')).not.toBeNull();
     expect(screen.getByText("Run done")).toBeInTheDocument();
@@ -173,6 +173,74 @@ describe("MarketLabClient", () => {
       .mocked(fetch)
       .mock.calls.filter(([url, init]) => String(url).includes("/codex-review") && init?.method === "POST");
     expect(codexPosts).toHaveLength(0);
+  });
+
+  it("uses latest Schwab cache when the run saved unavailable portfolio context", async () => {
+    const trustedRun = {
+      ...run,
+      trust_verdict: "trusted",
+      verdict_reasons: ["all_required_evidence_passed"],
+    };
+    const trustedDetail = {
+      ...detail,
+      run: trustedRun,
+      review: {
+        ...detail.review,
+        trust_verdict: "trusted",
+        interpretation: { summary: "Market Lab trusts this review for future alert consideration." },
+        codex_review: null,
+        portfolio_context: {
+          status: "unavailable",
+          source: "schwab",
+          generated_at: "2026-05-11T00:01:00Z",
+          accounts: [],
+          positions: [],
+          exposure_notes: [],
+          overlap_notes: [],
+          message: "No cached Schwab portfolio snapshot yet.",
+        },
+      },
+    };
+    const latestPortfolio = {
+      status: "available",
+      source: "schwab",
+      generated_at: "2026-05-11T00:03:00Z",
+      accounts: [{ account_hash: "acct-1", display_name: "Brokerage" }],
+      positions: [
+        {
+          symbol: "AAPL",
+          quantity: 25,
+          average_price: 100,
+          current_price: 125,
+          day_change: 1.25,
+          day_change_pct: 1,
+          market_value: 3125,
+        },
+      ],
+      exposure_notes: ["1 positions across 1 account(s)."],
+      overlap_notes: ["AAPL is already owned; current market value $3,125.00."],
+    };
+
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+      if (String(url).includes("/portfolio/latest")) {
+        return Response.json({ status: "ok", data: latestPortfolio });
+      }
+      if (String(url).includes("/events")) {
+        return Response.json({ status: "ok", data: [{ event: "done", message: "Run done", timestamp: "2026-05-11T00:02:00Z" }] });
+      }
+      if (String(url).includes("/api/market-lab/runs/") && !init?.method) {
+        return Response.json({ status: "ok", data: trustedDetail });
+      }
+      return Response.json({ status: "ok", data: { runs: [trustedRun] } });
+    }));
+
+    render(<MarketLabClient />);
+
+    expect(await screen.findByText("Evidence gates passed. Codex second opinion has not been attached yet.")).toBeInTheDocument();
+    expect(screen.getByText("AVAILABLE · LATEST CACHE")).toBeInTheDocument();
+    expect(screen.getByText("owned")).toBeInTheDocument();
+    expect(screen.getByText("Using latest Schwab cache because this run saved an unavailable portfolio snapshot.")).toBeInTheDocument();
+    expect(screen.queryByText("Market Lab trusts this review for future alert consideration.")).toBeNull();
   });
 
   it("reports early settlement in operator language", async () => {

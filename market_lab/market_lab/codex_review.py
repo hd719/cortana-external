@@ -84,7 +84,7 @@ Verdict guidance:
 
 - `blocked`: use only when a blocker check exists, required price evidence is unusable, or the artifact is internally inconsistent.
 - `trusted`: use when required live/latest price evidence is usable and the review is coherent, even if optional v0 news or sentiment evidence is missing.
-- `uncertain`: use when evidence is mixed, contradictory, materially thin beyond known optional v0 gaps, or needs a human decision.
+- `uncertain`: use when evidence is mixed, contradictory, materially thin beyond known optional v0 gaps, available sentiment is strongly bearish, or needs a human decision.
 - Deterministic blocker checks must force `blocked`.
 - Missing optional news/sentiment/fundamentals must be listed as missing context. Do not infer unavailable facts.
 - Do not claim Yahoo Finance, StockTwits, Reddit, or X/Twitter sentiment unless source data appears in this packet.

@@ -60,3 +60,20 @@ def test_optional_evidence_error_keeps_verdict_uncertain():
 
     assert verdict == TrustVerdict.UNCERTAIN
     assert reasons == ["news_error"]
+
+
+def test_bearish_sentiment_warning_keeps_verdict_uncertain():
+    verdict, reasons = decide_trust_verdict(
+        [
+            CheckResult(
+                code="bearish_sentiment_needs_codex_review",
+                severity=CheckSeverity.WARNING,
+                message="bearish sentiment",
+            )
+        ],
+        TradingAgentsReview(status="skipped", summary="not configured"),
+        OptionalEvidence(history_status="available", fundamentals_status="available", news_status="available", sentiment_status="available"),
+    )
+
+    assert verdict == TrustVerdict.UNCERTAIN
+    assert reasons == ["bearish_sentiment_needs_codex_review"]

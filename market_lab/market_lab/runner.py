@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -100,6 +101,7 @@ class ReviewRunner:
                 )
             checks.extend(evaluate_price_facts(price_facts))
             checks.extend(evaluate_optional_evidence(optional_evidence))
+            checks.extend(_sentiment_direction_checks(sentiment_snapshot))
             self.store.append_event(run.run_id, "facts_collected", "Market facts collected.")
         except MarketDataError as exc:
             message = str(exc)
@@ -222,7 +224,35 @@ class ReviewRunner:
 
 def _summary(verdict: str, reasons: list[str]) -> str:
     if verdict == "trusted":
-        return "Market Lab trusts this review for future alert consideration."
+        return "Evidence gates passed. Codex second opinion has not been attached yet."
     if verdict == "blocked":
         return f"Market Lab blocked this review: {', '.join(reasons)}."
     return f"Market Lab is uncertain: {', '.join(reasons)}."
+
+
+def _sentiment_direction_checks(sentiment_snapshot: SentimentSnapshot | None) -> list[CheckResult]:
+    if sentiment_snapshot is None:
+        return []
+
+    bull = 0
+    bear = 0
+    for source in sentiment_snapshot.sources:
+        for sample in source.samples:
+            match = re.match(r"^(bullish|bearish):\s*", sample, flags=re.IGNORECASE)
+            if not match:
+                continue
+            if match.group(1).lower() == "bullish":
+                bull += 1
+            else:
+                bear += 1
+
+    labeled = bull + bear
+    if labeled >= 3 and bear > bull and bear / labeled >= 0.7:
+        return [
+            CheckResult(
+                code="bearish_sentiment_needs_codex_review",
+                severity=CheckSeverity.WARNING,
+                message=f"Bearish labeled sentiment dominates sampled social posts ({bear}/{labeled}); attach Codex review before treating this as evidence-ready.",
+            )
+        ]
+    return []
