@@ -72,6 +72,15 @@ Default cache:
 - `MARKET_LAB_MONITOR_CHAT_ID`: override monitor Telegram chat id
 - `OPENCLAW_CONFIG_PATH`: override `~/.openclaw/openclaw.json`
 
+Mission Control sets `MARKET_LAB_ENV` from its launchd profile:
+
+| Mission Control profile | URL | Market Lab env |
+|---|---|---|
+| prod | `http://127.0.0.1:3000` / `http://100.120.198.12:3000` | `prod` |
+| dev | `http://127.0.0.1:3001` / `http://100.120.198.12:3001` | `dev` |
+
+Use explicit `--env prod` for real tracked runs. Use `--env dev`, `test`, or `ci` for throwaway QA.
+
 ## Codex-Assisted Reviews
 
 Every run writes `codex-review-packet.md`. Mission Control's `Ask Codex` button sends that packet through the existing Codex sessions route for the `cortana-external` workspace.

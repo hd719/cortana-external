@@ -241,29 +241,41 @@ pnpm dev
 ```
 
 Use `pnpm dev` or `pnpm start` only for a foreground/manual run.
-For the local launchd-managed app that the watchdog and Trading Ops smoke checks expect, use `./apps/mission-control/scripts/restart-mission-control.sh`.
+For launchd-managed runtime, use `./apps/mission-control/scripts/restart-mission-control.sh --env prod|dev`.
 
 ### Port/access
-- Local: `http://127.0.0.1:3000`
-- Tailscale: access via host tailnet IP (example observed in dev logs: `100.120.198.12:3000`)
+- Prod local: `http://127.0.0.1:3000`
+- Dev local: `http://127.0.0.1:3001`
+- Prod Tailscale: `http://100.120.198.12:3000`
+- Dev Tailscale: `http://100.120.198.12:3001`
+- Do not use `3002`; it is not a supported Mission Control environment. If it serves prod, remove the stale Tailscale Serve forward.
 - To verify current tailnet IP:
 ```bash
 tailscale ip -4
 ```
+
+Runtime profile mapping:
+
+| Profile | LaunchAgent | Port | Market Lab data |
+|---|---|---:|---|
+| `prod` | `com.cortana.mission-control` | `3000` | `.cache/market_lab/prod` |
+| `dev` | `com.cortana.mission-control-dev` | `3001` | `.cache/market_lab/dev` |
 
 ### Deploy / refresh checklist after UI merges (Mission Control)
 Use this whenever a PR touching `apps/mission-control` is merged and the UI still looks stale.
 
 Quick path:
 ```bash
-./apps/mission-control/scripts/restart-mission-control.sh
+./apps/mission-control/scripts/restart-mission-control.sh --env prod
+./apps/mission-control/scripts/restart-mission-control.sh --env dev
 ```
 
 That restart script rewrites the LaunchAgent to a direct `next start` entrypoint before every relaunch, then uses `launchctl kickstart -k` on the updated agent. That prevents `pnpm start` wrapper leaks from leaving stale Prisma pools behind.
 
 Skip the rebuild when you only want to bounce the already-built app:
 ```bash
-./apps/mission-control/scripts/restart-mission-control.sh --skip-build
+./apps/mission-control/scripts/restart-mission-control.sh --env prod --skip-build
+./apps/mission-control/scripts/restart-mission-control.sh --env dev --skip-build
 ```
 
 1. **Update code to latest main**
@@ -277,8 +289,11 @@ git pull --ff-only origin main
 2. **Stop old Mission Control processes (including orphans)**
 ```bash
 launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/com.cortana.mission-control.plist 2>/dev/null || true
+launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/com.cortana.mission-control-dev.plist 2>/dev/null || true
 launchctl remove com.cortana.mission-control 2>/dev/null || true
+launchctl remove com.cortana.mission-control-dev 2>/dev/null || true
 /usr/sbin/lsof -tiTCP:3000 -sTCP:LISTEN | xargs -r kill
+/usr/sbin/lsof -tiTCP:3001 -sTCP:LISTEN | xargs -r kill
 pkill -f 'cortana-external/apps/mission-control' || true
 pkill -f 'next-server' || true
 ```
@@ -293,18 +308,21 @@ pnpm build
 ```bash
 launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.cortana.mission-control.plist 2>/dev/null || true
 launchctl kickstart -k gui/$(id -u)/com.cortana.mission-control
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.cortana.mission-control-dev.plist 2>/dev/null || true
+launchctl kickstart -k gui/$(id -u)/com.cortana.mission-control-dev
 ```
 
 5. **Verify health**
 ```bash
 curl -sS http://127.0.0.1:3000/api/heartbeat-status
+curl -sS http://127.0.0.1:3001/api/heartbeat-status
 ```
 Expected: JSON with `ok: true` and current heartbeat status.
 
 6. **Browser refresh**
 - Hard refresh (`Cmd+Shift+R`) after restart.
 
-> Note: Tailscale Serve usually is **not** the root cause for stale UI data. It proxies whatever local app process on `127.0.0.1:3000` is currently serving.
+> Note: Tailscale Serve should not expose Mission Control on `3002`. If `100.120.198.12:3002` serves prod, check `tailscale serve status` and remove the stale TCP forward with `tailscale serve --yes --bg --tcp=3002 off`.
 
 ### What it shows
 - Dashboard (`/`): system metrics + recent activity
@@ -471,7 +489,8 @@ curl -s http://127.0.0.1:3033/tonal/health
 ## Mission Control
 ```bash
 # preferred local production-style restart
-./apps/mission-control/scripts/restart-mission-control.sh
+./apps/mission-control/scripts/restart-mission-control.sh --env prod
+./apps/mission-control/scripts/restart-mission-control.sh --env dev
 
 # foreground local dev only
 cd apps/mission-control
@@ -511,6 +530,8 @@ uv run python canslim_alert.py --limit 8 --min-score 6
 ## Mission Control `.env.local`
 - `DATABASE_URL` (typically `mission_control` DB)
 - `CORTANA_DATABASE_URL` (typically `cortana` DB)
+- `MISSION_CONTROL_RUNTIME_ENV` is set by the launchd profile: `prod` on port `3000`, `dev` on port `3001`
+- `MARKET_LAB_ENV` is set by the launchd profile: `prod` uses `.cache/market_lab/prod`, `dev` uses `.cache/market_lab/dev`
 - optional path overrides if local repos live somewhere else:
   - `CORTANA_SOURCE_REPO`
   - `DOCS_PATH`
@@ -540,6 +561,7 @@ curl -s http://127.0.0.1:3033/market-data/ops
 curl -s http://127.0.0.1:3000/api/dashboard | head
 curl -s http://127.0.0.1:3000/api/heartbeat-status
 curl -s http://127.0.0.1:3000/api/trading-ops/live | head
+curl -s http://127.0.0.1:3001/api/heartbeat-status
 
 # Watchdog
 tail -n 30 ~/Developer/cortana-external/watchdog/logs/watchdog.log

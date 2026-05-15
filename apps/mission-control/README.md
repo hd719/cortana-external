@@ -44,11 +44,27 @@ pnpm dev
 # open http://localhost:3000
 ```
 
-Preferred local operator flow:
+Preferred launchd-managed operator flow:
 ```bash
-./scripts/restart-mission-control.sh
+./scripts/restart-mission-control.sh --env prod
+./scripts/restart-mission-control.sh --env dev
 ```
 This runs Mission Control through the launchd-managed local app path instead of a transient dev server.
+
+## Runtime environments
+
+Mission Control has two local launchd profiles:
+
+| Profile | URL | LaunchAgent | Env |
+|---|---|---|---|
+| `prod` | `http://127.0.0.1:3000` / `http://100.120.198.12:3000` | `com.cortana.mission-control` | `PORT=3000`, `MISSION_CONTROL_RUNTIME_ENV=prod`, `MARKET_LAB_ENV=prod` |
+| `dev` | `http://127.0.0.1:3001` / `http://100.120.198.12:3001` | `com.cortana.mission-control-dev` | `PORT=3001`, `MISSION_CONTROL_RUNTIME_ENV=dev`, `MARKET_LAB_ENV=dev` |
+
+`3002` is not a valid Mission Control environment. If `100.120.198.12:3002` serves prod, remove the stale Tailscale Serve TCP forward:
+
+```bash
+tailscale serve --yes --bg --tcp=3002 off
+```
 
 ## Scripts
 - `pnpm dev` — start Next.js dev server
@@ -82,6 +98,7 @@ That path rewrites the LaunchAgent to a direct `next start` entrypoint, clears s
 
 ## Browser access model
 - Mission Control browser access is private-network based: `localhost` and Tailscale operator sessions are first-class supported paths.
+- Prod is served on `3000`; dev is served on `3001`.
 - Browser pages and their same-origin API reads do **not** require `MISSION_CONTROL_API_TOKEN`.
 - Browser mutations are protected by same-origin checks instead of token-cookie bootstrap.
 - `MISSION_CONTROL_API_TOKEN` is only for machine ingress such as local producers, webhooks, and automation jobs.
@@ -198,6 +215,7 @@ pnpm exec tsx scripts/install-launch-agent.ts
 
 Verification:
 - `curl http://127.0.0.1:3000/api/heartbeat-status`
+- `curl http://127.0.0.1:3001/api/heartbeat-status`
 
 
 ## Council integration notes

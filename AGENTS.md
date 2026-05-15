@@ -26,12 +26,17 @@ Primary machine assumptions:
 - Sibling command-brain repo: `/Users/hd/Developer/cortana`
 - Live runtime/state path: `/Users/hd/.openclaw`
 - External-service loopback: `http://127.0.0.1:3033`
-- Mission Control loopback: `http://127.0.0.1:3000`
+- Mission Control prod loopback: `http://127.0.0.1:3000`
+- Mission Control dev loopback: `http://127.0.0.1:3001`
 
 Mac mini access defaults:
 - Tailscale IP: `100.120.198.12`
 - SSH config label from Hamel's laptop: `Mac-Mini`
-- Tailscale browser path often used for Mission Control: `https://hs-mac-mini.taild96d14.ts.net`
+- Tailscale browser paths:
+  - prod: `http://100.120.198.12:3000`
+  - dev: `http://100.120.198.12:3001`
+  - do not use `3002`; it is not a supported Mission Control environment
+  - host HTTPS path often used for prod: `https://hs-mac-mini.taild96d14.ts.net`
 
 If you begin on another machine:
 1. SSH to the Mac mini first.
@@ -125,16 +130,25 @@ Important repo-level facts:
 
 ## 6. Mission Control Reality
 
-Mission Control is a Next.js operator dashboard at:
+Mission Control is a Next.js operator dashboard with two launchd-managed profiles:
 - source: `/Users/hd/Developer/cortana-external/apps/mission-control`
-- local URL: `http://127.0.0.1:3000`
-- health endpoint: `http://127.0.0.1:3000/api/heartbeat-status`
-- launchd label: `com.cortana.mission-control`
+- prod URL: `http://127.0.0.1:3000`
+- dev URL: `http://127.0.0.1:3001`
+- prod health endpoint: `http://127.0.0.1:3000/api/heartbeat-status`
+- dev health endpoint: `http://127.0.0.1:3001/api/heartbeat-status`
+- prod launchd label: `com.cortana.mission-control`
+- dev launchd label: `com.cortana.mission-control-dev`
+
+Environment mapping:
+- prod: `PORT=3000`, `MISSION_CONTROL_RUNTIME_ENV=prod`, `MARKET_LAB_ENV=prod`
+- dev: `PORT=3001`, `MISSION_CONTROL_RUNTIME_ENV=dev`, `MARKET_LAB_ENV=dev`
+- no `3002` Mission Control profile exists; if `100.120.198.12:3002` serves anything, inspect stale Tailscale Serve config.
 
 Preferred restart flow:
 ```bash
 cd /Users/hd/Developer/cortana-external
-bash apps/mission-control/scripts/restart-mission-control.sh
+bash apps/mission-control/scripts/restart-mission-control.sh --env prod
+bash apps/mission-control/scripts/restart-mission-control.sh --env dev
 ```
 
 What the restart script does:
@@ -150,11 +164,15 @@ Do not treat `pnpm dev` as equivalent to the launchd-managed runtime if the user
 Mission Control-specific debugging:
 1. check health:
    - `curl -sS http://127.0.0.1:3000/api/heartbeat-status`
+   - `curl -sS http://127.0.0.1:3001/api/heartbeat-status`
 2. if unhealthy, run the restart script above
 3. inspect launchd state:
    - `launchctl print gui/$(id -u)/com.cortana.mission-control`
+   - `launchctl print gui/$(id -u)/com.cortana.mission-control-dev`
 4. inspect listeners:
    - `lsof -iTCP:3000 -sTCP:LISTEN`
+   - `lsof -iTCP:3001 -sTCP:LISTEN`
+   - `lsof -iTCP:3002 -sTCP:LISTEN` should be empty
 5. if the app differs from repo expectations, confirm `.env.local` and build output
 
 Useful build/test commands:
