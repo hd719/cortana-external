@@ -2,7 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { POST } from "./route";
+import { GET, POST } from "./route";
 import { getCodexRun } from "@/lib/codex-runs";
 import { createCodexSessionRun } from "@/lib/codex-session-workspace";
 import { getMarketLabCodexPacket, getMarketLabRun } from "@/lib/market-lab";
@@ -94,6 +94,42 @@ describe("Market Lab Codex review route", () => {
     expect(createCodexSessionRun).toHaveBeenCalledTimes(1);
     expect(body.data).toMatchObject({
       status: "running",
+      streamId: "stream-1",
+      packet_path: path.join(tempDir, "codex-review-packet.md"),
+      reused: true,
+    });
+  });
+
+  it("reuses a persisted Codex review request after in-memory stream state is gone", async () => {
+    const runId = "mlab_route_persisted_AAPL";
+    const first = await POST(sameOriginPost(runId), { params: Promise.resolve({ runId }) });
+    expect(first.status).toBe(202);
+
+    vi.mocked(getCodexRun).mockReturnValue(null);
+
+    const second = await POST(sameOriginPost(runId), { params: Promise.resolve({ runId }) });
+    const body = await second.json();
+
+    expect(second.status).toBe(202);
+    expect(createCodexSessionRun).toHaveBeenCalledTimes(1);
+    expect(body.data).toMatchObject({
+      status: "already_requested",
+      streamId: "stream-1",
+      packet_path: path.join(tempDir, "codex-review-packet.md"),
+      reused: true,
+    });
+  });
+
+  it("reports persisted Codex review request state on refresh", async () => {
+    const runId = "mlab_route_state_AAPL";
+    await POST(sameOriginPost(runId), { params: Promise.resolve({ runId }) });
+
+    const response = await GET(sameOriginPost(runId), { params: Promise.resolve({ runId }) });
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.data).toMatchObject({
+      status: "already_requested",
       streamId: "stream-1",
       packet_path: path.join(tempDir, "codex-review-packet.md"),
       reused: true,

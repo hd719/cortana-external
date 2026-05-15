@@ -107,6 +107,11 @@ describe("MarketLabClient", () => {
           { status: 202 },
         );
       }
+      if (String(url).includes("/codex-review") && !init?.method) {
+        return Response.json(
+          { status: "ok", data: { status: "not_requested", packet_path: "/tmp/codex-review-packet.md" } },
+        );
+      }
       if (String(url).includes("/api/codex/streams/stream-1")) {
         const encoder = new TextEncoder();
         const stream = new ReadableStream({
@@ -158,6 +163,30 @@ describe("MarketLabClient", () => {
     expect(screen.getByText("Price evidence is stale, so the review is blocked before analyst debate.")).toBeInTheDocument();
     expect(screen.getByText("/tmp/review.json")).toBeInTheDocument();
     expect(screen.getByText("/tmp/codex-review-packet.md")).toBeInTheDocument();
+  });
+
+  it("wraps long timeline event messages", async () => {
+    const longMessage =
+      "Codex review attached from /Users/hd/Developer/cortana-external/.cache/market_lab/prod/runs/mlab_20260515T204412Z_DIS/codex-review.md";
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+      if (String(url).includes("/events")) {
+        return Response.json({
+          status: "ok",
+          data: [{ event: "codex_review_attached", message: longMessage, timestamp: "2026-05-11T00:02:00Z" }],
+        });
+      }
+      if (String(url).includes("/api/market-lab/runs/") && !init?.method) {
+        return Response.json({ status: "ok", data: detail });
+      }
+      return Response.json({ status: "ok", data: { runs: [run] } });
+    }));
+
+    render(<MarketLabClient />);
+
+    const eventMessage = await screen.findByText(longMessage);
+    expect(eventMessage).toHaveClass("min-w-0");
+    expect(eventMessage).toHaveClass("break-words");
+    expect(eventMessage.className).toContain("[overflow-wrap:anywhere]");
   });
 
   it("starts a run for the entered symbol", async () => {
@@ -286,10 +315,68 @@ describe("MarketLabClient", () => {
   });
 
   it("starts a Codex-assisted review for the selected run", async () => {
+    const pendingRun = {
+      ...run,
+      trust_verdict: "trusted",
+      verdict_reasons: ["all_required_evidence_passed"],
+    };
+    const pendingDetail = {
+      ...detail,
+      run: pendingRun,
+      review: {
+        ...detail.review,
+        trust_verdict: "trusted",
+        verdict_reasons: ["all_required_evidence_passed"],
+        interpretation: { summary: "Market Lab trusts this review for future alert consideration." },
+        codex_review: null,
+        artifact_paths: {
+          ...detail.review.artifact_paths,
+          codex_review: null,
+        },
+        checks: [{ code: "price_present", severity: "info", message: "Fresh price present." }],
+      },
+    };
+    let streamStarted = false;
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+      if (String(url).includes("/codex-review") && init?.method === "POST") {
+        return Response.json(
+          { status: "ok", data: { status: "running", streamId: "stream-1", packet_path: "/tmp/codex-review-packet.md" } },
+          { status: 202 },
+        );
+      }
+      if (String(url).includes("/codex-review") && !init?.method) {
+        return Response.json({ status: "ok", data: { status: "not_requested", packet_path: "/tmp/codex-review-packet.md" } });
+      }
+      if (String(url).includes("/api/codex/streams/stream-1")) {
+        streamStarted = true;
+        const encoder = new TextEncoder();
+        const stream = new ReadableStream({
+          start(controller) {
+            const send = (event: string, data: unknown) => {
+              controller.enqueue(encoder.encode(`event: ${event}\n`));
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
+            };
+            send("lifecycle", { codexSessionId: "session-1" });
+            send("codex_event", { type: "item.completed", item: { type: "agent_message" } });
+            send("done", { session: { sessionId: "session-1" } });
+            controller.close();
+          },
+        });
+        return new Response(stream, { status: 200, headers: { "content-type": "text/event-stream" } });
+      }
+      if (String(url).includes("/events")) {
+        return Response.json({ status: "ok", data: [{ event: "done", message: "Run done", timestamp: "2026-05-11T00:02:00Z" }] });
+      }
+      if (String(url).includes("/api/market-lab/runs/") && !init?.method) {
+        return Response.json({ status: "ok", data: streamStarted ? detail : pendingDetail });
+      }
+      return Response.json({ status: "ok", data: { runs: [pendingRun] } });
+    }));
+
     render(<MarketLabClient />);
 
-    await screen.findByText("Blocked because price data is stale.");
     const askButton = await screen.findByRole("button", { name: /ask codex/i });
+    await waitFor(() => expect(askButton).not.toBeDisabled());
     fireEvent.click(askButton);
     fireEvent.click(askButton);
 
@@ -307,15 +394,92 @@ describe("MarketLabClient", () => {
     expect(screen.getByRole("link", { name: /open session/i })).toHaveAttribute("href", "/sessions?sessionId=session-1");
   });
 
+  it("keeps Ask Codex disabled after refresh when a review was already requested", async () => {
+    const pendingRun = {
+      ...run,
+      trust_verdict: "trusted",
+      verdict_reasons: ["all_required_evidence_passed"],
+    };
+    const pendingDetail = {
+      ...detail,
+      run: pendingRun,
+      review: {
+        ...detail.review,
+        trust_verdict: "trusted",
+        verdict_reasons: ["all_required_evidence_passed"],
+        interpretation: { summary: "Market Lab trusts this review for future alert consideration." },
+        codex_review: null,
+        artifact_paths: {
+          ...detail.review.artifact_paths,
+          codex_review: null,
+        },
+        checks: [{ code: "price_present", severity: "info", message: "Fresh price present." }],
+      },
+    };
+
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+      if (String(url).includes("/codex-review") && init?.method === "POST") {
+        return Response.json({ status: "error", error: "duplicate codex request" }, { status: 409 });
+      }
+      if (String(url).includes("/codex-review") && !init?.method) {
+        return Response.json({
+          status: "ok",
+          data: {
+            status: "already_requested",
+            streamId: "stream-existing",
+            sessionId: "session-existing",
+            packet_path: "/tmp/codex-review-packet.md",
+            reused: true,
+          },
+        });
+      }
+      if (String(url).includes("/events")) {
+        return Response.json({ status: "ok", data: [{ event: "done", message: "Run done", timestamp: "2026-05-11T00:02:00Z" }] });
+      }
+      if (String(url).includes("/api/market-lab/runs/") && !init?.method) {
+        return Response.json({ status: "ok", data: pendingDetail });
+      }
+      return Response.json({ status: "ok", data: { runs: [pendingRun] } });
+    }));
+
+    render(<MarketLabClient />);
+
+    expect(await screen.findByText("Codex review was already requested. Waiting for Codex to attach the review artifact.")).toBeInTheDocument();
+    const askButton = screen.getByRole("button", { name: /ask codex/i });
+    expect(askButton).toBeDisabled();
+    fireEvent.click(askButton);
+    expect(screen.getByRole("link", { name: /open session/i })).toHaveAttribute("href", "/sessions?sessionId=session-existing");
+    const codexPosts = vi
+      .mocked(fetch)
+      .mock.calls.filter(([url, init]) => String(url).includes("/codex-review") && init?.method === "POST");
+    expect(codexPosts).toHaveLength(0);
+  });
+
   it("refreshes the review artifact when the Codex transcript is not indexed", async () => {
+    const pendingDetail = {
+      ...detail,
+      review: {
+        ...detail.review,
+        codex_review: null,
+        artifact_paths: {
+          ...detail.review.artifact_paths,
+          codex_review: null,
+        },
+      },
+    };
+    let streamStarted = false;
     vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
       if (String(url).includes("/codex-review") && init?.method === "POST") {
         return Response.json(
-          { status: "ok", data: { streamId: "stream-error", packet_path: "/tmp/codex-review-packet.md" } },
+          { status: "ok", data: { status: "running", streamId: "stream-error", packet_path: "/tmp/codex-review-packet.md" } },
           { status: 202 },
         );
       }
+      if (String(url).includes("/codex-review") && !init?.method) {
+        return Response.json({ status: "ok", data: { status: "not_requested", packet_path: "/tmp/codex-review-packet.md" } });
+      }
       if (String(url).includes("/api/codex/streams/stream-error")) {
+        streamStarted = true;
         const encoder = new TextEncoder();
         const stream = new ReadableStream({
           start(controller) {
@@ -330,7 +494,7 @@ describe("MarketLabClient", () => {
         return Response.json({ status: "ok", data: [{ event: "codex_review_attached", message: "Codex review attached", timestamp: "2026-05-11T00:03:00Z" }] });
       }
       if (String(url).includes("/api/market-lab/runs/") && !init?.method) {
-        return Response.json({ status: "ok", data: detail });
+        return Response.json({ status: "ok", data: streamStarted ? detail : pendingDetail });
       }
       return Response.json({ status: "ok", data: { runs: [run] } });
     }));

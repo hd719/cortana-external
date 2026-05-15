@@ -16,12 +16,24 @@ type CodexReviewStartResult =
       status: "running";
       streamId: string;
       packet_path: string;
+      sessionId?: string | null;
+      reused?: boolean;
+    }
+  | {
+      status: "already_requested";
+      streamId: string;
+      packet_path: string;
+      sessionId?: string | null;
       reused?: boolean;
     }
   | {
       status: "already_attached";
       packet_path: string | null;
       codex_review: unknown;
+    }
+  | {
+      status: "not_requested";
+      packet_path: string | null;
     };
 
 type CodexReviewRequestMarker = {
@@ -29,6 +41,7 @@ type CodexReviewRequestMarker = {
   environment: string;
   run_id: string;
   stream_id: string;
+  session_id?: string | null;
   packet_path: string;
   status: "running";
   created_at: string;
@@ -78,6 +91,7 @@ async function writeCodexReviewMarker(runId: string, streamId: string, packetPat
     environment: resolveMarketLabEnvironment(),
     run_id: runId,
     stream_id: streamId,
+    session_id: null,
     packet_path: packetPath,
     status: "running",
     created_at: now,
@@ -99,12 +113,61 @@ function getActiveCodexReview(key: string): CodexReviewStartResult | null {
       status: "running",
       streamId: activeReview.streamId,
       packet_path: activeReview.packetPath,
+      sessionId: activeRun.sessionId,
       reused: true,
     };
   }
 
   activeCodexReviews.delete(key);
   return null;
+}
+
+async function getPersistedCodexReviewRequest(packetPath: string | null | undefined) {
+  const marker = await readCodexReviewMarker(packetPath);
+  if (!marker) return null;
+
+  const markerRun = getCodexRun(marker.stream_id);
+  if (markerRun?.status === "running") {
+    return {
+      status: "running",
+      streamId: marker.stream_id,
+      packet_path: marker.packet_path,
+      sessionId: markerRun.sessionId ?? marker.session_id ?? null,
+      reused: true,
+    } satisfies CodexReviewStartResult;
+  }
+
+  return {
+    status: "already_requested",
+    streamId: marker.stream_id,
+    packet_path: marker.packet_path,
+    sessionId: markerRun?.sessionId ?? marker.session_id ?? null,
+    reused: true,
+  } satisfies CodexReviewStartResult;
+}
+
+async function getCodexReviewState(runId: string): Promise<CodexReviewStartResult> {
+  const existing = await getMarketLabRun(runId);
+  const attached = existing.review?.codex_review?.status === "attached" ? existing.review.codex_review : null;
+  const existingPacketPath = existing.review?.artifact_paths?.codex_packet ?? null;
+  if (attached) {
+    return {
+      status: "already_attached",
+      packet_path: existingPacketPath,
+      codex_review: attached,
+    };
+  }
+
+  const active = getActiveCodexReview(codexReviewKey(runId));
+  if (active) return active;
+
+  const persisted = await getPersistedCodexReviewRequest(existingPacketPath);
+  if (persisted) return persisted;
+
+  return {
+    status: "not_requested",
+    packet_path: existingPacketPath,
+  };
 }
 
 async function startOrReuseCodexReview(runId: string): Promise<CodexReviewStartResult> {
@@ -116,35 +179,15 @@ async function startOrReuseCodexReview(runId: string): Promise<CodexReviewStartR
   }
 
   const startPromise = (async () => {
-    const existing = await getMarketLabRun(runId);
-    const attached = existing.review?.codex_review?.status === "attached" ? existing.review.codex_review : null;
-    const existingPacketPath = existing.review?.artifact_paths?.codex_packet ?? null;
-    if (attached) {
-      return {
-        status: "already_attached",
-        packet_path: existingPacketPath,
-        codex_review: attached,
-      } satisfies CodexReviewStartResult;
-    }
-
-    const active = getActiveCodexReview(key);
-    if (active) return active;
-
-    const marker = await readCodexReviewMarker(existingPacketPath);
-    const markerRun = marker ? getCodexRun(marker.stream_id) : null;
-    if (marker && markerRun?.status === "running") {
-      activeCodexReviews.set(key, { streamId: marker.stream_id, packetPath: marker.packet_path });
-      return {
-        status: "running",
-        streamId: marker.stream_id,
-        packet_path: marker.packet_path,
-        reused: true,
-      } satisfies CodexReviewStartResult;
-    }
+    const existingState = await getCodexReviewState(runId);
+    if (existingState.status !== "not_requested") return existingState;
 
     const packet = await getMarketLabCodexPacket(runId);
     const activeAfterPacket = getActiveCodexReview(key);
     if (activeAfterPacket) return activeAfterPacket;
+
+    const persistedAfterPacket = await getPersistedCodexReviewRequest(packet.packet_path);
+    if (persistedAfterPacket) return persistedAfterPacket;
 
     const result = await createCodexSessionRun({
       prompt: packet.prompt,
@@ -184,6 +227,21 @@ export async function POST(request: Request, context: { params: Promise<{ runId:
     }
 
     const message = error instanceof Error ? error.message : "Failed to start Codex review";
+    return NextResponse.json({ status: "error", error: message }, { status: 500 });
+  }
+}
+
+export async function GET(request: Request, context: { params: Promise<{ runId: string }> }) {
+  const auth = requireSameOrigin(request);
+  if (!auth.ok) return auth.response;
+
+  const { runId } = await context.params;
+
+  try {
+    const result = await getCodexReviewState(runId);
+    return NextResponse.json({ status: "ok", data: result });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to read Codex review state";
     return NextResponse.json({ status: "error", error: message }, { status: 500 });
   }
 }
