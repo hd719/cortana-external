@@ -107,6 +107,22 @@ describe("MarketLabClient", () => {
           { status: 202 },
         );
       }
+      if (String(url).includes("/api/codex/streams/stream-1")) {
+        const encoder = new TextEncoder();
+        const stream = new ReadableStream({
+          start(controller) {
+            const send = (event: string, data: unknown) => {
+              controller.enqueue(encoder.encode(`event: ${event}\n`));
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
+            };
+            send("lifecycle", { codexSessionId: "session-1" });
+            send("codex_event", { type: "item.completed", item: { type: "agent_message" } });
+            send("done", { session: { sessionId: "session-1" } });
+            controller.close();
+          },
+        });
+        return new Response(stream, { status: 200, headers: { "content-type": "text/event-stream" } });
+      }
       if (String(url).includes("/events")) {
         return Response.json({ status: "ok", data: [{ event: "done", message: "Run done", timestamp: "2026-05-11T00:02:00Z" }] });
       }
@@ -279,7 +295,44 @@ describe("MarketLabClient", () => {
         expect.objectContaining({ method: "POST" }),
       );
     });
-    expect(await screen.findByText(/Codex review started in Sessions: stream-1/)).toBeInTheDocument();
+    expect(await screen.findByText("Codex review attached. The review panel is up to date.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /open session/i })).toHaveAttribute("href", "/sessions?sessionId=session-1");
+  });
+
+  it("refreshes the review artifact when the Codex transcript is not indexed", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+      if (String(url).includes("/codex-review") && init?.method === "POST") {
+        return Response.json(
+          { status: "ok", data: { streamId: "stream-error", packet_path: "/tmp/codex-review-packet.md" } },
+          { status: 202 },
+        );
+      }
+      if (String(url).includes("/api/codex/streams/stream-error")) {
+        const encoder = new TextEncoder();
+        const stream = new ReadableStream({
+          start(controller) {
+            controller.enqueue(encoder.encode("event: error\n"));
+            controller.enqueue(encoder.encode('data: {"error":"Codex session transcript did not index"}\n\n'));
+            controller.close();
+          },
+        });
+        return new Response(stream, { status: 200, headers: { "content-type": "text/event-stream" } });
+      }
+      if (String(url).includes("/events")) {
+        return Response.json({ status: "ok", data: [{ event: "codex_review_attached", message: "Codex review attached", timestamp: "2026-05-11T00:03:00Z" }] });
+      }
+      if (String(url).includes("/api/market-lab/runs/") && !init?.method) {
+        return Response.json({ status: "ok", data: detail });
+      }
+      return Response.json({ status: "ok", data: { runs: [run] } });
+    }));
+
+    render(<MarketLabClient />);
+
+    await screen.findByText("Blocked because price data is stale.");
+    fireEvent.click(await screen.findByRole("button", { name: /ask codex/i }));
+
+    expect(await screen.findByText("Codex review attached. Session transcript is not indexed yet, so use the review panel for now.")).toBeInTheDocument();
   });
 
   it("derives sentiment counts from Bullish:/Bearish: prefixed samples and filters the feed", async () => {

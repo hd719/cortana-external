@@ -758,12 +758,18 @@ export default function SessionsPage() {
 
       if (codexResult.status === "fulfilled") {
         try {
-          setCodexSessions(codexResult.value.sessions ?? []);
+          const sessions = codexResult.value.sessions ?? [];
+          const preferredSessionId = new URLSearchParams(window.location.search).get("sessionId");
           setCodexSessionGroups(codexResult.value.groups ?? []);
-          setCodexVisibleTotal(codexResult.value.totalVisibleSessions ?? codexResult.value.sessions.length ?? 0);
-          setCodexMatchedTotal(codexResult.value.totalMatchedSessions ?? codexResult.value.sessions.length ?? 0);
+          setCodexSessions(sessions);
+          setCodexVisibleTotal(codexResult.value.totalVisibleSessions ?? sessions.length ?? 0);
+          setCodexMatchedTotal(codexResult.value.totalMatchedSessions ?? sessions.length ?? 0);
           setCodexLatestUpdatedAt(codexResult.value.latestUpdatedAt ?? null);
-          setSelectedCodexSessionId(codexResult.value.sessions[0]?.sessionId ?? null);
+          setSelectedCodexSessionId(
+            preferredSessionId && sessions.some((session) => session.sessionId === preferredSessionId)
+              ? preferredSessionId
+              : sessions[0]?.sessionId ?? preferredSessionId ?? null,
+          );
         } catch (err) {
           setCodexError(err instanceof Error ? err.message : "Failed to load Codex sessions");
         }

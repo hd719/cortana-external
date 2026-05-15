@@ -387,6 +387,134 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
   return body.data as T;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object";
+}
+
+function parseCodexSseChunk(rawChunk: string): { event: string; data: unknown } | null {
+  const lines = rawChunk.replace(/\r/g, "").split("\n");
+  let event = "message";
+  const dataLines: string[] = [];
+
+  for (const line of lines) {
+    if (!line || line.startsWith(":")) continue;
+    if (line.startsWith("event:")) {
+      event = line.slice("event:".length).trim();
+    } else if (line.startsWith("data:")) {
+      dataLines.push(line.slice("data:".length).trim());
+    }
+  }
+
+  if (dataLines.length === 0) return null;
+  try {
+    return { event, data: JSON.parse(dataLines.join("\n")) };
+  } catch {
+    return null;
+  }
+}
+
+function getCodexStreamError(data: unknown): string | null {
+  if (!isRecord(data)) return null;
+  return typeof data.error === "string" ? data.error : typeof data.message === "string" ? data.message : null;
+}
+
+function getLifecycleSessionId(data: unknown): string | null {
+  if (!isRecord(data)) return null;
+  const sessionId = data.codexSessionId;
+  return typeof sessionId === "string" && sessionId.trim() ? sessionId : null;
+}
+
+function getThreadStartedId(data: unknown): string | null {
+  if (!isRecord(data) || data.type !== "thread.started") return null;
+  const threadId = data.thread_id;
+  return typeof threadId === "string" && threadId.trim() ? threadId : null;
+}
+
+function getDoneSessionId(data: unknown): string | null {
+  if (!isRecord(data) || !isRecord(data.session)) return null;
+  const sessionId = data.session.sessionId;
+  return typeof sessionId === "string" && sessionId.trim() ? sessionId : null;
+}
+
+function getCodexProgressMessage(data: unknown): string | null {
+  if (!isRecord(data) || data.type !== "item.completed" || !isRecord(data.item)) return null;
+  if (data.item.type === "agent_message") return "Codex responded; waiting for the attach command to finish.";
+  if (data.item.type === "function_call_output") return "Codex ran the attach command; refreshing this run.";
+  return null;
+}
+
+async function consumeCodexReviewStream(
+  response: Response,
+  callbacks: {
+    onSession: (sessionId: string) => void;
+    onProgress: (message: string) => void;
+    onDone: (sessionId: string | null) => void;
+  },
+) {
+  const reader = response.body?.getReader();
+  if (!reader) throw new Error("Codex stream response did not include a body");
+
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let completed = false;
+  let latestSessionId: string | null = null;
+
+  const handleChunk = async (rawChunk: string) => {
+    const envelope = parseCodexSseChunk(rawChunk);
+    if (!envelope) return;
+
+    if (envelope.event === "codex_event") {
+      const threadId = getThreadStartedId(envelope.data);
+      if (threadId) {
+        latestSessionId = threadId;
+        callbacks.onSession(threadId);
+        return;
+      }
+
+      const progress = getCodexProgressMessage(envelope.data);
+      if (progress) callbacks.onProgress(progress);
+      return;
+    }
+
+    if (envelope.event === "lifecycle") {
+      const sessionId = getLifecycleSessionId(envelope.data);
+      if (sessionId) {
+        latestSessionId = sessionId;
+        callbacks.onSession(sessionId);
+      }
+      return;
+    }
+
+    if (envelope.event === "error") {
+      throw new Error(getCodexStreamError(envelope.data) ?? "Codex stream failed");
+    }
+
+    if (envelope.event === "done") {
+      latestSessionId = getDoneSessionId(envelope.data) ?? latestSessionId;
+      completed = true;
+      callbacks.onDone(latestSessionId);
+    }
+  };
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+    let boundaryIndex = buffer.indexOf("\n\n");
+    while (boundaryIndex !== -1) {
+      const rawChunk = buffer.slice(0, boundaryIndex);
+      buffer = buffer.slice(boundaryIndex + 2);
+      await handleChunk(rawChunk);
+      boundaryIndex = buffer.indexOf("\n\n");
+    }
+  }
+
+  buffer += decoder.decode();
+  if (buffer.trim()) await handleChunk(buffer);
+  if (!completed) throw new Error("Codex stream ended before the session finished");
+}
+
 type MarketLabClientProps = {
   embedded?: boolean;
 };
@@ -407,6 +535,7 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [codexStatus, setCodexStatus] = useState<string | null>(null);
+  const [codexStatusSessionId, setCodexStatusSessionId] = useState<string | null>(null);
   const [settlementStatus, setSettlementStatus] = useState<string | null>(null);
   const [portfolioStatus, setPortfolioStatus] = useState<PortfolioNotice | null>(null);
   const [environmentOverview, setEnvironmentOverview] = useState<EnvironmentOverview | null>(null);
@@ -514,6 +643,7 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
     ]);
     setDetail(runDetail);
     setEvents(eventItems);
+    return runDetail;
   };
 
   useEffect(() => {
@@ -601,18 +731,55 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
 
   const askCodex = async () => {
     if (!selectedRunId) return;
+    const runId = selectedRunId;
     setLoading(true);
     setError(null);
-    setCodexStatus(null);
+    setCodexStatus("Codex review queued. Waiting for the session to start...");
+    setCodexStatusSessionId(null);
     setSettlementStatus(null);
     setPortfolioStatus(null);
     try {
       const result = await api<{ streamId: string; packet_path: string }>(
-        `/api/market-lab/runs/${encodeURIComponent(selectedRunId)}/codex-review`,
+        `/api/market-lab/runs/${encodeURIComponent(runId)}/codex-review`,
         { method: "POST" },
       );
-      setCodexStatus(`Codex review started in Sessions: ${result.streamId}. It can take a minute; refresh this run after the review attaches.`);
+      setCodexStatus(`Codex stream started: ${result.streamId}. Waiting for Codex to attach the review...`);
+
+      const response = await fetch(`/api/codex/streams/${encodeURIComponent(result.streamId)}`, {
+        headers: { Accept: "text/event-stream" },
+      });
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(payload?.error ?? "Failed to attach to Codex stream");
+      }
+
+      await consumeCodexReviewStream(response, {
+        onSession(sessionId) {
+          setCodexStatusSessionId(sessionId);
+          setCodexStatus(`Codex session started: ${sessionId}. Review is running...`);
+        },
+        onProgress(message) {
+          setCodexStatus(message);
+        },
+        onDone(sessionId) {
+          setCodexStatusSessionId(sessionId);
+          setCodexStatus("Codex review attached. Refreshing Market Lab...");
+        },
+      });
+      await loadRunDetail(runId);
+      await loadRuns();
+      setCodexStatus("Codex review attached. The review panel is up to date.");
     } catch (err) {
+      try {
+        const refreshed = await loadRunDetail(runId);
+        await loadRuns();
+        if (refreshed.review?.codex_review?.status === "attached") {
+          setCodexStatus("Codex review attached. Session transcript is not indexed yet, so use the review panel for now.");
+          return;
+        }
+      } catch {
+        // Preserve the original stream/start error below.
+      }
       setError(err instanceof Error ? err.message : "Failed to start Codex review");
     } finally {
       setLoading(false);
@@ -922,7 +1089,18 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
         <div className="mt-3 rounded-md border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-200">{error}</div>
       ) : null}
       {codexStatus ? (
-        <div className="mt-3 rounded-md border border-sky-300 bg-sky-50 px-3 py-2 text-xs text-sky-700 dark:border-sky-900/50 dark:bg-sky-950/30 dark:text-sky-200">{codexStatus}</div>
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-md border border-sky-300 bg-sky-50 px-3 py-2 text-xs text-sky-700 dark:border-sky-900/50 dark:bg-sky-950/30 dark:text-sky-200">
+          <span>{codexStatus}</span>
+          {codexStatusSessionId ? (
+            <a
+              href={`/sessions?sessionId=${encodeURIComponent(codexStatusSessionId)}`}
+              className="inline-flex items-center gap-1 font-semibold underline-offset-2 hover:underline"
+            >
+              Open session
+              <ArrowUpRight className="h-3 w-3" />
+            </a>
+          ) : null}
+        </div>
       ) : null}
       {settlementStatus ? (
         <div className="mt-3 rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/30 dark:text-emerald-200">{settlementStatus}</div>
