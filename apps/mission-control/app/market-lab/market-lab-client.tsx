@@ -1045,7 +1045,7 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
     >
       {events.length === 0 ? (
         <p className="text-xs text-muted-foreground">No events loaded.</p>
-      ) : (
+      ) : timelineExpanded ? (
         <div className="space-y-2">
           <div className="grid min-w-0 gap-1 rounded-md border border-border/60 bg-muted/20 px-2.5 py-1.5 text-[11px] sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
             <span className="min-w-0 break-words font-semibold [overflow-wrap:anywhere]">
@@ -1056,52 +1056,50 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
               {shownEvent?.timestamp ? ` · ${getAge(shownEvent.timestamp)} ago` : ""}
             </span>
           </div>
-          {timelineExpanded ? (
-            <ol className="-mx-1 flex max-w-full snap-x snap-mandatory gap-1.5 overflow-x-auto px-1 py-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-              {events.map((event, index) => {
-                const isActive = index === events.length - 1;
-                const isPinned = pinnedStep === index;
-                const isDone = !isActive || runComplete;
-                const message = String(event.message ?? "");
-                const timeBits = event.timestamp
-                  ? ` · ${formatRunTime(event.timestamp)} · ${getAge(event.timestamp)} ago`
-                  : "";
-                const tooltip = `${formatEventTitle(event.event)}${message ? " — " + message : ""}${timeBits}`;
-                return (
-                  <li key={`${String(event.event ?? "")}-${index}`} className="shrink-0 snap-start">
-                    <button
-                      type="button"
-                      ref={isActive ? activePillRef : null}
-                      aria-current={isActive ? "step" : undefined}
-                      title={tooltip}
-                      onClick={() => setPinnedStep(isPinned ? null : index)}
+          <ol className="-mx-1 flex max-w-full snap-x snap-mandatory gap-1.5 overflow-x-auto px-1 py-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            {events.map((event, index) => {
+              const isActive = index === events.length - 1;
+              const isPinned = pinnedStep === index;
+              const isDone = !isActive || runComplete;
+              const message = String(event.message ?? "");
+              const timeBits = event.timestamp
+                ? ` · ${formatRunTime(event.timestamp)} · ${getAge(event.timestamp)} ago`
+                : "";
+              const tooltip = `${formatEventTitle(event.event)}${message ? " — " + message : ""}${timeBits}`;
+              return (
+                <li key={`${String(event.event ?? "")}-${index}`} className="shrink-0 snap-start">
+                  <button
+                    type="button"
+                    ref={isActive ? activePillRef : null}
+                    aria-current={isActive ? "step" : undefined}
+                    title={tooltip}
+                    onClick={() => setPinnedStep(isPinned ? null : index)}
+                    className={cn(
+                      "inline-flex items-center gap-1.5 whitespace-nowrap rounded-md border px-2 py-1.5 text-[11px] font-semibold transition-colors",
+                      isActive
+                        ? "border-foreground/40 bg-foreground/10 text-foreground"
+                        : isPinned
+                          ? "border-foreground/30 bg-muted/40 text-foreground"
+                          : "border-border/60 bg-muted/20 text-muted-foreground hover:bg-muted/40",
+                    )}
+                  >
+                    <span
                       className={cn(
-                        "inline-flex items-center gap-1.5 whitespace-nowrap rounded-md border px-2 py-1.5 text-[11px] font-semibold transition-colors",
+                        "inline-flex h-4 w-4 items-center justify-center rounded-full border text-[9px]",
                         isActive
-                          ? "border-foreground/40 bg-foreground/10 text-foreground"
-                          : isPinned
-                            ? "border-foreground/30 bg-muted/40 text-foreground"
-                            : "border-border/60 bg-muted/20 text-muted-foreground hover:bg-muted/40",
+                          ? "border-foreground/50 bg-background text-foreground"
+                          : "border-border/60 bg-background/60 text-muted-foreground",
                       )}
                     >
-                      <span
-                        className={cn(
-                          "inline-flex h-4 w-4 items-center justify-center rounded-full border text-[9px]",
-                          isActive
-                            ? "border-foreground/50 bg-background text-foreground"
-                            : "border-border/60 bg-background/60 text-muted-foreground",
-                        )}
-                      >
-                        {isDone ? "✓" : index + 1}
-                      </span>
-                      <span className="capitalize">{formatEventTitle(event.event)}</span>
-                    </button>
-                  </li>
-                );
-              })}
-            </ol>
-          ) : null}
-          {shownEvent && timelineExpanded ? (
+                      {isDone ? "✓" : index + 1}
+                    </span>
+                    <span className="capitalize">{formatEventTitle(event.event)}</span>
+                  </button>
+                </li>
+              );
+            })}
+          </ol>
+          {shownEvent ? (
             <div className="flex min-w-0 max-w-full flex-wrap items-baseline gap-x-2 gap-y-0.5 rounded-md border border-border/60 bg-muted/20 px-2.5 py-1.5 text-[11px]">
               <span className="shrink-0 font-semibold capitalize">{formatEventTitle(shownEvent.event)}</span>
               {shownEvent.message ? (
@@ -1117,7 +1115,7 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
             </div>
           ) : null}
         </div>
-      )}
+      ) : null}
     </Panel>
   );
 
@@ -1685,54 +1683,51 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
             ) : null}
           </Panel>
 
-          {/* Compact context row — Memory + Forward Score stack on left, Schwab on right.
-              Left col stretches to row height; Forward Score grows so both columns align. */}
-          <section className="grid items-stretch gap-3 lg:grid-cols-2">
-            <div className="flex flex-col gap-3 lg:h-full">
-              <Panel icon={ShieldCheck} eyebrow="Memory" title="Outcome memory" dense>
-                {outcomeMemory ? (
-                  <div className="grid gap-2 sm:grid-cols-3">
-                    <Metric label="Prior runs" value={String(outcomeMemory.lookback_runs ?? 0)} />
-                    <Metric label="Settled" value={String(outcomeMemory.settled_count ?? 0)} />
-                    <Metric
-                      label="Avg alpha"
-                      value={
-                        typeof outcomeMemory.evidence_ready_avg_alpha_vs_spy_pct === "number"
-                          ? `${outcomeMemory.evidence_ready_avg_alpha_vs_spy_pct.toFixed(2)}%`
-                          : "n/a"
-                      }
-                    />
-                  </div>
-                ) : (
-                  <p className="text-xs text-muted-foreground">No outcome memory attached.</p>
-                )}
-              </Panel>
+          {/* Compact context stack — Memory, Forward Score, and Schwab stay in one scan column. */}
+          <section className="grid gap-3">
+            <Panel icon={ShieldCheck} eyebrow="Memory" title="Outcome memory" dense>
+              {outcomeMemory ? (
+                <div className="grid gap-2 sm:grid-cols-3">
+                  <Metric label="Prior runs" value={String(outcomeMemory.lookback_runs ?? 0)} />
+                  <Metric label="Settled" value={String(outcomeMemory.settled_count ?? 0)} />
+                  <Metric
+                    label="Avg alpha"
+                    value={
+                      typeof outcomeMemory.evidence_ready_avg_alpha_vs_spy_pct === "number"
+                        ? `${outcomeMemory.evidence_ready_avg_alpha_vs_spy_pct.toFixed(2)}%`
+                        : "n/a"
+                    }
+                  />
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">No outcome memory attached.</p>
+              )}
+            </Panel>
 
-              <Panel icon={ArrowUpRight} eyebrow="Forward score" title="Settlement" dense className="lg:flex-1">
-                <ul className="space-y-1">
-                  {settlementWindows.map((settlement) => (
-                    <li
-                      key={String(settlement.window)}
-                      className="grid grid-cols-[36px_minmax(0,1fr)_auto] items-center gap-2 rounded-md border border-border/60 bg-muted/20 px-2.5 py-1.5"
-                    >
-                      <span className="text-xs font-bold uppercase">{String(settlement.window)}</span>
-                      <span className="min-w-0 truncate text-[10px] uppercase tracking-widest text-muted-foreground">
-                        {settlementReturn(settlement) != null
-                          ? `${Number(settlementReturn(settlement)).toFixed(2)}% · vs SPY ${
-                              settlement.alpha_vs_spy_pct != null
-                                ? `${Number(settlement.alpha_vs_spy_pct).toFixed(2)}%`
-                                : "—"
-                            }`
-                          : "pending · vs SPY pending"}
-                      </span>
-                      <span className="shrink-0 rounded border border-border/60 px-1.5 py-px text-[9px] uppercase tracking-wider text-muted-foreground">
-                        {String(settlement.status ?? "pending")}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </Panel>
-            </div>
+            <Panel icon={ArrowUpRight} eyebrow="Forward score" title="Settlement" dense>
+              <ul className="space-y-1">
+                {settlementWindows.map((settlement) => (
+                  <li
+                    key={String(settlement.window)}
+                    className="grid grid-cols-[36px_minmax(0,1fr)_auto] items-center gap-2 rounded-md border border-border/60 bg-muted/20 px-2.5 py-1.5"
+                  >
+                    <span className="text-xs font-bold uppercase">{String(settlement.window)}</span>
+                    <span className="min-w-0 truncate text-[10px] uppercase tracking-widest text-muted-foreground">
+                      {settlementReturn(settlement) != null
+                        ? `${Number(settlementReturn(settlement)).toFixed(2)}% · vs SPY ${
+                            settlement.alpha_vs_spy_pct != null
+                              ? `${Number(settlement.alpha_vs_spy_pct).toFixed(2)}%`
+                              : "—"
+                          }`
+                        : "pending · vs SPY pending"}
+                    </span>
+                    <span className="shrink-0 rounded border border-border/60 px-1.5 py-px text-[9px] uppercase tracking-wider text-muted-foreground">
+                      {String(settlement.status ?? "pending")}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </Panel>
 
             <Panel
               icon={ShieldQuestion}
