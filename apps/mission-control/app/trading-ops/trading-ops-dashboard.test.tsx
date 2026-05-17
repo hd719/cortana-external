@@ -406,6 +406,7 @@ function findEventSource(url: string) {
 describe("TradingOpsDashboard", () => {
   beforeEach(() => {
     MockEventSource.reset();
+    window.history.replaceState(null, "", "/trading-ops");
     vi.stubGlobal(
       "fetch",
       vi.fn(() => new Promise<Response>(() => {
@@ -451,11 +452,20 @@ describe("TradingOpsDashboard", () => {
     const watchlistsTab = screen.getByRole("tab", { name: "Watchlists" });
     fireEvent.mouseDown(watchlistsTab);
     fireEvent.click(watchlistsTab);
+    expect(window.location.search).toBe("?tab=watchlists");
     expect(container).toHaveTextContent("Watchlists / Opportunity Board");
     expect(container).toHaveTextContent("Deterministic review priority. No Codex fanout, no buy/sell signal.");
     expect(container).toHaveTextContent("Core");
     expect(container).toHaveTextContent("Benchmarks");
     expect(container).toHaveTextContent("Score a watchlist to rank symbols for review.");
+  });
+
+  it("opens the tab named in the URL query", () => {
+    window.history.replaceState(null, "", "/trading-ops?tab=market-lab");
+    const { container } = render(<TradingOpsDashboard data={fixture} />);
+
+    expect(container).toHaveTextContent("Forward-looking trust reviews");
+    expect(screen.getByRole("tab", { name: "Market Lab" })).toHaveAttribute("data-state", "active");
   });
 
   it("renders live tab data from the Schwab stream snapshot", async () => {

@@ -147,9 +147,16 @@ describe("MarketLabClient", () => {
     await screen.findByText("Blocked because price data is stale.");
 
     expect(screen.getAllByText(/blocked/i).length).toBeGreaterThan(0);
-    // Timeline: active step pill carries aria-current="step" and the step's message renders in the caption beneath the strip.
-    expect(document.querySelector('[aria-current="step"]')).not.toBeNull();
+    // Timeline: compact by default, expandable when the operator needs the full run path.
+    expect(screen.getByText(/Current:/)).toBeInTheDocument();
+    expect(screen.getByText(/Step 1 of 1/)).toBeInTheDocument();
+    expect(screen.queryByText("Run done")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /show/i }));
     expect(screen.getByText("Run done")).toBeInTheDocument();
+    expect(document.querySelector('[aria-current="step"]')).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /hide/i }));
+    expect(screen.queryByText("Run done")).toBeNull();
+    expect(document.querySelector('[aria-current="step"]')).toBeNull();
     expect(screen.getAllByText("Yahoo news").length).toBeGreaterThan(0);
     // News & sentiment: Codex one-liner replaces the old "News analysis" column; summary still renders.
     expect(screen.getAllByText("News is not decisive.").length).toBeGreaterThan(0);
@@ -159,13 +166,13 @@ describe("MarketLabClient", () => {
     expect(screen.queryByText("No bearish points.")).toBeNull();
     expect(screen.getByText("Codex review ready")).toBeInTheDocument();
     expect(screen.getByText("Codex says keep this blocked.")).toBeInTheDocument();
+    expect(screen.queryByText("Price action")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /expand codex review/i }));
     expect(screen.getByText("Price action")).toBeInTheDocument();
     expect(screen.getByText("Price evidence is stale, so the review is blocked before analyst debate.")).toBeInTheDocument();
     expect(screen.getAllByText("fresh_price").length).toBeGreaterThan(0);
     fireEvent.click(screen.getByRole("button", { name: /collapse codex review/i }));
     expect(screen.queryByText("Price action")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: /expand codex review/i }));
-    expect(screen.getByText("Price action")).toBeInTheDocument();
     expect(screen.getByText("/tmp/review.json")).toBeInTheDocument();
     expect(screen.getByText("/tmp/codex-review-packet.md")).toBeInTheDocument();
   });
@@ -188,6 +195,8 @@ describe("MarketLabClient", () => {
 
     render(<MarketLabClient />);
 
+    await screen.findByText(/Current:/);
+    fireEvent.click(screen.getByRole("button", { name: /show/i }));
     const eventMessage = await screen.findByText(longMessage);
     expect(eventMessage).toHaveClass("min-w-0");
     expect(eventMessage).toHaveClass("break-words");
@@ -290,6 +299,9 @@ describe("MarketLabClient", () => {
     expect(await screen.findByText("Evidence gates passed. Codex second opinion has not been attached yet.")).toBeInTheDocument();
     expect(await screen.findByText("Codex review not attached")).toBeInTheDocument();
     expect(screen.getByText("AVAILABLE · LATEST CACHE")).toBeInTheDocument();
+    expect(screen.getByText(/AAPL owned/)).toBeInTheDocument();
+    expect(screen.queryByText("Using latest Schwab cache because this run saved an unavailable portfolio snapshot.")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /expand schwab portfolio/i }));
     expect(screen.getByText("owned")).toBeInTheDocument();
     expect(screen.getByText("Using latest Schwab cache because this run saved an unavailable portfolio snapshot.")).toBeInTheDocument();
     expect(screen.queryByText("Market Lab trusts this review for future alert consideration.")).toBeNull();

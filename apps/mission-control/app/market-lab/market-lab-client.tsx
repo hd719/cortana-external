@@ -563,7 +563,9 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
   const [feedSrc, setFeedSrc] = useState<string>("all");
   const [feedSent, setFeedSent] = useState<"all" | "bull" | "bear" | "unlabeled">("all");
   const [codexExpanded, setCodexExpanded] = useState(false);
-  const [codexReviewExpanded, setCodexReviewExpanded] = useState(true);
+  const [codexReviewExpanded, setCodexReviewExpanded] = useState(false);
+  const [portfolioExpanded, setPortfolioExpanded] = useState(false);
+  const [timelineExpanded, setTimelineExpanded] = useState(false);
   const [tapeOpen, setTapeOpen] = useState(false);
   const [expandedCheck, setExpandedCheck] = useState<string | null>(null);
   const codexRequestInFlightRef = useRef<string | null>(null);
@@ -1008,56 +1010,98 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
   const latestEvent = events.at(-1);
   const shownEvent = pinnedStep !== null ? events[pinnedStep] : latestEvent;
   const runComplete = String(latestEvent?.event ?? "") === "done";
+  const shownEventIndex = shownEvent ? events.indexOf(shownEvent) : -1;
   const timelinePanel = (
-    <Panel icon={Activity} eyebrow="Run path" title="Timeline" dense className="mt-3">
+    <Panel
+      icon={Activity}
+      eyebrow="Run path"
+      title="Timeline"
+      dense
+      className="mt-3"
+      action={
+        events.length ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setTimelineExpanded((value) => !value)}
+            aria-expanded={timelineExpanded}
+            className="h-7 gap-1 px-2 font-mono text-[10px] uppercase tracking-wider"
+          >
+            {timelineExpanded ? (
+              <>
+                Hide
+                <ChevronUp className="h-3 w-3" />
+              </>
+            ) : (
+              <>
+                Show
+                <ChevronDown className="h-3 w-3" />
+              </>
+            )}
+          </Button>
+        ) : null
+      }
+    >
       {events.length === 0 ? (
         <p className="text-xs text-muted-foreground">No events loaded.</p>
       ) : (
         <div className="space-y-2">
-          <ol className="-mx-1 flex max-w-full snap-x snap-mandatory gap-1.5 overflow-x-auto px-1 py-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            {events.map((event, index) => {
-              const isActive = index === events.length - 1;
-              const isPinned = pinnedStep === index;
-              const isDone = !isActive || runComplete;
-              const message = String(event.message ?? "");
-              const timeBits = event.timestamp
-                ? ` · ${formatRunTime(event.timestamp)} · ${getAge(event.timestamp)} ago`
-                : "";
-              const tooltip = `${formatEventTitle(event.event)}${message ? " — " + message : ""}${timeBits}`;
-              return (
-                <li key={`${String(event.event ?? "")}-${index}`} className="shrink-0 snap-start">
-                  <button
-                    type="button"
-                    ref={isActive ? activePillRef : null}
-                    aria-current={isActive ? "step" : undefined}
-                    title={tooltip}
-                    onClick={() => setPinnedStep(isPinned ? null : index)}
-                    className={cn(
-                      "inline-flex items-center gap-1.5 whitespace-nowrap rounded-md border px-2 py-1.5 text-[11px] font-semibold transition-colors",
-                      isActive
-                        ? "border-foreground/40 bg-foreground/10 text-foreground"
-                        : isPinned
-                          ? "border-foreground/30 bg-muted/40 text-foreground"
-                          : "border-border/60 bg-muted/20 text-muted-foreground hover:bg-muted/40",
-                    )}
-                  >
-                    <span
+          <div className="grid min-w-0 gap-1 rounded-md border border-border/60 bg-muted/20 px-2.5 py-1.5 text-[11px] sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+            <span className="min-w-0 break-words font-semibold [overflow-wrap:anywhere]">
+              Current: <span className="capitalize">{formatEventTitle(shownEvent?.event)}</span>
+            </span>
+            <span className="text-[10px] uppercase tracking-widest text-muted-foreground sm:text-right">
+              Step {shownEventIndex + 1 || events.length} of {events.length}
+              {shownEvent?.timestamp ? ` · ${getAge(shownEvent.timestamp)} ago` : ""}
+            </span>
+          </div>
+          {timelineExpanded ? (
+            <ol className="-mx-1 flex max-w-full snap-x snap-mandatory gap-1.5 overflow-x-auto px-1 py-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              {events.map((event, index) => {
+                const isActive = index === events.length - 1;
+                const isPinned = pinnedStep === index;
+                const isDone = !isActive || runComplete;
+                const message = String(event.message ?? "");
+                const timeBits = event.timestamp
+                  ? ` · ${formatRunTime(event.timestamp)} · ${getAge(event.timestamp)} ago`
+                  : "";
+                const tooltip = `${formatEventTitle(event.event)}${message ? " — " + message : ""}${timeBits}`;
+                return (
+                  <li key={`${String(event.event ?? "")}-${index}`} className="shrink-0 snap-start">
+                    <button
+                      type="button"
+                      ref={isActive ? activePillRef : null}
+                      aria-current={isActive ? "step" : undefined}
+                      title={tooltip}
+                      onClick={() => setPinnedStep(isPinned ? null : index)}
                       className={cn(
-                        "inline-flex h-4 w-4 items-center justify-center rounded-full border text-[9px]",
+                        "inline-flex items-center gap-1.5 whitespace-nowrap rounded-md border px-2 py-1.5 text-[11px] font-semibold transition-colors",
                         isActive
-                          ? "border-foreground/50 bg-background text-foreground"
-                          : "border-border/60 bg-background/60 text-muted-foreground",
+                          ? "border-foreground/40 bg-foreground/10 text-foreground"
+                          : isPinned
+                            ? "border-foreground/30 bg-muted/40 text-foreground"
+                            : "border-border/60 bg-muted/20 text-muted-foreground hover:bg-muted/40",
                       )}
                     >
-                      {isDone ? "✓" : index + 1}
-                    </span>
-                    <span className="capitalize">{formatEventTitle(event.event)}</span>
-                  </button>
-                </li>
-              );
-            })}
-          </ol>
-          {shownEvent ? (
+                      <span
+                        className={cn(
+                          "inline-flex h-4 w-4 items-center justify-center rounded-full border text-[9px]",
+                          isActive
+                            ? "border-foreground/50 bg-background text-foreground"
+                            : "border-border/60 bg-background/60 text-muted-foreground",
+                        )}
+                      >
+                        {isDone ? "✓" : index + 1}
+                      </span>
+                      <span className="capitalize">{formatEventTitle(event.event)}</span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ol>
+          ) : null}
+          {shownEvent && timelineExpanded ? (
             <div className="flex min-w-0 max-w-full flex-wrap items-baseline gap-x-2 gap-y-0.5 rounded-md border border-border/60 bg-muted/20 px-2.5 py-1.5 text-[11px]">
               <span className="shrink-0 font-semibold capitalize">{formatEventTitle(shownEvent.event)}</span>
               {shownEvent.message ? (
@@ -1075,6 +1119,112 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
         </div>
       )}
     </Panel>
+  );
+
+  const renderRunTapeContent = () => (
+    <>
+      <div className="space-y-2 border-b border-border/50 px-3 py-2 lg:border-t-0">
+        <div className="hidden items-center justify-between lg:flex">
+          <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Run tape</span>
+          <span className="text-[10px] uppercase tracking-widest text-muted-foreground">{runs.length}</span>
+        </div>
+        <TapeModeTabs mode={tapeMode} onChange={setTapeMode} />
+      </div>
+      <div className="max-h-[60vh] min-h-0 overflow-y-auto p-1 [scrollbar-gutter:stable] lg:max-h-[min(calc(100svh-180px),720px)]">
+        {runs.length === 0 ? (
+          <p className="px-2 py-6 text-center text-xs text-muted-foreground">No runs yet.</p>
+        ) : tapeMode === "recent" ? (
+          <ul className="space-y-0.5">
+            {runs.map((run) => (
+              <li key={run.run_id}>
+                <RunTapeRow
+                  run={run}
+                  selected={selectedRunId === run.run_id}
+                  onSelect={setSelectedRunId}
+                />
+              </li>
+            ))}
+          </ul>
+        ) : tapeMode === "symbol" ? (
+          <div className="space-y-1">
+            {runsBySymbol.map(([symbol, groupRuns]) => {
+              const key = `sym:${symbol}`;
+              const hasSelected = groupRuns.some((r) => r.run_id === selectedRunId);
+              const open = !closedGroups.has(key) || hasSelected;
+              const latestVerdict = (groupRuns[0]?.trust_verdict ?? "uncertain") as Verdict;
+              return (
+                <RunTapeGroup
+                  key={key}
+                  open={open}
+                  onToggle={(isOpen) => toggleGroup(key, isOpen)}
+                  labelNode={
+                    <span className="flex items-center gap-1.5">
+                      <span className={cn("h-1.5 w-1.5 rounded-full", verdictMeta[latestVerdict].dot)} />
+                      <span className="text-xs font-semibold">{symbol}</span>
+                    </span>
+                  }
+                  count={groupRuns.length}
+                >
+                  <ul className="space-y-0.5">
+                    {groupRuns.map((run) => (
+                      <li key={run.run_id}>
+                        <RunTapeRow
+                          run={run}
+                          selected={selectedRunId === run.run_id}
+                          onSelect={setSelectedRunId}
+                          hideSymbol
+                        />
+                      </li>
+                    ))}
+                  </ul>
+                </RunTapeGroup>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="space-y-1">
+            {(["trusted", "uncertain", "blocked"] as const).map((verdictKey) => {
+              const list = runsByVerdict[verdictKey];
+              if (list.length === 0) return null;
+              const key = `verd:${verdictKey}`;
+              const hasSelected = list.some((r) => r.run_id === selectedRunId);
+              const open = !closedGroups.has(key) || hasSelected;
+              return (
+                <RunTapeGroup
+                  key={key}
+                  open={open}
+                  onToggle={(isOpen) => toggleGroup(key, isOpen)}
+                  labelNode={
+                    <span
+                      className={cn(
+                        "rounded px-1.5 py-px text-[10px] font-bold uppercase tracking-wider",
+                        verdictMeta[verdictKey].chip,
+                      )}
+                    >
+                      {verdictMeta[verdictKey].label}
+                    </span>
+                  }
+                  count={list.length}
+                >
+                  <ul className="space-y-0.5">
+                    {list.map((run) => (
+                      <li key={run.run_id}>
+                        <RunTapeRow
+                          run={run}
+                          selected={selectedRunId === run.run_id}
+                          onSelect={setSelectedRunId}
+                          hideVerdictChip
+                        />
+                      </li>
+                    ))}
+                  </ul>
+                </RunTapeGroup>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </>
   );
 
   return (
@@ -1106,6 +1256,7 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
                 ) : null}
               </span>
               <span className="text-sm font-bold uppercase tracking-wider">Forward-looking trust reviews</span>
+              {environmentOverview ? <EnvironmentStatusTabs overview={environmentOverview} /> : null}
             </div>
           </div>
           <div className="grid w-full grid-cols-3 gap-2 md:flex md:w-auto md:flex-wrap md:items-center">
@@ -1147,31 +1298,21 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
         </div>
       </section>
 
-      {environmentOverview ? (
-        <section className="mt-3 grid gap-2 md:grid-cols-2">
-          {environmentOverview.environments.map((item) => (
-            <div key={item.environment} className="flex items-center justify-between gap-3 rounded-lg border border-border/70 bg-card/50 px-3 py-2 text-xs">
-              <div className="min-w-0">
-                <div className="font-semibold uppercase tracking-wider">{item.environment}</div>
-                <div className="truncate text-[10px] text-muted-foreground">
-                  {item.url} · {item.runCount} runs{item.latestRunAt ? ` · latest ${getAge(item.latestRunAt)} ago` : ""}
-                </div>
-              </div>
-              <span
-                className={cn(
-                  "rounded border px-1.5 py-px text-[10px] font-bold uppercase tracking-wider",
-                  item.status === "healthy"
-                    ? "border-emerald-400/60 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
-                    : "border-red-400/60 bg-red-500/10 text-red-700 dark:text-red-300",
-                )}
-                title={item.message}
-              >
-                {item.status}
-              </span>
-            </div>
-          ))}
-        </section>
-      ) : null}
+      <aside className="mt-3 rounded-lg border border-border/70 bg-card/60 lg:hidden">
+        <button
+          type="button"
+          onClick={() => setTapeOpen((v) => !v)}
+          aria-expanded={tapeOpen}
+          className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left"
+        >
+          <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">History</span>
+          <span className="flex items-center gap-2">
+            <span className="text-[10px] uppercase tracking-widest text-muted-foreground">{runs.length}</span>
+            <span className={cn("text-xs text-muted-foreground transition-transform", tapeOpen && "rotate-90")}>›</span>
+          </span>
+        </button>
+        <div className={cn(tapeOpen ? "block" : "hidden")}>{renderRunTapeContent()}</div>
+      </aside>
 
       {codexReviewNotice ? <CodexReviewNotice notice={codexReviewNotice} /> : null}
 
@@ -1227,132 +1368,14 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
 
       {/* ── Body: tape + decision area ── */}
       <section className={cn(
-        "mt-3 flex flex-col-reverse gap-3",
+        "mt-3 flex flex-col gap-3",
         showRunTapeSidebar && "lg:grid lg:grid-cols-[180px_minmax(0,1fr)]",
       )}>
-        {/* Run tape — always rendered for mobile collapse; hidden on lg+ when strip mode is active */}
-        <aside
-          className={cn(
-            "self-start rounded-lg border border-border/70 bg-card/60",
-            showRunTapeSidebar ? "lg:sticky lg:top-3" : "lg:hidden",
-          )}
-        >
-          <button
-            type="button"
-            onClick={() => setTapeOpen((v) => !v)}
-            aria-expanded={tapeOpen}
-            className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left lg:hidden"
-          >
-            <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">History</span>
-            <span className="flex items-center gap-2">
-              <span className="text-[10px] uppercase tracking-widest text-muted-foreground">{runs.length}</span>
-              <span className={cn("text-xs text-muted-foreground transition-transform", tapeOpen && "rotate-90")}>›</span>
-            </span>
-          </button>
-          <div className={cn("lg:block", tapeOpen ? "block" : "hidden")}>
-          <div className="space-y-2 border-b border-border/50 px-3 py-2 lg:border-t-0">
-            <div className="hidden items-center justify-between lg:flex">
-              <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Run tape</span>
-              <span className="text-[10px] uppercase tracking-widest text-muted-foreground">{runs.length}</span>
-            </div>
-            <TapeModeTabs mode={tapeMode} onChange={setTapeMode} />
-          </div>
-          <div className="max-h-[60vh] min-h-0 overflow-y-auto p-1 [scrollbar-gutter:stable] lg:max-h-[min(calc(100svh-180px),720px)]">
-            {runs.length === 0 ? (
-              <p className="px-2 py-6 text-center text-xs text-muted-foreground">No runs yet.</p>
-            ) : tapeMode === "recent" ? (
-              <ul className="space-y-0.5">
-                {runs.map((run) => (
-                  <li key={run.run_id}>
-                    <RunTapeRow
-                      run={run}
-                      selected={selectedRunId === run.run_id}
-                      onSelect={setSelectedRunId}
-                    />
-                  </li>
-                ))}
-              </ul>
-            ) : tapeMode === "symbol" ? (
-              <div className="space-y-1">
-                {runsBySymbol.map(([symbol, groupRuns]) => {
-                  const key = `sym:${symbol}`;
-                  const hasSelected = groupRuns.some((r) => r.run_id === selectedRunId);
-                  const open = !closedGroups.has(key) || hasSelected;
-                  const latestVerdict = (groupRuns[0]?.trust_verdict ?? "uncertain") as Verdict;
-                  return (
-                    <RunTapeGroup
-                      key={key}
-                      open={open}
-                      onToggle={(isOpen) => toggleGroup(key, isOpen)}
-                      labelNode={
-                        <span className="flex items-center gap-1.5">
-                          <span className={cn("h-1.5 w-1.5 rounded-full", verdictMeta[latestVerdict].dot)} />
-                          <span className="text-xs font-semibold">{symbol}</span>
-                        </span>
-                      }
-                      count={groupRuns.length}
-                    >
-                      <ul className="space-y-0.5">
-                        {groupRuns.map((run) => (
-                          <li key={run.run_id}>
-                            <RunTapeRow
-                              run={run}
-                              selected={selectedRunId === run.run_id}
-                              onSelect={setSelectedRunId}
-                              hideSymbol
-                            />
-                          </li>
-                        ))}
-                      </ul>
-                    </RunTapeGroup>
-                  );
-                })}
-              </div>
-            ) : (
-              <div className="space-y-1">
-                {(["trusted", "uncertain", "blocked"] as const).map((verdictKey) => {
-                  const list = runsByVerdict[verdictKey];
-                  if (list.length === 0) return null;
-                  const key = `verd:${verdictKey}`;
-                  const hasSelected = list.some((r) => r.run_id === selectedRunId);
-                  const open = !closedGroups.has(key) || hasSelected;
-                  return (
-                    <RunTapeGroup
-                      key={key}
-                      open={open}
-                      onToggle={(isOpen) => toggleGroup(key, isOpen)}
-                      labelNode={
-                        <span
-                          className={cn(
-                            "rounded px-1.5 py-px text-[10px] font-bold uppercase tracking-wider",
-                            verdictMeta[verdictKey].chip,
-                          )}
-                        >
-                          {verdictMeta[verdictKey].label}
-                        </span>
-                      }
-                      count={list.length}
-                    >
-                      <ul className="space-y-0.5">
-                        {list.map((run) => (
-                          <li key={run.run_id}>
-                            <RunTapeRow
-                              run={run}
-                              selected={selectedRunId === run.run_id}
-                              onSelect={setSelectedRunId}
-                              hideVerdictChip
-                            />
-                          </li>
-                        ))}
-                      </ul>
-                    </RunTapeGroup>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-          </div>
-        </aside>
+        {showRunTapeSidebar ? (
+          <aside className="hidden self-start rounded-lg border border-border/70 bg-card/60 lg:sticky lg:top-3 lg:block">
+            {renderRunTapeContent()}
+          </aside>
+        ) : null}
 
         {/* Decision area */}
         <div className="flex min-w-0 flex-col gap-3">
@@ -1711,55 +1734,13 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
               </Panel>
             </div>
 
-            <Panel icon={ShieldQuestion} eyebrow="Portfolio" title="Schwab portfolio" dense>
-              {portfolioContext ? (
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between gap-2">
-                    <span
-                      className={cn(
-                        "rounded-md border px-2 py-0.5 text-[11px] font-bold uppercase tracking-wider",
-                        portfolioContext.status?.toLowerCase() === "available"
-                          ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-                          : "border-amber-400/60 bg-amber-500/10 text-amber-600 dark:text-amber-400",
-                      )}
-                    >
-                      {String(portfolioContext.status ?? "").toUpperCase() || "UNKNOWN"}
-                      {usingPortfolioFallback ? " · LATEST CACHE" : ""}
-                    </span>
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      onClick={refreshPortfolio}
-                      disabled={loading}
-                      title="Refresh Schwab"
-                      aria-label="Refresh Schwab"
-                      className="h-7 w-7"
-                    >
-                      <RefreshCw className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
-                  <div className="grid gap-2 sm:grid-cols-2">
-                    <Metric label={selectedSymbol} value={selectedPosition ? "owned" : "not owned"} />
-                    <Metric label="Quantity" value={asShares(selectedPosition?.quantity)} />
-                    <Metric label="Current" value={asMoney(selectedPosition?.current_price ?? undefined)} />
-                    <Metric label="Today" value={`${asSignedMoney(selectedPosition?.day_change)} · ${asSignedPercent(selectedPosition?.day_change_pct)}`} />
-                    <Metric label="Vs run" value={asSignedPercent(currentVsRun)} />
-                    <Metric label="Vs avg" value={asSignedPercent(currentVsAverage)} />
-                  </div>
-                  {[...(portfolioContext.exposure_notes ?? []), ...(portfolioContext.overlap_notes ?? [])].slice(0, 3).map((note) => (
-                    <p key={note} className="font-sans text-xs text-muted-foreground">{note}</p>
-                  ))}
-                  {usingPortfolioFallback ? (
-                    <p className="font-sans text-xs text-muted-foreground">
-                      Using latest Schwab cache because this run saved an unavailable portfolio snapshot.
-                    </p>
-                  ) : portfolioContext.message ? (
-                    <p className="font-sans text-xs text-muted-foreground">{portfolioContext.message}</p>
-                  ) : null}
-                </div>
-              ) : (
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-xs text-muted-foreground">No portfolio context attached.</p>
+            <Panel
+              icon={ShieldQuestion}
+              eyebrow="Portfolio"
+              title="Schwab portfolio"
+              dense
+              action={
+                <div className="flex items-center gap-1">
                   <Button
                     variant="outline"
                     size="icon"
@@ -1771,7 +1752,77 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
                   >
                     <RefreshCw className="h-3.5 w-3.5" />
                   </Button>
+                  {portfolioContext ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setPortfolioExpanded((value) => !value)}
+                      aria-expanded={portfolioExpanded}
+                      aria-label={portfolioExpanded ? "Collapse Schwab portfolio" : "Expand Schwab portfolio"}
+                      className="h-7 gap-1 px-2 text-[10px] uppercase tracking-wider"
+                    >
+                      {portfolioExpanded ? (
+                        <>
+                          Collapse
+                          <ChevronUp className="h-3 w-3" />
+                        </>
+                      ) : (
+                        <>
+                          Expand
+                          <ChevronDown className="h-3 w-3" />
+                        </>
+                      )}
+                    </Button>
+                  ) : null}
                 </div>
+              }
+            >
+              {portfolioContext ? (
+                <div className="space-y-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span
+                      className={cn(
+                        "rounded-md border px-2 py-0.5 text-[11px] font-bold uppercase tracking-wider",
+                        portfolioContext.status?.toLowerCase() === "available"
+                          ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                          : "border-amber-400/60 bg-amber-500/10 text-amber-600 dark:text-amber-400",
+                      )}
+                    >
+                      {String(portfolioContext.status ?? "").toUpperCase() || "UNKNOWN"}
+                      {usingPortfolioFallback ? " · LATEST CACHE" : ""}
+                    </span>
+                    <span className="min-w-0 break-words font-sans text-xs text-muted-foreground [overflow-wrap:anywhere]">
+                      {selectedPosition
+                        ? `${selectedSymbol} owned · ${asShares(selectedPosition.quantity)} shares · ${asMoney(selectedPosition.current_price ?? undefined)} current`
+                        : `${selectedSymbol} not owned`}
+                    </span>
+                  </div>
+                  {portfolioExpanded ? (
+                    <>
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        <Metric label={selectedSymbol} value={selectedPosition ? "owned" : "not owned"} />
+                        <Metric label="Quantity" value={asShares(selectedPosition?.quantity)} />
+                        <Metric label="Current" value={asMoney(selectedPosition?.current_price ?? undefined)} />
+                        <Metric label="Today" value={`${asSignedMoney(selectedPosition?.day_change)} · ${asSignedPercent(selectedPosition?.day_change_pct)}`} />
+                        <Metric label="Vs run" value={asSignedPercent(currentVsRun)} />
+                        <Metric label="Vs avg" value={asSignedPercent(currentVsAverage)} />
+                      </div>
+                      {[...(portfolioContext.exposure_notes ?? []), ...(portfolioContext.overlap_notes ?? [])].slice(0, 3).map((note) => (
+                        <p key={note} className="break-words font-sans text-xs text-muted-foreground [overflow-wrap:anywhere]">{note}</p>
+                      ))}
+                      {usingPortfolioFallback ? (
+                        <p className="break-words font-sans text-xs text-muted-foreground [overflow-wrap:anywhere]">
+                          Using latest Schwab cache because this run saved an unavailable portfolio snapshot.
+                        </p>
+                      ) : portfolioContext.message ? (
+                        <p className="break-words font-sans text-xs text-muted-foreground [overflow-wrap:anywhere]">{portfolioContext.message}</p>
+                      ) : null}
+                    </>
+                  ) : null}
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">No portfolio context attached.</p>
               )}
             </Panel>
           </section>
@@ -1894,6 +1945,35 @@ function CodexReviewNotice({ notice }: { notice: CodexReviewNoticeState }) {
           </a>
         ) : null}
       </div>
+    </div>
+  );
+}
+
+function EnvironmentStatusTabs({ overview }: { overview: EnvironmentOverview }) {
+  return (
+    <div className="-mx-0.5 mt-2 flex max-w-full gap-1 overflow-x-auto px-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      {overview.environments.map((item) => {
+        const active = item.environment === overview.current;
+        const healthy = item.status === "healthy";
+        return (
+          <span
+            key={item.environment}
+            className={cn(
+              "inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2 py-1 text-[10px] font-semibold uppercase tracking-wider",
+              active ? "border-foreground/30 bg-background text-foreground shadow-sm" : "border-border/70 bg-muted/30 text-muted-foreground",
+            )}
+            title={`${item.url} · ${item.runCount} runs${item.latestRunAt ? ` · latest ${getAge(item.latestRunAt)} ago` : ""}${item.message ? ` · ${item.message}` : ""}`}
+          >
+            <span>{item.environment}</span>
+            <span className={cn("h-1.5 w-1.5 rounded-full", healthy ? "bg-emerald-500" : "bg-red-500")} />
+            <span className={healthy ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}>
+              {item.status}
+            </span>
+            <span className="text-muted-foreground/70">· {item.runCount} runs</span>
+            {item.latestRunAt ? <span className="text-muted-foreground/70">· {getAge(item.latestRunAt)} ago</span> : null}
+          </span>
+        );
+      })}
     </div>
   );
 }

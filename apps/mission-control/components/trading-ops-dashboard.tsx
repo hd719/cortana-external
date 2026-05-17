@@ -41,6 +41,26 @@ import { MarketLabClient } from "@/app/market-lab/market-lab-client";
 const POLYMARKET_HANDOFF_RETRY_MS = 1_000;
 const POLYMARKET_HANDOFF_MAX_RETRIES = 3;
 
+const TRADING_OPS_TABS = [
+  { value: "overview", label: "Overview" },
+  { value: "live", label: "Live" },
+  { value: "market-lab", label: "Market Lab" },
+  { value: "watchlists", label: "Watchlists" },
+  { value: "portfolio", label: "Portfolio" },
+  { value: "polymarket", label: "Polymarket" },
+  { value: "health", label: "System Health" },
+] as const;
+
+type TradingOpsTab = (typeof TRADING_OPS_TABS)[number]["value"];
+
+const isTradingOpsTab = (value: string | null): value is TradingOpsTab =>
+  TRADING_OPS_TABS.some((tab) => tab.value === value);
+
+const tabFromSearch = (search: string): TradingOpsTab => {
+  const tab = new URLSearchParams(search).get("tab");
+  return isTradingOpsTab(tab) ? tab : "overview";
+};
+
 /* ── main component ── */
 
 type TradingOpsDashboardProps = {
@@ -48,6 +68,9 @@ type TradingOpsDashboardProps = {
 };
 
 export function TradingOpsDashboard({ data }: TradingOpsDashboardProps) {
+  const [activeTab, setActiveTab] = useState<TradingOpsTab>(() =>
+    typeof window === "undefined" ? "overview" : tabFromSearch(window.location.search),
+  );
   const hasIncidents = (data.runtime.data?.incidents.length ?? 0) > 0;
   const hasErrors = [data.market, data.runtime, data.workflow, data.canary, data.financialServices, data.tradingRun].some((a) => a.state === "error");
   const hasTradingRunFallback = data.tradingRun.badgeText === "fallback";
@@ -75,6 +98,28 @@ export function TradingOpsDashboard({ data }: TradingOpsDashboardProps) {
     data: polymarketData,
     liveData: polymarketLiveData,
   });
+
+  useEffect(() => {
+    const syncFromUrl = () => {
+      setActiveTab(tabFromSearch(window.location.search));
+    };
+    syncFromUrl();
+    window.addEventListener("popstate", syncFromUrl);
+    return () => window.removeEventListener("popstate", syncFromUrl);
+  }, []);
+
+  const selectTab = (nextValue: string) => {
+    const nextTab = isTradingOpsTab(nextValue) ? nextValue : "overview";
+    setActiveTab(nextTab);
+
+    const url = new URL(window.location.href);
+    if (nextTab === "overview") {
+      url.searchParams.delete("tab");
+    } else {
+      url.searchParams.set("tab", nextTab);
+    }
+    window.history.pushState(null, "", `${url.pathname}${url.search}${url.hash}`);
+  };
 
   useEffect(() => {
     if (!polymarketNeedsHandoff) {
@@ -153,15 +198,13 @@ export function TradingOpsDashboard({ data }: TradingOpsDashboardProps) {
       {(hasIncidents || hasErrors || hasTradingRunFallback) && <AlertBanner data={data} />}
 
       {/* ── Zone E: Tabs ── */}
-      <Tabs defaultValue="overview" className="space-y-3">
+      <Tabs value={activeTab} onValueChange={selectTab} className="space-y-3">
         <TabsList className="w-full justify-start overflow-x-auto font-mono text-xs uppercase tracking-wide">
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="live">Live</TabsTrigger>
-          <TabsTrigger value="market-lab">Market Lab</TabsTrigger>
-          <TabsTrigger value="watchlists">Watchlists</TabsTrigger>
-          <TabsTrigger value="portfolio">Portfolio</TabsTrigger>
-          <TabsTrigger value="polymarket">Polymarket</TabsTrigger>
-          <TabsTrigger value="health">System Health</TabsTrigger>
+          {TRADING_OPS_TABS.map((tab) => (
+            <TabsTrigger key={tab.value} value={tab.value}>
+              {tab.label}
+            </TabsTrigger>
+          ))}
         </TabsList>
 
         {/* ── Overview ── */}
