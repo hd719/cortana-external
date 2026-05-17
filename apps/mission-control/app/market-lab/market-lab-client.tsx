@@ -1047,11 +1047,11 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
         <p className="text-xs text-muted-foreground">No events loaded.</p>
       ) : (
         <div className="space-y-2">
-          <div className="flex min-w-0 flex-wrap items-center justify-between gap-2 rounded-md border border-border/60 bg-muted/20 px-2.5 py-1.5 text-[11px]">
-            <span className="min-w-0 flex-1 truncate font-semibold">
+          <div className="grid min-w-0 gap-1 rounded-md border border-border/60 bg-muted/20 px-2.5 py-1.5 text-[11px] sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+            <span className="min-w-0 break-words font-semibold [overflow-wrap:anywhere]">
               Current: <span className="capitalize">{formatEventTitle(shownEvent?.event)}</span>
             </span>
-            <span className="shrink-0 text-[10px] uppercase tracking-widest text-muted-foreground">
+            <span className="text-[10px] uppercase tracking-widest text-muted-foreground sm:text-right">
               Step {shownEventIndex + 1 || events.length} of {events.length}
               {shownEvent?.timestamp ? ` · ${getAge(shownEvent.timestamp)} ago` : ""}
             </span>
@@ -1101,7 +1101,7 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
               })}
             </ol>
           ) : null}
-          {shownEvent ? (
+          {shownEvent && timelineExpanded ? (
             <div className="flex min-w-0 max-w-full flex-wrap items-baseline gap-x-2 gap-y-0.5 rounded-md border border-border/60 bg-muted/20 px-2.5 py-1.5 text-[11px]">
               <span className="shrink-0 font-semibold capitalize">{formatEventTitle(shownEvent.event)}</span>
               {shownEvent.message ? (

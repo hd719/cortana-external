@@ -148,10 +148,14 @@ describe("MarketLabClient", () => {
 
     expect(screen.getAllByText(/blocked/i).length).toBeGreaterThan(0);
     // Timeline: compact by default, expandable when the operator needs the full run path.
-    expect(screen.getByText("Run done")).toBeInTheDocument();
+    expect(screen.getByText(/Current:/)).toBeInTheDocument();
+    expect(screen.getByText(/Step 1 of 1/)).toBeInTheDocument();
+    expect(screen.queryByText("Run done")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: /show/i }));
+    expect(screen.getByText("Run done")).toBeInTheDocument();
     expect(document.querySelector('[aria-current="step"]')).not.toBeNull();
     fireEvent.click(screen.getByRole("button", { name: /hide/i }));
+    expect(screen.queryByText("Run done")).toBeNull();
     expect(document.querySelector('[aria-current="step"]')).toBeNull();
     expect(screen.getAllByText("Yahoo news").length).toBeGreaterThan(0);
     // News & sentiment: Codex one-liner replaces the old "News analysis" column; summary still renders.
@@ -191,6 +195,8 @@ describe("MarketLabClient", () => {
 
     render(<MarketLabClient />);
 
+    await screen.findByText(/Current:/);
+    fireEvent.click(screen.getByRole("button", { name: /show/i }));
     const eventMessage = await screen.findByText(longMessage);
     expect(eventMessage).toHaveClass("min-w-0");
     expect(eventMessage).toHaveClass("break-words");
