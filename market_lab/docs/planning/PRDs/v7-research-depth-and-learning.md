@@ -226,6 +226,21 @@ Shared/generated caches can live outside a run when they are reused:
 - Read-only Schwab portfolio cache: `<cache-root>/portfolio/schwab-portfolio-latest.json`
 - Raw Schwab portfolio payloads: `<cache-root>/portfolio/raw/`
 
+## How The Ledger Gets Updated
+
+Market Lab updates this ledger through normal UI/API/CLI actions:
+
+| Action | What Updates |
+|--------|--------------|
+| Run a symbol from Mission Control or `market_lab.cli run <symbol>` | Creates a SQLite row in `market_lab.sqlite`, creates `<cache-root>/runs/<run_id>/`, writes `review.json`, `events.jsonl`, and `logs.txt`. |
+| Collect source/fundamental/momentum evidence | Writes V7 evidence artifacts into the same run folder and updates `review.json`. |
+| Ask Codex | Writes `codex-review-packet.md`, starts/links the Codex session, then writes `codex-review.md` when the review is attached. |
+| Settle one run | Updates that run's settlement rows in SQLite and refreshes the settlement section in `review.json`. |
+| Settle due | Finds all due 1D/5D/20D windows, updates SQLite settlement rows, and refreshes each affected run artifact. |
+| Refresh Schwab portfolio | Updates `<cache-root>/portfolio/schwab-portfolio-latest.json`; runs can then reference that snapshot as portfolio context. |
+
+The SQLite database is the index. The run folder is the readable evidence packet. Mission Control should read both: SQLite for listing/searching runs, and the run folder for the detailed review artifacts.
+
 ## Success Criteria
 
 - News panel shows meaningful source links and timestamps.

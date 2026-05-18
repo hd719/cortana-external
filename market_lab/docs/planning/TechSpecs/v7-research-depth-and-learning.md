@@ -91,6 +91,21 @@ Reusable caches can stay outside a single run:
 - Schwab portfolio cache: `<cache-root>/portfolio/schwab-portfolio-latest.json`
 - Raw Schwab payloads: `<cache-root>/portfolio/raw/`
 
+## Ledger Update Flow
+
+The SQLite database is the run ledger index. The run folder is the human-readable evidence packet.
+
+| Entry Point | CLI Equivalent | Storage Updates |
+|-------------|----------------|-----------------|
+| `POST /api/market-lab/runs` | `uv run --project market_lab python -m market_lab.cli run AAPL --json` | Inserts `market_lab_runs` row, creates `<cache-root>/runs/<run_id>/`, writes `review.json`, `events.jsonl`, and `logs.txt`. |
+| Source/fundamental/momentum collection | internal runner modules | Writes run-scoped V7 artifacts and updates `review.json` before Codex review. |
+| `POST /api/market-lab/runs/:runId/codex-review` | `market_lab.cli codex-packet` plus `attach-codex-review` | Writes `codex-review-packet.md`, records session/attach state, writes `codex-review.md`, and updates `review.json`. |
+| `POST /api/market-lab/runs/:runId/settle` | `market_lab.cli settle <run_id> --json` | Updates `market_lab_settlements` rows for that run and refreshes settlement data in `review.json`. |
+| `POST /api/market-lab/settle-due` | `market_lab.cli settle-due --json` | Finds due 1D/5D/20D windows, updates settlement rows, and refreshes affected run artifacts. |
+| `POST /api/market-lab/portfolio/refresh` | `market_lab.cli portfolio --refresh --json` | Writes `portfolio/schwab-portfolio-latest.json` and optional raw Schwab payloads. |
+
+Mission Control should use SQLite-backed APIs for run lists and run lookup, then read artifact files for the detailed review, Codex packet, Codex review, timeline, and V7 evidence panels.
+
 ## New Models
 
 ```python
