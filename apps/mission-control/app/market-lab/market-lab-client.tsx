@@ -46,6 +46,8 @@ type TimelineEvent = {
 type SentimentSource = {
   source?: string;
   status?: string;
+  fetched_at?: string | null;
+  request_url?: string | null;
   sample_count?: number;
   fetch_method?: string;
   error_message?: string | null;
@@ -417,11 +419,34 @@ const stanceChipClass = (stance?: string) => {
 
 type SentimentLabel = "bull" | "bear" | null;
 
+type SentimentFeedEntry = {
+  source?: string;
+  status?: string;
+  item: string;
+  sentiment: SentimentLabel;
+  publishedAt?: string | null;
+  fetchedAt?: string | null;
+  url?: string | null;
+};
+
 const deriveSentiment = (item: string): { label: SentimentLabel; cleaned: string } => {
   const match = String(item).match(/^(bullish|bearish):\s*/i);
   if (!match) return { label: null, cleaned: String(item) };
   const label = match[1].toLowerCase() === "bullish" ? "bull" : "bear";
   return { label, cleaned: String(item).slice(match[0].length) };
+};
+
+const sentimentLabelFromSourceItem = (label?: string): SentimentLabel => {
+  const normalized = String(label ?? "").toLowerCase();
+  if (normalized === "bullish") return "bull";
+  if (normalized === "bearish") return "bear";
+  return null;
+};
+
+const sourceTimeLabel = (entry: SentimentFeedEntry) => {
+  if (entry.publishedAt) return formatRunTime(entry.publishedAt);
+  if (entry.fetchedAt) return `fetched ${formatRunTime(entry.fetchedAt)}`;
+  return null;
 };
 
 const getAge = (iso?: string) => {
@@ -1051,17 +1076,32 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
   const newsRole = structuredCodex?.roles.find((role) => role.role === "news_sentiment") ?? null;
   // Per-headline sentiment label derived via tier-2 self-label only (e.g. StockTwits "Bullish:"/"Bearish:" prefix).
   // TODO: per-headline labels once Codex news_sentiment role surfaces them; substring-matching its summary points is too lossy.
-  const sentimentDigest = (sentiment?.sources ?? []).flatMap((source) =>
-    sourceSamples(source, 20).map((item) => {
-      const { label, cleaned } = deriveSentiment(item);
-      return {
-        source: source.source,
-        status: source.status,
-        item: cleaned,
-        sentiment: label,
-      };
-    }),
-  );
+  const sourceQualityItems = sourceQuality?.items ?? [];
+  const sourceQualityStatus = sourceQuality?.status;
+  const sourceStatusByName = sourceQuality?.source_status ?? {};
+  const sentimentDigest: SentimentFeedEntry[] = sourceQualityItems.length
+    ? sourceQualityItems.map((item) => ({
+        source: item.source,
+        status: sourceStatusByName[String(item.source ?? "")] ?? sourceQualityStatus,
+        item: item.title ?? item.excerpt ?? "Untitled source item",
+        sentiment: sentimentLabelFromSourceItem(item.sentiment_label),
+        publishedAt: item.published_at ?? null,
+        fetchedAt: item.fetched_at ?? null,
+        url: item.url ?? null,
+      }))
+    : (sentiment?.sources ?? []).flatMap((source) =>
+        sourceSamples(source, 20).map((item) => {
+          const { label, cleaned } = deriveSentiment(item);
+          return {
+            source: source.source,
+            status: source.status,
+            item: cleaned,
+            sentiment: label,
+            fetchedAt: source.fetched_at ?? null,
+            url: source.request_url ?? null,
+          };
+        }),
+      );
   const sentimentCounts = sentimentDigest.reduce(
     (acc, entry) => {
       if (entry.sentiment === "bull") acc.bull += 1;
@@ -1753,10 +1793,28 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
                           title={entry.sentiment ?? "unlabeled"}
                         />
                         <div className="min-w-0 flex-1 font-mono text-[12px] leading-5">
-                          <span className={cn("mr-1.5 align-baseline text-[9px] font-semibold uppercase tracking-wider", sourceColorClass(entry.source))}>
-                            {sourceLabel(entry.source)}
-                          </span>
-                          <span className="align-baseline text-foreground">{entry.item}</span>
+                          <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                            <span className={cn("shrink-0 align-baseline text-[9px] font-semibold uppercase tracking-wider", sourceColorClass(entry.source))}>
+                              {sourceLabel(entry.source)}
+                            </span>
+                            {sourceTimeLabel(entry) ? (
+                              <span className="shrink-0 text-[9px] uppercase tracking-wider text-muted-foreground">
+                                {sourceTimeLabel(entry)}
+                              </span>
+                            ) : null}
+                          </div>
+                          {entry.url ? (
+                            <a
+                              href={entry.url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="break-words align-baseline text-foreground underline-offset-2 hover:underline"
+                            >
+                              {entry.item}
+                            </a>
+                          ) : (
+                            <span className="break-words align-baseline text-foreground">{entry.item}</span>
+                          )}
                         </div>
                       </li>
                     ))}
