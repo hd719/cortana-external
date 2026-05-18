@@ -39,17 +39,33 @@ The goal is to move from "this artifact is evidence-ready" toward "this review e
 
 ## Requirements
 
-| Requirement | Description |
-|-------------|-------------|
-| Source Quality | Filter noisy StockTwits and low-signal Reddit/Yahoo results before analysis. |
-| Source Attribution | Show source name, URL, title, timestamp, and relevance for each item. |
-| News Summary | Summarize news into "why this matters" and separate catalysts from noise. |
-| Fundamentals Snapshot | Capture valuation, earnings date, revenue/earnings trend, margins, and analyst estimates when available. |
-| Momentum Snapshot | Compute 1D, 5D, 20D, and 3M returns for symbol and SPY before Codex review. |
-| Role Outputs | Persist role-specific analysis for price, news, fundamentals, risk, and final judge. |
-| Compact Codex Packet | Send Codex only decision evidence, not the full raw review or portfolio payload. |
-| Settlement Learning | Use settled 1D/5D/20D outcomes to measure whether evidence-ready reviews beat SPY. |
-| UI Clarity | Make news, fundamentals, momentum, and role outputs visible without overwhelming the cockpit. |
+Use the requirement IDs below to trace this PRD into the Tech Spec and Implementation Plan.
+
+| ID | Requirement | Description |
+|----|-------------|-------------|
+| PRD-R1 | Source Quality | Filter noisy StockTwits and low-signal Reddit/Yahoo results before analysis. |
+| PRD-R2 | Source Attribution | Show source name, URL, title, timestamp, and relevance for each item. |
+| PRD-R3 | News Summary | Summarize news into "why this matters" and separate catalysts from noise. |
+| PRD-R4 | Fundamentals Snapshot | Capture valuation, earnings date, revenue/earnings trend, margins, and analyst estimates when available. |
+| PRD-R5 | Momentum Snapshot | Compute 1D, 5D, 20D, and 3M returns for symbol and SPY before Codex review. |
+| PRD-R6 | Role Outputs | Persist role-specific analysis for price, news, fundamentals, risk, and final judge. |
+| PRD-R7 | Compact Codex Packet | Send Codex only decision evidence, not the full raw review or portfolio payload. |
+| PRD-R8 | Settlement Learning | Use settled 1D/5D/20D outcomes to measure whether evidence-ready reviews beat SPY. |
+| PRD-R9 | UI Clarity | Make news, fundamentals, momentum, and role outputs visible without overwhelming the cockpit. |
+
+## Requirement Traceability
+
+| PRD Requirement | Tech Spec Concept | Implementation Vertical |
+|-----------------|-------------------|--------------------------|
+| PRD-R1 Source Quality | `SourceItem`, `SourceQualitySnapshot`, Source Quality Module | V1 - Source Quality |
+| PRD-R2 Source Attribution | `SourceItem.url`, `published_at`, `fetched_at`, relevance and source status fields | V1 - Source Quality, V6 - Mission Control |
+| PRD-R3 News Summary | `SourceQualitySnapshot.why_this_matters`, source cautions, relevance scoring | V1 - Source Quality, V6 - Mission Control |
+| PRD-R4 Fundamentals Snapshot | `FundamentalsSnapshot`, Fundamentals Module | V3 - Fundamentals, V6 - Mission Control |
+| PRD-R5 Momentum Snapshot | `MomentumWindow`, `MomentumSnapshot`, Momentum Module | V2 - Momentum, V6 - Mission Control |
+| PRD-R6 Role Outputs | `AnalystRoleOutput`, Role Flow | V4 - Compact Codex Roles, V6 - Mission Control |
+| PRD-R7 Compact Codex Packet | Compact Codex Packet, packet caps, no raw artifact/portfolio dump | V4 - Compact Codex Roles |
+| PRD-R8 Settlement Learning | `OutcomeMemorySummary`, Settlement Learning | V5 - Settlement Learning |
+| PRD-R9 UI Clarity | Mission Control rendering of V1-V5 outputs | V6 - Mission Control |
 
 ## Source Quality
 

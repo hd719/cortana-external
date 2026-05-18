@@ -20,6 +20,34 @@ collect prices
 -> settle over time
 ```
 
+## Product Requirement Traceability
+
+This table connects each PRD requirement to the technical contract and the implementation vertical that builds it.
+
+| PRD ID | Product Intent | Tech Spec Concepts | Implementation Vertical |
+|--------|----------------|--------------------|--------------------------|
+| PRD-R1 | Clean noisy news/social evidence before analysis. | `SourceItem`, `SourceQualitySnapshot`, Source Quality Module | V1 - Source Quality |
+| PRD-R2 | Keep every source auditable with links and timestamps. | `SourceItem.url`, `published_at`, `fetched_at`, `source_status`, relevance fields | V1 - Source Quality, V6 - Mission Control |
+| PRD-R3 | Explain why source evidence matters. | `SourceQualitySnapshot.why_this_matters`, `cautions`, relevance scoring | V1 - Source Quality, V6 - Mission Control |
+| PRD-R4 | Add real fundamentals without inventing missing data. | `FundamentalsSnapshot`, Fundamentals Module, unavailable-field tracking | V3 - Fundamentals, V6 - Mission Control |
+| PRD-R5 | Add deterministic momentum versus SPY before Codex review. | `MomentumWindow`, `MomentumSnapshot`, Momentum Module | V2 - Momentum, V6 - Mission Control |
+| PRD-R6 | Make Codex output role-specific analysis. | `AnalystRoleOutput`, Role Flow | V4 - Compact Codex Roles, V6 - Mission Control |
+| PRD-R7 | Keep Codex packets compact and auditable. | Compact Codex Packet, packet caps, role instructions, output schema | V4 - Compact Codex Roles |
+| PRD-R8 | Learn from settled outcomes without overreacting early. | `OutcomeMemorySummary`, sample threshold, Settlement Learning | V5 - Settlement Learning |
+| PRD-R9 | Show the new evidence without cluttering Mission Control. | Mission Control rendering for source quality, fundamentals, momentum, roles, memory | V6 - Mission Control |
+
+## Vertical Build Order
+
+| Vertical | Consumes | Produces | Why It Comes Here |
+|----------|----------|----------|-------------------|
+| V1 - Source Quality | Existing Yahoo/StockTwits/Reddit collectors | Normalized, filtered source evidence | Later Codex roles need clean source evidence first. |
+| V2 - Momentum | Schwab/current price and available history | Deterministic relative-strength snapshot | Price analyst needs momentum before role review. |
+| V3 - Fundamentals | Selected free/reliable fundamentals provider | Fundamentals snapshot with unavailable fields | Fundamentals analyst needs explicit context or explicit missing data. |
+| V4 - Compact Codex Roles | V1, V2, V3, risk flags, outcome memory summary | Compact packet and role outputs | Codex should review the assembled evidence, not raw artifacts. |
+| V5 - Settlement Learning | Existing settlement records and role verdicts | Outcome memory summary | Future reviews can see whether prior evidence-ready calls worked. |
+| V6 - Mission Control | V1-V5 artifacts | Operator-facing UI panels | UI should render the finished evidence contracts, not invent logic. |
+| V7 - QA | All V7 artifacts and UI flows | Verified fixture and live paths | Final validation checks the full chain. |
+
 ## New Models
 
 ```python

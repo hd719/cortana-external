@@ -4,17 +4,31 @@
 **PRD:** [v7-research-depth-and-learning.md](../PRDs/v7-research-depth-and-learning.md)
 **Tech Spec:** [v7-research-depth-and-learning.md](../TechSpecs/v7-research-depth-and-learning.md)
 
+## How To Trace This Plan
+
+Start from the PRD requirement ID, find its Tech Spec contract, then build the matching vertical here.
+
+Example:
+
+```text
+PRD-R5 Momentum Snapshot
+-> Tech Spec: MomentumWindow, MomentumSnapshot, Momentum Module
+-> Implementation: V2 - Momentum
+-> UI rendering: V6 - Mission Control
+-> QA: V7 - QA
+```
+
 ## Dependency Map
 
-| Vertical | Dependencies | Outcome |
-|----------|--------------|---------|
-| V1 - Source Quality | Existing sentiment collectors | Cleaner news/social evidence. |
-| V2 - Momentum | Schwab/price history access | 1D/5D/20D/3M versus SPY before Codex. |
-| V3 - Fundamentals | Provider selection | Valuation/earnings context when available. |
-| V4 - Compact Codex Roles | V1-V3 | Role-based Codex review without token bloat. |
-| V5 - Settlement Learning | Existing settlement records | Outcome memory informs future reviews safely. |
-| V6 - Mission Control | V1-V5 | Research depth is understandable in the UI. |
-| V7 - QA | All | Live and fixture paths are verified. |
+| Vertical | Delivers PRD | Implements Tech Spec Concepts | Dependencies | Outcome |
+|----------|--------------|-------------------------------|--------------|---------|
+| V1 - Source Quality | PRD-R1, PRD-R2, PRD-R3 | `SourceItem`, `SourceQualitySnapshot`, Source Quality Module | Existing sentiment collectors | Cleaner news/social evidence. |
+| V2 - Momentum | PRD-R5 | `MomentumWindow`, `MomentumSnapshot`, Momentum Module | Schwab/price history access | 1D/5D/20D/3M versus SPY before Codex. |
+| V3 - Fundamentals | PRD-R4 | `FundamentalsSnapshot`, Fundamentals Module | Provider selection | Valuation/earnings context when available. |
+| V4 - Compact Codex Roles | PRD-R6, PRD-R7 | `AnalystRoleOutput`, Compact Codex Packet, Role Flow | V1-V3 | Role-based Codex review without token bloat. |
+| V5 - Settlement Learning | PRD-R8 | `OutcomeMemorySummary`, Settlement Learning | Existing settlement records | Outcome memory informs future reviews safely. |
+| V6 - Mission Control | PRD-R2, PRD-R3, PRD-R4, PRD-R5, PRD-R6, PRD-R8, PRD-R9 | Mission Control rendering for V1-V5 artifacts | V1-V5 | Research depth is understandable in the UI. |
+| V7 - QA | PRD-R1 through PRD-R9 | Full fixture/live validation path | All | Live and fixture paths are verified. |
 
 ## Verticals
 
