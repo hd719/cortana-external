@@ -5,6 +5,7 @@ import json
 import os
 import xml.etree.ElementTree as ET
 from datetime import UTC, datetime, timedelta
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, Callable
 from urllib.parse import quote_plus
@@ -15,18 +16,7 @@ from .models import SentimentSnapshot, SentimentSourceResult
 from .storage import default_cache_dir
 
 SOURCES = ("yahoo_finance_news", "stocktwits", "reddit")
-COMPANY_NAME_BY_SYMBOL = {
-    "AAPL": "Apple",
-    "AMD": "Advanced Micro Devices",
-    "DIS": "Disney",
-    "GOOG": "Google",
-    "GOOGL": "Google",
-    "LMND": "Lemonade",
-    "META": "Meta",
-    "MSFT": "Microsoft",
-    "NVDA": "Nvidia",
-    "TSLA": "Tesla",
-}
+SYMBOL_PROFILES_PATH = Path(__file__).with_name("config") / "symbol_profiles.json"
 
 
 def _utc_now() -> datetime:
@@ -39,6 +29,18 @@ def _safe_symbol(symbol: str) -> str:
 
 def _cache_key(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()[:16]
+
+
+@lru_cache(maxsize=1)
+def _symbol_profiles() -> dict[str, dict[str, Any]]:
+    try:
+        payload = json.loads(SYMBOL_PROFILES_PATH.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    symbols = payload.get("symbols") if isinstance(payload, dict) else None
+    if not isinstance(symbols, dict):
+        return {}
+    return {str(symbol).upper(): profile for symbol, profile in symbols.items() if isinstance(profile, dict)}
 
 
 class SentimentSourceClient:
@@ -273,7 +275,7 @@ class SentimentSourceClient:
 
 def _reddit_query(symbol: str) -> str:
     normalized = _safe_symbol(symbol)
-    company = COMPANY_NAME_BY_SYMBOL.get(normalized)
+    company = _symbol_profiles().get(normalized, {}).get("company_name")
     if company:
         return f'{normalized} OR "{company}" stock earnings'
     return f"{normalized} stock earnings"

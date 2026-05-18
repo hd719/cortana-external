@@ -1,0 +1,34 @@
+{
+  "symbols": {
+    "AAPL": {
+      "company_name": "Apple"
+    },
+    "AMD": {
+      "company_name": "Advanced Micro Devices"
+    },
+    "DIS": {
+      "company_name": "Disney"
+    },
+    "GOOG": {
+      "company_name": "Google"
+    },
+    "GOOGL": {
+      "company_name": "Google"
+    },
+    "LMND": {
+      "company_name": "Lemonade"
+    },
+    "META": {
+      "company_name": "Meta"
+    },
+    "MSFT": {
+      "company_name": "Microsoft"
+    },
+    "NVDA": {
+      "company_name": "Nvidia"
+    },
+    "TSLA": {
+      "company_name": "Tesla"
+    }
+  }
+}

@@ -24,3 +24,6 @@ pythonpath = ["."]
 
 [tool.setuptools.packages.find]
 where = ["."]
+
+[tool.setuptools.package-data]
+market_lab = ["config/*.json"]
