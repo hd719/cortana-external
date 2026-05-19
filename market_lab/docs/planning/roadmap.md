@@ -1,16 +1,28 @@
 # Market Lab Roadmap
 
 **Document Status:** Lightweight roadmap  
-**Last Updated:** 2026-05-13
+**Last Updated:** 2026-05-19
 
 ## Implementation Progress
 
-V2 through V5 are implemented in PR #346:
+V2 through V7 are implemented:
 
 - V2 adds evidence snapshots, grounded optional sentiment source adapters, outcome memory, token-budgeted Codex packets, and safer Evidence Ready / Needs More Context / Blocked labeling.
 - V3 adds deterministic watchlists/opportunity boards with configurable scoring and no Codex fanout.
 - V4 adds read-only Schwab portfolio context with cached snapshot support and no order endpoints.
 - V5 adds execution intents, approvals/rejections, and a broker adapter boundary with `validate_intent` and `preview_order` only. No order placement is implemented.
+- V6 separates prod/dev Market Lab data and Mission Control runtime environments.
+- V7 adds source quality, source timestamps/links, fundamentals, momentum versus SPY, structured analyst roles, and settlement-backed learning.
+
+V8 is currently planned as the Market Lab Decision Committee:
+
+- specialist analyst outputs
+- bull/bear debate
+- research manager synthesis
+- aggressive/neutral/conservative risk perspectives
+- portfolio-aware final action decision
+- settlement reflections that feed future reviews
+- no broker order placement
 
 Current QA:
 
@@ -61,59 +73,47 @@ V5:
 - [Implementation Plan](Implementation/v5-execution-readiness.md)
 - [QA Plan](QA/v5-execution-readiness.md)
 
+V6:
+
+- [PRD](PRDs/v6-data-environment-separation.md)
+- [Tech Spec](TechSpecs/v6-data-environment-separation.md)
+- [Implementation Plan](Implementation/v6-data-environment-separation.md)
+- [QA Plan](QA/v6-data-environment-separation.md)
+
+V7:
+
+- [PRD](PRDs/v7-research-depth-and-learning.md)
+- [Tech Spec](TechSpecs/v7-research-depth-and-learning.md)
+- [Implementation Plan](Implementation/v7-research-depth-and-learning.md)
+- [QA Plan](QA/v7-research-depth-and-learning.md)
+
+V8:
+
+- [PRD](PRDs/v8-decision-committee.md)
+- [Tech Spec](TechSpecs/v8-decision-committee.md)
+- [Implementation Plan](Implementation/v8-decision-committee.md)
+- [QA Plan](QA/v8-decision-committee.md)
+
 ## Future Directions
 
-### V3 - Watchlists / Opportunity Board
+### V8 - Decision Committee
 
-Use the existing Mission Control Watchlists tab as the idea-discovery surface.
+Turn richer V7 evidence into a committee-style action decision.
 
-V3 should answer:
+V8 should answer:
 
 ```text
-Which symbols from my watchlists deserve review today?
+Given the evidence, portfolio context, and prior outcomes, is this a buy candidate, wait, avoid, hold, or sell review?
 ```
 
 Likely scope:
 
-- named watchlists
-- deterministic ranking without Codex fanout
-- reasons, blockers, and missing context per symbol
-- `Run Market Lab Review` action into the one-symbol review flow
-- no portfolio holdings logic
-- no BUY/SELL language
-
-### V4 - Portfolio Intelligence
-
-Add read-only portfolio awareness as a separate layer from watchlists.
-
-V4 should answer:
-
-```text
-What do I already own, and how would this idea affect my exposure?
-```
-
-Likely scope:
-
-- read-only holdings/exposure adapter
-- Schwab Trader API account/position import first, manual snapshot fallback second
-- concentration and overlap context
-- portfolio panel inside Market Lab
-- no execution-capable APIs
-
-### V5 - Execution Readiness
-
-Define the supervised execution boundary before any broker integration.
-
-V5 should answer:
-
-```text
-Could this review ever become an approved execution candidate?
-```
-
-Likely scope:
-
-- execution-intent artifact
-- approval gates
-- broker adapter boundary
-- audit trail
-- no strategy/review module calling broker APIs directly
+- evidence gate remains first
+- price/news/fundamentals/portfolio/risk analyst outputs
+- bull/bear debate
+- research manager synthesis
+- risk committee
+- final action decision separate from evidence status
+- settlement reflection memory
+- idempotent Codex/agent sessions
+- no autonomous execution
