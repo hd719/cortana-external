@@ -1450,13 +1450,17 @@ export function MarketLabClient({ embedded = false }: MarketLabClientProps = {})
           {ARTIFACT_VIEWERS.map(({ kind, label }) => {
             const artifactPath = review?.artifact_paths?.[kind] ?? null;
             return (
-              <ArtifactViewer
-                key={kind}
-                label={label}
-                kind={kind}
-                runId={selectedRunId}
-                path={artifactPath}
-              />
+              <div key={kind} className="space-y-2">
+                <ArtifactViewer
+                  label={label}
+                  kind={kind}
+                  runId={selectedRunId}
+                  path={artifactPath}
+                />
+                {kind === "codex_review" ? (
+                  <StructuredRolesViewer structuredCodex={structuredCodex} />
+                ) : null}
+              </div>
             );
           })}
         </div>
@@ -2311,6 +2315,122 @@ function ArtifactViewer({
         </div>
       ) : null}
     </details>
+  );
+}
+
+function StructuredRolesViewer({ structuredCodex }: { structuredCodex: CodexStructuredReview | null }) {
+  const [open, setOpen] = useState(false);
+  const roles = structuredCodex?.roles ?? [];
+  const disabled = roles.length === 0;
+
+  return (
+    <details
+      open={open}
+      onToggle={(event) => setOpen(event.currentTarget.open)}
+      className={cn("group/file rounded-md border border-border/60 bg-muted/20", disabled && "opacity-60")}
+    >
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-2.5 py-1.5">
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="text-[10px] uppercase tracking-widest text-muted-foreground">structured roles</span>
+          <span className="truncate text-[10px] text-muted-foreground/80">
+            review.json -&gt; codex_review.structured.roles
+          </span>
+        </div>
+        <span className="shrink-0 text-[10px] uppercase tracking-widest text-muted-foreground">
+          {open ? "close" : disabled ? "-" : "open"}
+        </span>
+      </summary>
+      {open ? (
+        <div className="space-y-2 border-t border-border/60 px-2.5 py-2">
+          {disabled ? (
+            <p className="text-xs text-muted-foreground">Structured Codex roles are not attached for this run.</p>
+          ) : (
+            <>
+              <div className="grid gap-2 md:grid-cols-3">
+                <Metric label="Verdict" value={structuredCodex?.verdict ?? "-"} />
+                <Metric label="Confidence" value={asPercent(structuredCodex?.confidence)} />
+                <Metric label="Horizon" value={structuredCodex?.horizon?.toUpperCase() ?? "-"} />
+              </div>
+              <div className="grid gap-2 lg:grid-cols-2">
+                <StructuredRolesNote title="Hard gate" value={structuredCodex?.hard_gate_assessment} />
+                <StructuredRolesNote title="Context quality" value={structuredCodex?.context_quality} />
+              </div>
+              <div className="grid gap-2 xl:grid-cols-2">
+                {roles.map((role) => (
+                  <StructuredRoleDebugCard key={role.role} role={role} />
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      ) : null}
+    </details>
+  );
+}
+
+function StructuredRolesNote({ title, value }: { title: string; value?: string }) {
+  return (
+    <div className="min-w-0 rounded-md border border-border/60 bg-background/50 px-2.5 py-2">
+      <div className="text-[10px] uppercase tracking-widest text-muted-foreground">{title}</div>
+      <p className="mt-1 min-w-0 break-words font-sans text-xs leading-5 text-muted-foreground [overflow-wrap:anywhere]">
+        {value || "-"}
+      </p>
+    </div>
+  );
+}
+
+function StructuredRoleDebugCard({ role }: { role: CodexRoleReview }) {
+  return (
+    <div className="min-w-0 rounded-md border border-border/60 bg-background/50 px-2.5 py-2">
+      <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
+        <span className="min-w-0 break-words text-xs font-semibold [overflow-wrap:anywhere]">{roleLabel(role.role)}</span>
+        <span className="shrink-0 rounded border border-border/60 px-1.5 py-px text-[9px] uppercase tracking-wider text-muted-foreground">
+          {role.stance} · {asPercent(role.confidence)}
+        </span>
+      </div>
+      <p className="mt-1 min-w-0 break-words font-sans text-xs leading-5 text-muted-foreground [overflow-wrap:anywhere]">
+        {role.summary}
+      </p>
+      <StructuredRoleList title="Evidence used" items={role.evidence_used} />
+      <StructuredRoleList title="Bull points" items={role.bull_points} tone="bull" />
+      <StructuredRoleList title="Bear points" items={role.bear_points} tone="bear" />
+      <StructuredRoleList title="Missing evidence" items={role.missing_evidence} />
+    </div>
+  );
+}
+
+function StructuredRoleList({
+  title,
+  items,
+  tone,
+}: {
+  title: string;
+  items: string[];
+  tone?: "bull" | "bear";
+}) {
+  if (!items.length) return null;
+  return (
+    <div className="mt-2 min-w-0">
+      <div
+        className={cn(
+          "text-[10px] uppercase tracking-widest text-muted-foreground",
+          tone === "bull" && "text-emerald-600 dark:text-emerald-400",
+          tone === "bear" && "text-red-600 dark:text-red-400",
+        )}
+      >
+        {title}
+      </div>
+      <ul className="mt-1 space-y-1">
+        {items.map((item) => (
+          <li
+            key={item}
+            className="min-w-0 break-words font-sans text-[11px] leading-4 text-muted-foreground [overflow-wrap:anywhere]"
+          >
+            {item}
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 
